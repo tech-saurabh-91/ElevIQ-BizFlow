@@ -9,7 +9,7 @@ import Modal from '@/components/common/Modal';
 import toast from 'react-hot-toast';
 
 type DiscountItem = {
-  itemId: string;
+  itemId: string | { _id: string; itemCode?: string; itemName?: string; unit?: string };
   itemCode?: string;
   itemName?: string;
   unit?: string;
