@@ -1,0 +1,38 @@
+﻿const mongoose = require('mongoose');
+
+const executiveVanAssignmentSchema = new mongoose.Schema({
+  companyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Company',
+    required: [true, 'Company ID is required'],
+  },
+  executiveId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, 'Executive user ID is required'],
+  },
+  vanId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'VAN',
+    required: [true, 'VAN ID is required'],
+  },
+  assignedFrom: {
+    type: Date,
+    required: [true, 'Assignment start date is required'],
+  },
+  assignedTo: {
+    type: Date,
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+}, {
+  timestamps: true,
+});
+
+module.exports = mongoose.model('ExecutiveVanAssignment', executiveVanAssignmentSchema);
