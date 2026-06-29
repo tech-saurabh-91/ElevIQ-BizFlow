@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { masterAPI } from '@/services/api';
+import { masterAPI, moduleAPI } from '@/services/api';
 import { usePermission } from '@/hooks/usePermission';
 import Table from '@/components/common/Table';
 import Button from '@/components/common/Button';
@@ -37,10 +37,10 @@ export default function WarehousesPage() {
     try {
       const [wareRes, paramRes] = await Promise.all([
         masterAPI.getWarehouses({ limit: 500 }).catch(() => ({ data: { data: [] } })),
-        masterAPI.getParameters({ parameterType: 'warehouse_nature', limit: 500 }).catch(() => ({ data: { data: [] } })),
+        moduleAPI.getParameters({ parameterType: 'warehouse_nature', limit: 500 }).catch(() => ({ data: { data: [] } })),
       ]);
-      setWarehouses(wareRes.data.data || []);
-      setNatureOptions((paramRes.data?.data || []).filter((p: any) => p.isActive !== false));
+      setWarehouses(wareRes?.data?.data || []);
+      setNatureOptions((paramRes?.data?.data || []).filter((p: any) => p.isActive !== false));
     } catch { toast.error('Failed to load data'); }
     finally { setIsLoading(false); }
   };
