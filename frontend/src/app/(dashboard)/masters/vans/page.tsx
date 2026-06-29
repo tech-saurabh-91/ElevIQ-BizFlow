@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { masterAPI, moduleAPI } from '@/services/api';
 import { usePermission } from '@/hooks/usePermission';
-import { VAN, Warehouse, Customer } from '@/types';
+import { VAN, Warehouse } from '@/types';
 import Table from '@/components/common/Table';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
@@ -15,20 +15,19 @@ export default function VansPage() {
   const perm = usePermission('/masters/vans');
   const [vans, setVans] = useState<VAN[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<VAN | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
-    vanName: '', warehouseId: '', customerId: '', vehicleNumber: '', driverName: '',
+    vanName: '', warehouseId: '', vehicleNumber: '', driverName: '',
     driverPhone: '', driverPhoneCode: '+91', capacity: '0',
   });
 
   useEffect(() => {
-    Promise.all([masterAPI.getVans(), masterAPI.getWarehouses(), moduleAPI.getCustomers()])
-      .then(([v, w, c]) => { setVans(v.data.data); setWarehouses(w.data.data); setCustomers(c.data.data); })
+    Promise.all([masterAPI.getVans(), masterAPI.getWarehouses()])
+      .then(([v, w]) => { setVans(v.data.data); setWarehouses(w.data.data); })
       .catch(() => toast.error('Failed to fetch')).finally(() => setIsLoading(false));
   }, []);
 
@@ -85,7 +84,6 @@ export default function VansPage() {
     }
     setFormData({
       vanName: van.vanName, warehouseId: (van.warehouseId as any)?._id || '',
-      customerId: (van.customerId as any)?._id || '',
       vehicleNumber: van.vehicleNumber || '', driverName: van.driverName || '',
       driverPhone: number, driverPhoneCode: code,
       capacity: String(van.capacity),
@@ -101,7 +99,7 @@ export default function VansPage() {
 
   const resetForm = () => {
     setFormData({
-      vanName: '', warehouseId: '', customerId: '', vehicleNumber: '',
+      vanName: '', warehouseId: '', vehicleNumber: '',
       driverName: '', driverPhone: '', driverPhoneCode: '+91', capacity: '0',
     });
     setErrors({});
@@ -140,10 +138,7 @@ export default function VansPage() {
               {errors.warehouseId && <p className="text-red-500 text-xs mt-1">{errors.warehouseId}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Customer Account</label>
-              <select value={formData.customerId} onChange={(e) => setFormData({ ...formData, customerId: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
-                <option value="">Select</option>{customers.map(c => <option key={c._id} value={c._id}>{c.customerName}</option>)}
-              </select>
+              <Input label="Vehicle Number" value={formData.vehicleNumber} onChange={(e: any) => setFormData({ ...formData, vehicleNumber: e.target.value.toUpperCase() })} placeholder="e.g. MH12AB1234" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">

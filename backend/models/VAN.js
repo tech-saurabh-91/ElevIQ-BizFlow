@@ -22,10 +22,6 @@ const vanSchema = new mongoose.Schema({
     ref: 'Warehouse',
     required: [true, 'Warehouse ID is required'],
   },
-  customerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Customer',
-  },
   vehicleNumber: {
     type: String,
     trim: true,
