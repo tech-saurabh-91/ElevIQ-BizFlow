@@ -58,7 +58,7 @@ export default function VansPage() {
     if (!formData.vanId) newErrors.vanId = 'Please select a VAN';
 
     if (formData.dayCashOutMandatory) {
-      const existingCashOut = assignments.find((a: any) => a.dayCashOutMandatory && a._id !== formData.executiveId);
+      const existingCashOut = assignments.find((a: any) => a.dayCashOutMandatory);
       if (existingCashOut) {
         newErrors.dayCashOutMandatory = 'Only one user can have Day Cash Out Mandatory = Yes';
       }
@@ -74,8 +74,7 @@ export default function VansPage() {
         dayCashOutMandatory: formData.dayCashOutMandatory,
       });
       toast.success('Executive assigned successfully');
-      setFormData({ executiveId: '', vanId: '', dayCashOutMandatory: false });
-      setIsModalOpen(false);
+      setFormData({ executiveId: '', dayCashOutMandatory: false });
       loadData();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to assign');
@@ -128,7 +127,7 @@ export default function VansPage() {
 
       <Table columns={columns} data={assignments} isLoading={isLoading} />
 
-      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setFormData({ executiveId: '', vanId: '', dayCashOutMandatory: false }); setErrors({}); }} title="Van Assign" size="md">
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setFormData({ executiveId: '', vanId: '', dayCashOutMandatory: false }); setErrors({}); }} title="Van Link" size="md">
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Executive <span className="text-red-500">*</span></label>
@@ -172,7 +171,7 @@ export default function VansPage() {
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="secondary" onClick={() => { setIsModalOpen(false); setFormData({ executiveId: '', vanId: '', dayCashOutMandatory: false }); setErrors({}); }}>Cancel</Button>
+            <Button variant="secondary" onClick={() => { setIsModalOpen(false); setFormData({ executiveId: '', vanId: '', dayCashOutMandatory: false }); setErrors({}); }}>Close</Button>
             <Button onClick={handleAdd} disabled={isSaving}>{isSaving ? 'Saving...' : 'Add'}</Button>
           </div>
         </div>
