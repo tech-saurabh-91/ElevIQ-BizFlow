@@ -69,7 +69,7 @@ const warehouseSchema = new mongoose.Schema({
 warehouseSchema.pre('save', async function () {
   if (this.isNew && !this.warehouseCode) {
     const name = this.warehouseName || 'WH';
-    const initials = name.split(/\s+/).map((w: string) => w.charAt(0).toUpperCase()).join('');
+    const initials = name.split(/\s+/).map(w => w.charAt(0).toUpperCase()).join('');
     const count = await mongoose.model('Warehouse').countDocuments({ companyId: this.companyId });
     this.warehouseCode = `${initials}${String(count + 1).padStart(2, '0')}`;
   }
