@@ -118,7 +118,7 @@ export default function WarehousesPage() {
     try { await masterAPI.deleteWarehouse(id); toast.success('Deleted'); loadData(); } catch { toast.error('Failed'); }
   };
 
-  const parentWarehouses = warehouses.filter((w: any) => w.isParentWarehouse && w.isActive !== false && w._id !== editing?._id);
+  const parentWarehouses = warehouses.filter((w: any) => w.isActive !== false && w._id !== editing?._id);
 
   const columns = [
     {

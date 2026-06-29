@@ -53,7 +53,7 @@ const loginValidation = [
 const warehouseValidation = [
   body('warehouseName').notEmpty().withMessage('Warehouse name is required').trim(),
   body('address').notEmpty().withMessage('Address is required').trim(),
-  body('city').notEmpty().withMessage('City is required').trim(),
+  body('natureOfWarehouse').notEmpty().withMessage('Nature of warehouse is required').trim(),
   validate,
 ];
 
