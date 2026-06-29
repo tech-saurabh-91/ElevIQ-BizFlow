@@ -16,9 +16,13 @@ const executiveVanAssignmentSchema = new mongoose.Schema({
     ref: 'VAN',
     required: [true, 'VAN ID is required'],
   },
+  dayCashOutMandatory: {
+    type: Boolean,
+    default: false,
+  },
   assignedFrom: {
     type: Date,
-    required: [true, 'Assignment start date is required'],
+    default: Date.now,
   },
   assignedTo: {
     type: Date,

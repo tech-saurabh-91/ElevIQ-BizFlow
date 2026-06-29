@@ -20,7 +20,7 @@ const menuItems = [
       { name: 'Roles', path: '/masters/roles' },
       { name: 'Users', path: '/masters/users' },
       { name: 'Warehouses', path: '/masters/warehouses' },
-      { name: 'VANs', path: '/masters/vans' },
+      { name: 'Van Link', path: '/masters/vans' },
       { name: 'Parameters', path: '/masters/parameters' },
       { name: 'Countries', path: '/masters/countries' },
       { name: 'Tax Master', path: '/masters/tax' },

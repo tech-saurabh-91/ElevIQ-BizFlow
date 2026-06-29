@@ -3,172 +3,150 @@
 import { useEffect, useState } from 'react';
 import { masterAPI, moduleAPI } from '@/services/api';
 import { usePermission } from '@/hooks/usePermission';
-import { VAN, Warehouse } from '@/types';
 import Table from '@/components/common/Table';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
-import Input from '@/components/common/Input';
 import toast from 'react-hot-toast';
-import { COUNTRIES_DATA } from '@/utils/locationData';
 
 export default function VansPage() {
   const perm = usePermission('/masters/vans');
-  const [vans, setVans] = useState<VAN[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [vans, setVans] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editing, setEditing] = useState<VAN | null>(null);
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   const [formData, setFormData] = useState({
-    vanName: '', warehouseId: '', vehicleNumber: '', driverName: '',
-    driverPhone: '', driverPhoneCode: '+91', capacity: '0',
+    executiveId: '',
+    dayCashOutMandatory: false,
   });
 
-  useEffect(() => {
-    Promise.all([masterAPI.getVans(), masterAPI.getWarehouses()])
-      .then(([v, w]) => { setVans(v.data.data); setWarehouses(w.data.data); })
-      .catch(() => toast.error('Failed to fetch')).finally(() => setIsLoading(false));
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  const validate = () => {
-    const errs: Record<string, string> = {};
-    if (!formData.vanName.trim()) errs.vanName = 'VAN name is required';
-    if (!formData.warehouseId) errs.warehouseId = 'Please select a warehouse';
-    if (formData.driverPhone && !/^\d+$/.test(formData.driverPhone)) {
-      errs.driverPhone = 'Phone must contain only numbers';
-    } else if (formData.driverPhone) {
-      const country = COUNTRIES_DATA.find(c => c.phoneCode === formData.driverPhoneCode);
-      if (country && formData.driverPhone.length !== country.phoneLength) {
-        errs.driverPhone = `${country.name} phone must be ${country.phoneLength} digits`;
-      }
-    }
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
+  const loadData = async () => {
     try {
-      setIsSaving(true);
-      const payload = {
-        ...formData,
-        capacity: Number(formData.capacity),
-        driverPhone: formData.driverPhone ? `${formData.driverPhoneCode}${formData.driverPhone}` : '',
-      };
-      if (editing) { await masterAPI.updateVan(editing._id, payload); toast.success('Updated'); }
-      else { await masterAPI.createVan(payload); toast.success('Created'); }
-      setIsModalOpen(false); setEditing(null); resetForm();
-      const res = await masterAPI.getVans(); setVans(res.data.data);
-    } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed';
-      toast.error(msg);
-      setErrors({ submit: msg });
-    } finally {
-      setIsSaving(false);
-    }
+      const [assignRes, vansRes, usersRes] = await Promise.all([
+        moduleAPI.getExecutiveVanAssignments().catch(() => ({ data: { data: [] } })),
+        masterAPI.getVans({ limit: 500 }).catch(() => ({ data: { data: [] } })),
+        masterAPI.getUsers({ limit: 500 }).catch(() => ({ data: { data: [] } })),
+      ]);
+      setAssignments(assignRes.data.data || []);
+      setVans(vansRes.data.data || []);
+      const vanSaleUsers = (usersRes.data?.data || []).filter((u: any) => {
+        const sub = (u.roleId?.mobileSubType || '').toLowerCase();
+        return sub === 'vansale' && u.isActive !== false;
+      });
+      setUsers(vanSaleUsers);
+    } catch { toast.error('Failed to load data'); }
+    finally { setIsLoading(false); }
   };
 
-  const handleEdit = (van: VAN) => {
-    setEditing(van);
-    const phone = van.driverPhone || '';
-    let code = '+91';
-    let number = phone;
-    for (const c of COUNTRIES_DATA) {
-      if (phone.startsWith(c.phoneCode)) {
-        code = c.phoneCode;
-        number = phone.substring(c.phoneCode.length);
-        break;
-      }
-    }
-    setFormData({
-      vanName: van.vanName, warehouseId: (van.warehouseId as any)?._id || '',
-      vehicleNumber: van.vehicleNumber || '', driverName: van.driverName || '',
-      driverPhone: number, driverPhoneCode: code,
-      capacity: String(van.capacity),
-    });
+  const handleAdd = async () => {
     setErrors({});
-    setIsModalOpen(true);
+    if (!formData.executiveId) { setErrors({ executiveId: 'Please select an executive' }); return; }
+
+    const assignedVan = vans.find((v: any) => v.isActive !== false);
+    if (!assignedVan) { toast.error('No VAN available. Create a VAN first.'); return; }
+
+    setIsSaving(true);
+    try {
+      await moduleAPI.createExecutiveVanAssignment({
+        executiveId: formData.executiveId,
+        vanId: assignedVan._id,
+        dayCashOutMandatory: formData.dayCashOutMandatory,
+      });
+      toast.success('Executive assigned successfully');
+      setFormData({ executiveId: '', dayCashOutMandatory: false });
+      loadData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to assign');
+    } finally { setIsSaving(false); }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete?')) return;
-    try { await masterAPI.deleteVan(id); toast.success('Deleted'); const res = await masterAPI.getVans(); setVans(res.data.data); } catch { toast.error('Failed'); }
+    if (!confirm('Remove this assignment?')) return;
+    try {
+      await moduleAPI.deleteExecutiveVanAssignment(id);
+      toast.success('Removed');
+      loadData();
+    } catch { toast.error('Failed to remove'); }
   };
-
-  const resetForm = () => {
-    setFormData({
-      vanName: '', warehouseId: '', vehicleNumber: '',
-      driverName: '', driverPhone: '', driverPhoneCode: '+91', capacity: '0',
-    });
-    setErrors({});
-  };
-
-  const phoneCountry = COUNTRIES_DATA.find(c => c.phoneCode === formData.driverPhoneCode);
 
   const columns = [
-    { key: 'van', label: 'VAN', render: (v: VAN) => <div><p className="font-medium">{v.vanName}</p><p className="text-sm text-gray-500">{v.vanCode}</p></div> },
-    { key: 'warehouse', label: 'Warehouse', render: (v: VAN) => (v.warehouseId as any)?.warehouseName || 'N/A' },
-    { key: 'vehicleNumber', label: 'Vehicle No' },
-    { key: 'driverName', label: 'Driver' },
-    { key: 'capacity', label: 'Capacity' },
-    { key: 'actions', label: 'Actions', render: (v: VAN) => <div className="flex space-x-2">{perm.canEdit && <button onClick={() => handleEdit(v)} className="text-blue-600">Edit</button>}{perm.canDelete && <button onClick={() => handleDelete(v._id)} className="text-red-600">Delete</button>}</div> },
+    {
+      key: 'executive', label: 'Executive',
+      render: (r: any) => {
+        const u = r.executiveId;
+        return <span>{u?.firstName} {u?.lastName}</span>;
+      },
+    },
+    {
+      key: 'van', label: 'VAN',
+      render: (r: any) => <span>{r.vanId?.vanName || '-'}</span>,
+    },
+    {
+      key: 'dayCashOut', label: 'Day Cash Out Mandatory',
+      render: (r: any) => <span>{r.dayCashOutMandatory ? 'Yes' : 'No'}</span>,
+    },
+    {
+      key: 'actions', label: 'Action',
+      render: (r: any) => perm.canDelete && (
+        <button onClick={() => handleDelete(r._id)} className="text-red-600 hover:text-red-800">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+          </svg>
+        </button>
+      ),
+    },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center"><h1 className="text-2xl font-bold">VANs</h1>{perm.canCreate && <Button onClick={() => { resetForm(); setIsModalOpen(true); }}>+ Add VAN</Button>}</div>
-      <Table columns={columns} data={vans} isLoading={isLoading} />
-      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditing(null); setErrors({}); }} title={editing ? 'Edit VAN' : 'Add VAN'} size="lg">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {errors.submit && (
-            <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg text-sm">{errors.submit}</div>
-          )}
-          <div>
-            <Input label="VAN Name" required value={formData.vanName} onChange={(e: any) => setFormData({ ...formData, vanName: e.target.value })} />
-            {errors.vanName && <p className="text-red-500 text-xs mt-1">{errors.vanName}</p>}
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Van Link</h1>
+        {perm.canCreate && <Button onClick={() => setIsModalOpen(true)}>+ Van Assign</Button>}
+      </div>
+
+      <Table columns={columns} data={assignments} isLoading={isLoading} />
+
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setFormData({ executiveId: '', dayCashOutMandatory: false }); setErrors({}); }} title="Van Assign" size="md">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 items-end">
             <div>
-              <label className="block text-sm font-medium mb-1">Warehouse <span className="text-red-500">*</span></label>
-              <select value={formData.warehouseId} onChange={(e) => setFormData({ ...formData, warehouseId: e.target.value })} className="w-full px-3 py-2 border rounded-lg" required>
-                <option value="">Select</option>{warehouses.map(w => <option key={w._id} value={w._id}>{w.warehouseName}</option>)}
-              </select>
-              {errors.warehouseId && <p className="text-red-500 text-xs mt-1">{errors.warehouseId}</p>}
-            </div>
-            <div>
-              <Input label="Vehicle Number" value={formData.vehicleNumber} onChange={(e: any) => setFormData({ ...formData, vehicleNumber: e.target.value.toUpperCase() })} placeholder="e.g. MH12AB1234" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Vehicle Number" value={formData.vehicleNumber} onChange={(e: any) => setFormData({ ...formData, vehicleNumber: e.target.value.toUpperCase() })} placeholder="e.g. MH12AB1234" />
-            <Input label="Capacity" type="number" value={formData.capacity} onChange={(e: any) => setFormData({ ...formData, capacity: e.target.value })} />
-          </div>
-          <Input label="Driver Name" value={formData.driverName} onChange={(e: any) => setFormData({ ...formData, driverName: e.target.value })} />
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Driver Phone</label>
-            <div className="flex">
-              <select value={formData.driverPhoneCode} onChange={(e) => setFormData({ ...formData, driverPhoneCode: e.target.value })}
-                className="w-[130px] px-2 py-2 border border-r-0 border-gray-300 rounded-l-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-slate-500">
-                {COUNTRIES_DATA.map(c => (
-                  <option key={c.code} value={c.phoneCode}>{c.name} ({c.phoneCode})</option>
+              <label className="block text-sm font-medium mb-1">Executive <span className="text-red-500">*</span></label>
+              <select value={formData.executiveId} onChange={(e) => setFormData({ ...formData, executiveId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <option value="">Select</option>
+                {users.map((u: any) => (
+                  <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>
                 ))}
               </select>
-              <input type="tel" value={formData.driverPhone} onChange={(e) => {
-                const val = e.target.value.replace(/\D/g, '');
-                const maxLen = phoneCountry?.phoneLength || 15;
-                setFormData({ ...formData, driverPhone: val.slice(0, maxLen) });
-              }} placeholder={`e.g. ${phoneCountry?.phoneLength || 10} digits`}
-                className="w-full px-3 py-2 border border-gray-300 rounded-r-lg focus:outline-none focus:ring-2 focus:ring-slate-500" />
+              {errors.executiveId && <p className="text-red-500 text-xs mt-1">{errors.executiveId}</p>}
             </div>
-            {errors.driverPhone && <p className="text-red-500 text-xs mt-1">{errors.driverPhone}</p>}
+            <div>
+              <label className="block text-sm font-medium mb-1">Day Cash Out Mandatory</label>
+              <div className="flex gap-4 py-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" checked={formData.dayCashOutMandatory === false}
+                    onChange={() => setFormData({ ...formData, dayCashOutMandatory: false })} className="h-4 w-4" />
+                  <span className="text-sm">No</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" checked={formData.dayCashOutMandatory === true}
+                    onChange={() => setFormData({ ...formData, dayCashOutMandatory: true })} className="h-4 w-4" />
+                  <span className="text-sm">Yes</span>
+                </label>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-end space-x-3 pt-4">
-            <Button variant="secondary" onClick={() => { setIsModalOpen(false); setEditing(null); setErrors({}); }}>Cancel</Button>
-            <Button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : (editing ? 'Update' : 'Create')}</Button>
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="secondary" onClick={() => { setIsModalOpen(false); setFormData({ executiveId: '', dayCashOutMandatory: false }); setErrors({}); }}>Cancel</Button>
+            <Button onClick={handleAdd} disabled={isSaving}>{isSaving ? 'Saving...' : 'Add'}</Button>
           </div>
-        </form>
+        </div>
       </Modal>
     </div>
   );

@@ -16,7 +16,7 @@ const defaultMenus = [
   { menuName: 'Roles', menuPath: '/masters/roles', canView: true, canCreate: true, canEdit: true, canDelete: true },
   { menuName: 'Users', menuPath: '/masters/users', canView: true, canCreate: true, canEdit: true, canDelete: true },
   { menuName: 'Warehouses', menuPath: '/masters/warehouses', canView: true, canCreate: true, canEdit: true, canDelete: true },
-  { menuName: 'VANs', menuPath: '/masters/vans', canView: true, canCreate: true, canEdit: true, canDelete: true },
+  { menuName: 'Van Link', menuPath: '/masters/vans', canView: true, canCreate: true, canEdit: true, canDelete: true },
   { menuName: 'Parameters', menuPath: '/masters/parameters', canView: true, canCreate: true, canEdit: true, canDelete: true },
   { menuName: 'Countries', menuPath: '/masters/countries', canView: true, canCreate: true, canEdit: true, canDelete: true },
   { menuName: 'Tax Master', menuPath: '/masters/tax', canView: true, canCreate: true, canEdit: true, canDelete: true },
