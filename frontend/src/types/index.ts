@@ -98,12 +98,18 @@ export interface Warehouse {
   _id: string;
   warehouseName: string;
   warehouseCode: string;
-  parentWarehouseId?: Warehouse;
   address: string;
-  city: string;
+  city?: string;
   state?: string;
   pincode?: string;
-  warehouseType: 'main' | 'sub' | 'van' | 'godown';
+  country?: string;
+  stateCode?: string;
+  natureOfWarehouse?: string;
+  isParentWarehouse: boolean;
+  parentWarehouseId?: Warehouse;
+  isVanWarehouse: boolean;
+  vanNumber?: string;
+  vanParentWarehouseId?: Warehouse;
   isActive: boolean;
 }
 

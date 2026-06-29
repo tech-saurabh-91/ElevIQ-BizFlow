@@ -7,11 +7,11 @@ class WarehouseController extends BaseController {
   }
 
   _getSearchableFields() {
-    return ['warehouseName', 'warehouseCode', 'city'];
+    return ['warehouseName', 'warehouseCode', 'city', 'natureOfWarehouse'];
   }
 
   _getPopulateFields() {
-    return ['parentWarehouseId'];
+    return ['parentWarehouseId', 'vanParentWarehouseId'];
   }
 }
 

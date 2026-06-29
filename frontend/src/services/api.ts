@@ -190,6 +190,13 @@ export const moduleAPI = {
   // Van-Sales Target
   getVanSalesTargets: (params: any) => api.get('/module/van-sales-target', { params }),
   saveVanSalesTargets: (data: any) => api.post('/module/van-sales-target', data),
+
+  // Executive Van Assignments
+  getExecutiveVanAssignments: (params?: any) => api.get('/module/executive-van-assignment', { params }),
+  getExecutiveVanAssignment: (id: string) => api.get(`/module/executive-van-assignment/${id}`),
+  createExecutiveVanAssignment: (data: any) => api.post('/module/executive-van-assignment', data),
+  updateExecutiveVanAssignment: (id: string, data: any) => api.put(`/module/executive-van-assignment/${id}`, data),
+  deleteExecutiveVanAssignment: (id: string) => api.delete(`/module/executive-van-assignment/${id}`),
 };
 
 export const transactionAPI = {

@@ -20,6 +20,7 @@ const otherParameterSchema = new mongoose.Schema({
       'visit_purpose',
       'attendance_status',
       'order_status',
+      'warehouse_nature',
       'other',
     ],
     trim: true,

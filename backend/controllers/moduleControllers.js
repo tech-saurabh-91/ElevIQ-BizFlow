@@ -411,6 +411,59 @@ class ExecutiveVanAssignmentController extends BaseController {
   constructor() { super(require('../models').ExecutiveVanAssignment); }
   _getSearchableFields() { return []; }
   _getPopulateFields() { return ['executiveId', 'vanId']; }
+
+  create = async (req, res, next) => {
+    try {
+      const { ExecutiveVanAssignment } = require('../models');
+      const { executiveId, vanId, dayCashOutMandatory } = req.body;
+
+      const existingExec = await ExecutiveVanAssignment.findOne({
+        executiveId, companyId: req.companyId, isActive: true,
+      });
+      if (existingExec) {
+        throw new ApiError(400, 'This executive is already linked to a VAN. Remove the existing link first.');
+      }
+
+      if (dayCashOutMandatory) {
+        const existingCashOut = await ExecutiveVanAssignment.findOne({
+          companyId: req.companyId, dayCashOutMandatory: true, isActive: true,
+        });
+        if (existingCashOut) {
+          throw new ApiError(400, 'Only one user can have Day Cash Out Mandatory = Yes.');
+        }
+      }
+
+      const data = { ...req.body, companyId: req.companyId, createdBy: req.user._id };
+      const doc = await this.Model.create(data);
+      return res.status(201).json(new ApiResponse(201, doc, 'Assigned successfully'));
+    } catch (error) { next(error); }
+  };
+
+  update = async (req, res, next) => {
+    try {
+      const { ExecutiveVanAssignment } = require('../models');
+      const { dayCashOutMandatory } = req.body;
+      const current = await this.Model.findOne({ _id: req.params.id, companyId: req.companyId });
+      if (!current) throw new ApiError(404, 'Record not found');
+
+      if (dayCashOutMandatory && !current.dayCashOutMandatory) {
+        const existingCashOut = await ExecutiveVanAssignment.findOne({
+          companyId: req.companyId, dayCashOutMandatory: true, isActive: true,
+          _id: { $ne: req.params.id },
+        });
+        if (existingCashOut) {
+          throw new ApiError(400, 'Only one user can have Day Cash Out Mandatory = Yes.');
+        }
+      }
+
+      const updates = { ...req.body, updatedBy: req.user._id };
+      const doc = await this.Model.findOneAndUpdate(
+        { _id: req.params.id, companyId: req.companyId },
+        updates, { new: true, runValidators: true }
+      );
+      return res.status(200).json(new ApiResponse(200, doc, 'Updated successfully'));
+    } catch (error) { next(error); }
+  };
 }
 
 class ExecutiveProductGroupController extends BaseController {

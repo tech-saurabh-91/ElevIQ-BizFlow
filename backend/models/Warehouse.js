@@ -17,28 +17,42 @@ const warehouseSchema = new mongoose.Schema({
     trim: true,
     unique: true,
   },
-  parentWarehouseId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Warehouse',
-    default: null,
-  },
   address: {
     type: String,
     required: [true, 'Address is required'],
     trim: true,
   },
-  city: { type: String, required: [true, 'City is required'], trim: true },
+  city: { type: String, trim: true },
   state: { type: String, trim: true },
   pincode: { type: String, trim: true },
-  contactPerson: { type: String, trim: true },
-  contactPhone: {
+  country: { type: String, trim: true, default: 'India' },
+  stateCode: { type: String, trim: true },
+  natureOfWarehouse: {
     type: String,
-    match: [/^[0-9]{10}$/, 'Phone must be 10 digits'],
+    trim: true,
+    required: [true, 'Nature of warehouse is required'],
   },
-  warehouseType: {
+  isParentWarehouse: {
+    type: Boolean,
+    default: false,
+  },
+  parentWarehouseId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Warehouse',
+    default: null,
+  },
+  isVanWarehouse: {
+    type: Boolean,
+    default: false,
+  },
+  vanNumber: {
     type: String,
-    enum: ['main', 'sub', 'van', 'godown'],
-    default: 'main',
+    trim: true,
+  },
+  vanParentWarehouseId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Warehouse',
+    default: null,
   },
   isActive: {
     type: Boolean,
@@ -54,9 +68,10 @@ const warehouseSchema = new mongoose.Schema({
 
 warehouseSchema.pre('save', async function () {
   if (this.isNew && !this.warehouseCode) {
+    const name = this.warehouseName || 'WH';
+    const initials = name.split(/\s+/).map((w: string) => w.charAt(0).toUpperCase()).join('');
     const count = await mongoose.model('Warehouse').countDocuments({ companyId: this.companyId });
-    const prefix = this.companyId.toString().slice(-4);
-    this.warehouseCode = `WH-${prefix}-${String(count + 1).padStart(4, '0')}`;
+    this.warehouseCode = `${initials}${String(count + 1).padStart(2, '0')}`;
   }
 });
 
@@ -77,6 +92,6 @@ warehouseSchema.post('save', async function (doc) {
       await StockSummary.insertMany(entries, { ordered: false }).catch(() => {});
     }
   }
-});;
+});
 
 module.exports = mongoose.model('Warehouse', warehouseSchema);

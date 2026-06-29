@@ -20,6 +20,7 @@ export default function VansPage() {
 
   const [formData, setFormData] = useState({
     executiveId: '',
+    vanId: '',
     dayCashOutMandatory: false,
   });
 
@@ -28,7 +29,7 @@ export default function VansPage() {
   const loadData = async () => {
     try {
       const [assignRes, vansRes, usersRes] = await Promise.all([
-        moduleAPI.getExecutiveVanAssignments().catch(() => ({ data: { data: [] } })),
+        moduleAPI.getExecutiveVanAssignments({ limit: 500 }).catch(() => ({ data: { data: [] } })),
         masterAPI.getVans({ limit: 500 }).catch(() => ({ data: { data: [] } })),
         masterAPI.getUsers({ limit: 500 }).catch(() => ({ data: { data: [] } })),
       ]);
@@ -43,22 +44,38 @@ export default function VansPage() {
     finally { setIsLoading(false); }
   };
 
+  const assignedExecutiveIds = assignments.map((a: any) => {
+    return typeof a.executiveId === 'object' ? a.executiveId?._id : a.executiveId;
+  });
+
+  const availableUsers = users.filter((u: any) => !assignedExecutiveIds.includes(u._id));
+
   const handleAdd = async () => {
     setErrors({});
-    if (!formData.executiveId) { setErrors({ executiveId: 'Please select an executive' }); return; }
+    const newErrors: Record<string, string> = {};
 
-    const assignedVan = vans.find((v: any) => v.isActive !== false);
-    if (!assignedVan) { toast.error('No VAN available. Create a VAN first.'); return; }
+    if (!formData.executiveId) newErrors.executiveId = 'Please select an executive';
+    if (!formData.vanId) newErrors.vanId = 'Please select a VAN';
+
+    if (formData.dayCashOutMandatory) {
+      const existingCashOut = assignments.find((a: any) => a.dayCashOutMandatory && a._id !== formData.executiveId);
+      if (existingCashOut) {
+        newErrors.dayCashOutMandatory = 'Only one user can have Day Cash Out Mandatory = Yes';
+      }
+    }
+
+    if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
 
     setIsSaving(true);
     try {
       await moduleAPI.createExecutiveVanAssignment({
         executiveId: formData.executiveId,
-        vanId: assignedVan._id,
+        vanId: formData.vanId,
         dayCashOutMandatory: formData.dayCashOutMandatory,
       });
       toast.success('Executive assigned successfully');
-      setFormData({ executiveId: '', dayCashOutMandatory: false });
+      setFormData({ executiveId: '', vanId: '', dayCashOutMandatory: false });
+      setIsModalOpen(false);
       loadData();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to assign');
@@ -111,39 +128,51 @@ export default function VansPage() {
 
       <Table columns={columns} data={assignments} isLoading={isLoading} />
 
-      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setFormData({ executiveId: '', dayCashOutMandatory: false }); setErrors({}); }} title="Van Assign" size="md">
+      <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setFormData({ executiveId: '', vanId: '', dayCashOutMandatory: false }); setErrors({}); }} title="Van Assign" size="md">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 items-end">
-            <div>
-              <label className="block text-sm font-medium mb-1">Executive <span className="text-red-500">*</span></label>
-              <select value={formData.executiveId} onChange={(e) => setFormData({ ...formData, executiveId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                <option value="">Select</option>
-                {users.map((u: any) => (
-                  <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>
-                ))}
-              </select>
-              {errors.executiveId && <p className="text-red-500 text-xs mt-1">{errors.executiveId}</p>}
+          <div>
+            <label className="block text-sm font-medium mb-1">Executive <span className="text-red-500">*</span></label>
+            <select value={formData.executiveId} onChange={(e) => setFormData({ ...formData, executiveId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="">Select</option>
+              {availableUsers.map((u: any) => (
+                <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>
+              ))}
+            </select>
+            {errors.executiveId && <p className="text-red-500 text-xs mt-1">{errors.executiveId}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">VAN <span className="text-red-500">*</span></label>
+            <select value={formData.vanId} onChange={(e) => setFormData({ ...formData, vanId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="">Select</option>
+              {vans.filter((v: any) => v.isActive !== false).map((v: any) => (
+                <option key={v._id} value={v._id}>{v.vanName}</option>
+              ))}
+            </select>
+            {errors.vanId && <p className="text-red-500 text-xs mt-1">{errors.vanId}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Day Cash Out Mandatory</label>
+            <div className="flex gap-4 py-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" checked={formData.dayCashOutMandatory === false}
+                  onChange={() => setFormData({ ...formData, dayCashOutMandatory: false })} className="h-4 w-4" />
+                <span className="text-sm">No</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" checked={formData.dayCashOutMandatory === true}
+                  onChange={() => setFormData({ ...formData, dayCashOutMandatory: true })} className="h-4 w-4" />
+                <span className="text-sm">Yes</span>
+              </label>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Day Cash Out Mandatory</label>
-              <div className="flex gap-4 py-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" checked={formData.dayCashOutMandatory === false}
-                    onChange={() => setFormData({ ...formData, dayCashOutMandatory: false })} className="h-4 w-4" />
-                  <span className="text-sm">No</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" checked={formData.dayCashOutMandatory === true}
-                    onChange={() => setFormData({ ...formData, dayCashOutMandatory: true })} className="h-4 w-4" />
-                  <span className="text-sm">Yes</span>
-                </label>
-              </div>
-            </div>
+            {errors.dayCashOutMandatory && <p className="text-red-500 text-xs mt-1">{errors.dayCashOutMandatory}</p>}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button variant="secondary" onClick={() => { setIsModalOpen(false); setFormData({ executiveId: '', dayCashOutMandatory: false }); setErrors({}); }}>Cancel</Button>
+            <Button variant="secondary" onClick={() => { setIsModalOpen(false); setFormData({ executiveId: '', vanId: '', dayCashOutMandatory: false }); setErrors({}); }}>Cancel</Button>
             <Button onClick={handleAdd} disabled={isSaving}>{isSaving ? 'Saving...' : 'Add'}</Button>
           </div>
         </div>
