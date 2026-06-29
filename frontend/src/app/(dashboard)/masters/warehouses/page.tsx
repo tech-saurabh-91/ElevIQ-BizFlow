@@ -126,7 +126,6 @@ export default function WarehousesPage() {
       render: (w: any) => <div><p className="font-medium">{w.warehouseName}</p><p className="text-sm text-gray-500">{w.warehouseCode}</p></div>,
     },
     { key: 'natureOfWarehouse', label: 'Nature' },
-    { key: 'city', label: 'City' },
     {
       key: 'parentWarehouse', label: 'Parent',
       render: (w: any) => <span>{w.isParentWarehouse ? 'Yes' : 'No'}</span>,
