@@ -20,6 +20,7 @@ const PARAM_TYPES = [
   { value: 'visit_purpose', label: 'Visit Purpose' },
   { value: 'attendance_status', label: 'Attendance Status' },
   { value: 'order_status', label: 'Order Status' },
+  { value: 'warehouse_nature', label: 'Warehouse Nature' },
   { value: 'other', label: 'Other' },
 ];
 
