@@ -13,8 +13,8 @@ const executiveVanAssignmentSchema = new mongoose.Schema({
   },
   vanId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'VAN',
-    required: [true, 'VAN ID is required'],
+    ref: 'Warehouse',
+    required: [true, 'VAN/Warehouse ID is required'],
   },
   dayCashOutMandatory: {
     type: Boolean,

@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 export default function VansPage() {
   const perm = usePermission('/masters/vans');
   const [assignments, setAssignments] = useState<any[]>([]);
-  const [vans, setVans] = useState<any[]>([]);
+  const [vanWarehouses, setVanWarehouses] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -28,13 +28,14 @@ export default function VansPage() {
 
   const loadData = async () => {
     try {
-      const [assignRes, vansRes, usersRes] = await Promise.all([
+      const [assignRes, wareRes, usersRes] = await Promise.all([
         moduleAPI.getExecutiveVanAssignments({ limit: 500 }).catch(() => ({ data: { data: [] } })),
-        masterAPI.getVans({ limit: 500 }).catch(() => ({ data: { data: [] } })),
+        masterAPI.getWarehouses({ limit: 500 }).catch(() => ({ data: { data: [] } })),
         masterAPI.getUsers({ limit: 500 }).catch(() => ({ data: { data: [] } })),
       ]);
       setAssignments(assignRes.data.data || []);
-      setVans(vansRes.data.data || []);
+      const vanWareData = (wareRes.data?.data || []).filter((w: any) => w.isVanWarehouse && w.isActive !== false);
+      setVanWarehouses(vanWareData);
       const vanSaleUsers = (usersRes.data?.data || []).filter((u: any) => {
         const sub = (u.roleId?.mobileSubType || '').toLowerCase();
         return sub === 'vansale' && u.isActive !== false;
@@ -90,6 +91,13 @@ export default function VansPage() {
     } catch { toast.error('Failed to remove'); }
   };
 
+  const getVanName = (vanId: any) => {
+    if (!vanId) return '-';
+    if (typeof vanId === 'object') return `${vanId.warehouseName}${vanId.vanNumber ? ` (${vanId.vanNumber})` : ''}`;
+    const ware = vanWarehouses.find((w: any) => w._id === vanId);
+    return ware ? `${ware.warehouseName}${ware.vanNumber ? ` (${ware.vanNumber})` : ''}` : '-';
+  };
+
   const columns = [
     {
       key: 'executive', label: 'Executive',
@@ -99,8 +107,8 @@ export default function VansPage() {
       },
     },
     {
-      key: 'van', label: 'VAN',
-      render: (r: any) => <span>{r.vanId?.vanName || '-'}</span>,
+      key: 'van', label: 'VAN / Warehouse',
+      render: (r: any) => <span>{getVanName(r.vanId)}</span>,
     },
     {
       key: 'dayCashOut', label: 'Day Cash Out Mandatory',
@@ -142,12 +150,12 @@ export default function VansPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">VAN <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium mb-1">VAN / Warehouse <span className="text-red-500">*</span></label>
             <select value={formData.vanId} onChange={(e) => setFormData({ ...formData, vanId: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg">
               <option value="">Select</option>
-              {vans.filter((v: any) => v.isActive !== false).map((v: any) => (
-                <option key={v._id} value={v._id}>{v.vanName}</option>
+              {vanWarehouses.map((w: any) => (
+                <option key={w._id} value={w._id}>{w.warehouseName} ({w.vanNumber || 'No VAN No'})</option>
               ))}
             </select>
             {errors.vanId && <p className="text-red-500 text-xs mt-1">{errors.vanId}</p>}
