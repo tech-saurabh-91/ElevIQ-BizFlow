@@ -441,7 +441,10 @@ class ExecutiveVanAssignmentController extends BaseController {
         });
       });
 
-      const result = Object.values(grouped);
+      const result = Object.entries(grouped).map(([vanId, group]: [string, any]) => ({
+        _id: vanId,
+        ...group,
+      }));
       return res.status(200).json({ statusCode: 200, success: true, message: 'Fetched successfully', data: result });
     } catch (error) { next(error); }
   };
