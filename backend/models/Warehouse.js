@@ -75,27 +75,4 @@ warehouseSchema.pre('save', async function () {
   }
 });
 
-warehouseSchema.post('save', async function (doc) {
-  if (doc.isNew) {
-    try {
-      const Item = mongoose.model('Item');
-      const StockSummary = mongoose.model('StockSummary');
-      const items = await Item.find({ companyId: doc.companyId, isActive: true }).select('_id');
-      if (items.length > 0) {
-        const entries = items.map(item => ({
-          companyId: doc.companyId,
-          itemId: item._id,
-          warehouseId: doc._id,
-          balanceQty: 0,
-          availableQty: 0,
-          requestedQty: 0,
-        }));
-        await StockSummary.insertMany(entries, { ordered: false });
-      }
-    } catch (err) {
-      console.error('Failed to create stock summaries for new warehouse:', err.message);
-    }
-  }
-});
-
 module.exports = mongoose.model('Warehouse', warehouseSchema);

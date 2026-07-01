@@ -5,6 +5,29 @@ class ItemController extends BaseController {
   constructor() { super(require('../models').Item); }
   _getSearchableFields() { return ['itemName', 'itemCode', 'sku', 'brand', 'category', 'customerItemCode']; }
   _getPopulateFields() { return ['groupId', 'subGroupId', 'taxId', 'hsnId']; }
+
+  create = async (req, res, next) => {
+    try {
+      const data = { ...req.body, companyId: req.companyId, createdBy: req.user._id };
+      const doc = await this.Model.create(data);
+
+      const { Warehouse, StockSummary } = require('../models');
+      const warehouses = await Warehouse.find({ companyId: req.companyId, isActive: true }).select('_id');
+      if (warehouses.length > 0) {
+        const entries = warehouses.map(wh => ({
+          companyId: req.companyId,
+          itemId: doc._id,
+          warehouseId: wh._id,
+          balanceQty: 0,
+          availableQty: 0,
+          requestedQty: 0,
+        }));
+        await StockSummary.insertMany(entries, { ordered: false });
+      }
+
+      return res.status(201).json(new ApiResponse(201, doc, 'Created successfully'));
+    } catch (error) { next(error); }
+  };
 }
 
 class CustomerController extends BaseController {
@@ -341,25 +364,6 @@ class StockSummaryController extends BaseController {
     } catch (error) {
       next(error);
     }
-  };
-
-  backfill = async (req, res, next) => {
-    try {
-      const { Warehouse, Item, StockSummary } = require('../models');
-      const warehouses = await Warehouse.find({ companyId: req.companyId, isActive: true });
-      const items = await Item.find({ companyId: req.companyId, isActive: true });
-      let created = 0;
-      for (const wh of warehouses) {
-        for (const item of items) {
-          const exists = await StockSummary.findOne({ companyId: req.companyId, itemId: item._id, warehouseId: wh._id });
-          if (!exists) {
-            await StockSummary.create({ companyId: req.companyId, itemId: item._id, warehouseId: wh._id, balanceQty: 0, availableQty: 0, requestedQty: 0 });
-            created++;
-          }
-        }
-      }
-      return res.status(200).json(new ApiResponse(200, { created }, `Backfill complete. ${created} entries created.`));
-    } catch (error) { next(error); }
   };
 }
 

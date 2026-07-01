@@ -110,23 +110,4 @@ itemSchema.pre('save', async function () {
   }
 });
 
-itemSchema.post('save', async function (doc) {
-  if (doc.isNew) {
-    const Warehouse = mongoose.model('Warehouse');
-    const StockSummary = mongoose.model('StockSummary');
-    const warehouses = await Warehouse.find({ companyId: doc.companyId, isActive: true }).select('_id');
-    if (warehouses.length > 0) {
-      const entries = warehouses.map(wh => ({
-        companyId: doc.companyId,
-        itemId: doc._id,
-        warehouseId: wh._id,
-        balanceQty: 0,
-        availableQty: 0,
-        requestedQty: 0,
-      }));
-      await StockSummary.insertMany(entries, { ordered: false }).catch(() => {});
-    }
-  }
-});;
-
 module.exports = mongoose.model('Item', itemSchema);

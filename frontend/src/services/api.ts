@@ -182,7 +182,6 @@ export const moduleAPI = {
   // Stock Summary
   getStockSummaries: (params?: any) => api.get('/module/stock-summary', { params }),
   getStockSummary: (id: string) => api.get(`/module/stock-summary/${id}`),
-  backfillStockSummaries: () => api.post('/module/stock-summary/backfill'),
 
   // Pre-Sales Target
   getPreSalesTargets: (params: any) => api.get('/module/pre-sales-target', { params }),

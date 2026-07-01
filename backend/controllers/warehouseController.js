@@ -1,5 +1,5 @@
 const BaseController = require('./BaseController');
-const { Warehouse } = require('../models');
+const { Warehouse, Item, StockSummary } = require('../models');
 const { ApiError, ApiResponse } = require('../utils/apiResponse');
 
 class WarehouseController extends BaseController {
@@ -25,6 +25,20 @@ class WarehouseController extends BaseController {
       }
       const data = { ...req.body, companyId: req.companyId, createdBy: req.user._id };
       const doc = await this.Model.create(data);
+
+      const items = await Item.find({ companyId: req.companyId, isActive: true }).select('_id');
+      if (items.length > 0) {
+        const entries = items.map(item => ({
+          companyId: req.companyId,
+          itemId: item._id,
+          warehouseId: doc._id,
+          balanceQty: 0,
+          availableQty: 0,
+          requestedQty: 0,
+        }));
+        await StockSummary.insertMany(entries, { ordered: false });
+      }
+
       return res.status(201).json(new ApiResponse(201, doc, 'Created successfully'));
     } catch (error) { next(error); }
   };
