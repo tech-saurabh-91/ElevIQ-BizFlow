@@ -120,6 +120,8 @@ export default function WarehousesPage() {
 
   const parentWarehouses = warehouses.filter((w: any) => w.isActive !== false && w._id !== editing?._id);
 
+  const existingParentWarehouse = warehouses.find((w: any) => w.isParentWarehouse && w.isActive !== false && w._id !== editing?._id);
+
   const columns = [
     {
       key: 'name', label: 'Warehouse',
@@ -205,13 +207,17 @@ export default function WarehousesPage() {
                     className="h-4 w-4" />
                   <span className="text-sm">No</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className={`flex items-center gap-2 ${existingParentWarehouse && !editing?.isParentWarehouse ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
                   <input type="radio" checked={formData.isParentWarehouse === true}
+                    disabled={!!existingParentWarehouse && !editing?.isParentWarehouse}
                     onChange={() => setFormData({ ...formData, isParentWarehouse: true, isVanWarehouse: false, vanNumber: '', vanParentWarehouseId: '' })}
                     className="h-4 w-4" />
                   <span className="text-sm">Yes</span>
                 </label>
               </div>
+              {existingParentWarehouse && !editing?.isParentWarehouse && (
+                <p className="text-amber-600 text-xs mt-1">Parent warehouse already exists ({existingParentWarehouse.warehouseName}). Only one allowed.</p>
+              )}
             </div>
           </div>
 
