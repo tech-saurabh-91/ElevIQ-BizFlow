@@ -421,7 +421,6 @@ class ExecutiveVanAssignmentController extends BaseController {
         .populate({ path: 'executiveId', model: 'User', select: 'firstName lastName email' })
         .populate({ path: 'vanId', model: 'Warehouse', select: 'warehouseName vanNumber vanParentWarehouseId isVanWarehouse', populate: { path: 'vanParentWarehouseId', model: 'Warehouse', select: 'warehouseName' } })
         .populate({ path: 'createdBy', model: 'User', select: 'firstName lastName' })
-        .populate({ path: 'updatedBy', model: 'User', select: 'firstName lastName' })
         .sort({ createdAt: -1 });
 
       const grouped = {};
@@ -432,7 +431,6 @@ class ExecutiveVanAssignmentController extends BaseController {
             vanId: a.vanId,
             executives: [],
             createdBy: a.createdBy,
-            updatedBy: a.updatedBy,
             updatedAt: a.updatedAt,
           };
         }

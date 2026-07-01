@@ -231,7 +231,7 @@ export default function VansPage() {
     },
     {
       key: 'updatedBy', label: 'Created/Updated By',
-      render: (g: any) => <span>{getUserInfo(g.updatedBy || g.createdBy)}</span>,
+      render: (g: any) => <span>{getUserInfo(g.createdBy)}</span>,
     },
     {
       key: 'actions', label: 'Action',
