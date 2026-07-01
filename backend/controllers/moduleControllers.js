@@ -342,6 +342,25 @@ class StockSummaryController extends BaseController {
       next(error);
     }
   };
+
+  backfill = async (req, res, next) => {
+    try {
+      const { Warehouse, Item, StockSummary } = require('../models');
+      const warehouses = await Warehouse.find({ companyId: req.companyId, isActive: true });
+      const items = await Item.find({ companyId: req.companyId, isActive: true });
+      let created = 0;
+      for (const wh of warehouses) {
+        for (const item of items) {
+          const exists = await StockSummary.findOne({ companyId: req.companyId, itemId: item._id, warehouseId: wh._id });
+          if (!exists) {
+            await StockSummary.create({ companyId: req.companyId, itemId: item._id, warehouseId: wh._id, balanceQty: 0, availableQty: 0, requestedQty: 0 });
+            created++;
+          }
+        }
+      }
+      return res.status(200).json(new ApiResponse(200, { created }, `Backfill complete. ${created} entries created.`));
+    } catch (error) { next(error); }
+  };
 }
 
 class OtherParameterController extends BaseController {

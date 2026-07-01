@@ -23,6 +23,7 @@ export default function StockQueryPage() {
   const [results, setResults] = useState<StockRow[]>([]);
   const [hasQueried, setHasQueried] = useState(false);
   const [isQuerying, setIsQuerying] = useState(false);
+  const [isBackfilling, setIsBackfilling] = useState(false);
   const loRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,11 +87,26 @@ export default function StockQueryPage() {
     finally { setIsQuerying(false); }
   };
 
+  const handleBackfill = async () => {
+    setIsBackfilling(true);
+    try {
+      const res = await moduleAPI.backfillStockSummaries();
+      toast.success(res.data.message || 'Backfill complete');
+      loadItems();
+    } catch { toast.error('Backfill failed'); }
+    finally { setIsBackfilling(false); }
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Stock Query</h1>
-        <p className="text-sm text-gray-500 mt-1">Check item-wise stock across all warehouses</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Stock Query</h1>
+          <p className="text-sm text-gray-500 mt-1">Check item-wise stock across all warehouses</p>
+        </div>
+        <Button variant="secondary" onClick={handleBackfill} disabled={isBackfilling}>
+          {isBackfilling ? 'Backfilling...' : 'Sync Stock Data'}
+        </Button>
       </div>
 
       <div className="bg-white rounded-lg shadow border p-6">

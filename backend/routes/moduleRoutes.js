@@ -115,6 +115,7 @@ router.delete('/stock-adjustment/:id', mongoIdValidation, stockAdjustmentControl
 
 // Stock Summary
 router.get('/stock-summary', paginationValidation, stockSummaryController.getAll);
+router.post('/stock-summary/backfill', stockSummaryController.backfill);
 router.get('/stock-summary/:id', mongoIdValidation, stockSummaryController.getById);
 
 // Other Parameters
