@@ -412,56 +412,163 @@ class ExecutiveVanAssignmentController extends BaseController {
   _getSearchableFields() { return []; }
   _getPopulateFields() { return ['executiveId', 'vanId']; }
 
+  getAll = async (req, res, next) => {
+    try {
+      const { ExecutiveVanAssignment } = require('../models');
+      const filter = { companyId: req.companyId, isActive: true };
+
+      const assignments = await ExecutiveVanAssignment.find(filter)
+        .populate({ path: 'executiveId', model: 'User', select: 'firstName lastName email' })
+        .populate({ path: 'vanId', model: 'Warehouse', select: 'warehouseName vanNumber vanParentWarehouseId isVanWarehouse', populate: { path: 'vanParentWarehouseId', model: 'Warehouse', select: 'warehouseName' } })
+        .populate({ path: 'createdBy', model: 'User', select: 'firstName lastName' })
+        .populate({ path: 'updatedBy', model: 'User', select: 'firstName lastName' })
+        .sort({ createdAt: -1 });
+
+      const grouped = {};
+      assignments.forEach(a => {
+        const vanId = a.vanId?._id?.toString() || 'unknown';
+        if (!grouped[vanId]) {
+          grouped[vanId] = {
+            vanId: a.vanId,
+            executives: [],
+            createdBy: a.createdBy,
+            updatedBy: a.updatedBy,
+            updatedAt: a.updatedAt,
+          };
+        }
+        grouped[vanId].executives.push({
+          _id: a._id,
+          executiveId: a.executiveId,
+          dayCashOutMandatory: a.dayCashOutMandatory,
+        });
+      });
+
+      const result = Object.values(grouped);
+      return res.status(200).json({ statusCode: 200, success: true, message: 'Fetched successfully', data: result });
+    } catch (error) { next(error); }
+  };
+
   create = async (req, res, next) => {
     try {
       const { ExecutiveVanAssignment } = require('../models');
-      const { executiveId, vanId, dayCashOutMandatory } = req.body;
+      const { vanId, executives } = req.body;
 
-      const existingExec = await ExecutiveVanAssignment.findOne({
-        executiveId, companyId: req.companyId, isActive: true,
-      });
-      if (existingExec) {
-        throw new ApiError(400, 'This executive is already linked to a VAN. Remove the existing link first.');
+      if (!vanId || !executives || executives.length === 0) {
+        throw new ApiError(400, 'VAN and at least one executive are required');
       }
 
-      if (dayCashOutMandatory) {
-        const existingCashOut = await ExecutiveVanAssignment.findOne({
-          companyId: req.companyId, dayCashOutMandatory: true, isActive: true,
+      for (const exec of executives) {
+        const existingExec = await ExecutiveVanAssignment.findOne({
+          executiveId: exec.executiveId, companyId: req.companyId, isActive: true,
         });
-        if (existingCashOut) {
-          throw new ApiError(400, 'Only one user can have Day Cash Out Mandatory = Yes.');
+        if (existingExec) {
+          const u = await require('../models').User.findById(exec.executiveId).select('firstName lastName');
+          throw new ApiError(400, `${u?.firstName || 'This user'} ${u?.lastName || ''} is already linked to another VAN/warehouse.`);
         }
       }
 
-      const data = { ...req.body, companyId: req.companyId, createdBy: req.user._id };
-      const doc = await this.Model.create(data);
-      return res.status(201).json(new ApiResponse(201, doc, 'Assigned successfully'));
+      const yesCount = executives.filter(e => e.dayCashOutMandatory).length;
+      if (yesCount > 1) {
+        throw new ApiError(400, 'Only one user can have Day Cash Out Mandatory = Yes per VAN.');
+      }
+
+      if (yesCount === 1) {
+        const existingCashOut = await ExecutiveVanAssignment.findOne({
+          companyId: req.companyId, dayCashOutMandatory: true, isActive: true,
+          vanId: { $ne: vanId },
+        });
+        if (existingCashOut) {
+          throw new ApiError(400, 'Only one user can have Day Cash Out Mandatory = Yes across all VANs.');
+        }
+      }
+
+      const docs = executives.map(exec => ({
+        companyId: req.companyId,
+        vanId,
+        executiveId: exec.executiveId,
+        dayCashOutMandatory: exec.dayCashOutMandatory || false,
+        createdBy: req.user._id,
+      }));
+
+      const result = await this.Model.insertMany(docs);
+      return res.status(201).json(new ApiResponse(201, result, 'Assigned successfully'));
     } catch (error) { next(error); }
   };
 
   update = async (req, res, next) => {
     try {
       const { ExecutiveVanAssignment } = require('../models');
-      const { dayCashOutMandatory } = req.body;
-      const current = await this.Model.findOne({ _id: req.params.id, companyId: req.companyId });
-      if (!current) throw new ApiError(404, 'Record not found');
+      const { vanId, executives } = req.body;
 
-      if (dayCashOutMandatory && !current.dayCashOutMandatory) {
-        const existingCashOut = await ExecutiveVanAssignment.findOne({
-          companyId: req.companyId, dayCashOutMandatory: true, isActive: true,
-          _id: { $ne: req.params.id },
+      if (!vanId || !executives || executives.length === 0) {
+        throw new ApiError(400, 'VAN and at least one executive are required');
+      }
+
+      for (const exec of executives) {
+        if (exec._id) continue;
+        const existingExec = await ExecutiveVanAssignment.findOne({
+          executiveId: exec.executiveId, companyId: req.companyId, isActive: true,
         });
-        if (existingCashOut) {
-          throw new ApiError(400, 'Only one user can have Day Cash Out Mandatory = Yes.');
+        if (existingExec) {
+          const u = await require('../models').User.findById(exec.executiveId).select('firstName lastName');
+          throw new ApiError(400, `${u?.firstName || 'This user'} ${u?.lastName || ''} is already linked to another VAN/warehouse.`);
         }
       }
 
-      const updates = { ...req.body, updatedBy: req.user._id };
-      const doc = await this.Model.findOneAndUpdate(
-        { _id: req.params.id, companyId: req.companyId },
-        updates, { new: true, runValidators: true }
+      const yesCount = executives.filter(e => e.dayCashOutMandatory).length;
+      if (yesCount > 1) {
+        throw new ApiError(400, 'Only one user can have Day Cash Out Mandatory = Yes per VAN.');
+      }
+
+      if (yesCount === 1) {
+        const existingCashOut = await ExecutiveVanAssignment.findOne({
+          companyId: req.companyId, dayCashOutMandatory: true, isActive: true,
+          vanId: { $ne: vanId },
+        });
+        if (existingCashOut) {
+          throw new ApiError(400, 'Only one user can have Day Cash Out Mandatory = Yes across all VANs.');
+        }
+      }
+
+      const existingForVan = await this.Model.find({ vanId, companyId: req.companyId, isActive: true });
+      const existingIds = existingForVan.map(e => e._id.toString());
+      const incomingIds = executives.filter(e => e._id).map(e => e._id);
+
+      const toDelete = existingIds.filter(id => !incomingIds.includes(id));
+      if (toDelete.length > 0) {
+        await this.Model.updateMany({ _id: { $in: toDelete } }, { isActive: false, updatedBy: req.user._id });
+      }
+
+      for (const exec of executives) {
+        if (exec._id) {
+          await this.Model.findOneAndUpdate(
+            { _id: exec._id, companyId: req.companyId },
+            { dayCashOutMandatory: exec.dayCashOutMandatory, updatedBy: req.user._id }
+          );
+        } else {
+          await this.Model.create({
+            companyId: req.companyId,
+            vanId,
+            executiveId: exec.executiveId,
+            dayCashOutMandatory: exec.dayCashOutMandatory || false,
+            createdBy: req.user._id,
+          });
+        }
+      }
+
+      return res.status(200).json(new ApiResponse(200, null, 'Updated successfully'));
+    } catch (error) { next(error); }
+  };
+
+  delete = async (req, res, next) => {
+    try {
+      const { vanId } = req.params;
+      const result = await this.Model.updateMany(
+        { vanId, companyId: req.companyId, isActive: true },
+        { isActive: false, updatedBy: req.user._id }
       );
-      return res.status(200).json(new ApiResponse(200, doc, 'Updated successfully'));
+      if (result.modifiedCount === 0) throw new ApiError(404, 'No assignments found for this VAN');
+      return res.status(200).json(new ApiResponse(200, null, 'Deleted successfully'));
     } catch (error) { next(error); }
   };
 }

@@ -191,12 +191,11 @@ export const moduleAPI = {
   getVanSalesTargets: (params: any) => api.get('/module/van-sales-target', { params }),
   saveVanSalesTargets: (data: any) => api.post('/module/van-sales-target', data),
 
-  // Executive Van Assignments
-  getExecutiveVanAssignments: (params?: any) => api.get('/module/executive-van-assignment', { params }),
-  getExecutiveVanAssignment: (id: string) => api.get(`/module/executive-van-assignment/${id}`),
-  createExecutiveVanAssignment: (data: any) => api.post('/module/executive-van-assignment', data),
-  updateExecutiveVanAssignment: (id: string, data: any) => api.put(`/module/executive-van-assignment/${id}`, data),
-  deleteExecutiveVanAssignment: (id: string) => api.delete(`/module/executive-van-assignment/${id}`),
+  // Executive Van Assignments (grouped by VAN)
+  getExecutiveVanAssignments: () => api.get('/module/executive-van-assignment'),
+  createExecutiveVanAssignments: (data: { vanId: string; executives: any[] }) => api.post('/module/executive-van-assignment', data),
+  updateExecutiveVanAssignments: (vanId: string, data: { vanId: string; executives: any[] }) => api.put(`/module/executive-van-assignment/${vanId}`, data),
+  deleteExecutiveVanAssignments: (vanId: string) => api.delete(`/module/executive-van-assignment/${vanId}`),
 };
 
 export const transactionAPI = {

@@ -73,11 +73,10 @@ router.put('/location/:id', mongoIdValidation, locationController.update);
 router.delete('/location/:id', mongoIdValidation, locationController.delete);
 
 // Executive-VAN Assignment
+router.get('/executive-van-assignment', executiveVanAssignmentController.getAll);
 router.post('/executive-van-assignment', executiveVanAssignmentController.create);
-router.get('/executive-van-assignment', paginationValidation, executiveVanAssignmentController.getAll);
-router.get('/executive-van-assignment/:id', mongoIdValidation, executiveVanAssignmentController.getById);
-router.put('/executive-van-assignment/:id', mongoIdValidation, executiveVanAssignmentController.update);
-router.delete('/executive-van-assignment/:id', mongoIdValidation, executiveVanAssignmentController.delete);
+router.put('/executive-van-assignment/:vanId', executiveVanAssignmentController.update);
+router.delete('/executive-van-assignment/:vanId', executiveVanAssignmentController.delete);
 
 // Executive-Product Group
 router.post('/executive-product-group', executiveProductGroupController.create);
