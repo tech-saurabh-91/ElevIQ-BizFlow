@@ -1,0 +1,527 @@
+import mongoose from 'mongoose';
+
+import StockBalance from '../models/StockBalance.js';
+import StockMovement from '../models/StockMovement.js';
+import Product from '../models/Product.js';
+import Warehouse from '../models/Warehouse.js';
+import Setting from '../models/Setting.js';
+
+import { AppError, BadRequestError, ConflictError, ErrorCodes } from '../utils/errors.js';
+import { round2 } from '../models/helpers.js';
+import { nextSeries, getFinancialYearTag } from '../utils/numberSeries.js';
+import { getCompanyId } from '../middlewares/tenantContext.js';
+import { MOVEMENT_TYPES, PO_TRANSITIONS, TRANSFER_TRANSITIONS } from '../config/constants.js';
+
+/**
+ * Inventory domain rules (Phase 7).
+ *
+ * This module OWNS stock. Every change to an on-hand quantity - whether it
+ * arrives from a goods receipt, leaves on an order dispatch, is corrected by an
+ * adjustment or moves between warehouses - is funnelled through
+ * `recordMovement`, which is the single write path that:
+ *
+ *   1. applies the signed delta to the (product, warehouse) `StockBalance`,
+ *   2. appends an immutable `StockMovement` row carrying the running balance,
+ *   3. keeps the company-wide `Product.stock` total in lockstep, and
+ *   4. refuses to go negative unless the tenant allows it.
+ *
+ * Nothing else in the codebase may mutate `Product.stock` or `StockBalance.qty`.
+ */
+
+const EPSILON = 0.0001;
+
+/** Resolve the tenant's default warehouse (settings -> MAIN -> first active). */
+export const resolveDefaultWarehouse = async (settings) => {
+  const configured = settings?.inventory?.defaultWarehouse;
+  if (configured) {
+    const doc = await Warehouse.findById(configured);
+    if (doc && doc.isActive !== false) return doc;
+  }
+  const main = await Warehouse.findOne({ type: 'MAIN', isActive: { $ne: false } }).sort({ createdAt: 1 });
+  if (main) return main;
+  return Warehouse.findOne({ isActive: { $ne: false } }).sort({ createdAt: 1 });
+};
+
+/** Load a warehouse by id, or throw 400. */
+export const loadWarehouse = async (id, label = 'Warehouse') => {
+  if (!id) return null;
+  const doc = await Warehouse.findById(id);
+  if (!doc) throw new BadRequestError(`${label} not found`, 'INVALID_REFERENCE');
+  return doc;
+};
+
+/** True when the tenant permits stock to go negative. */
+const allowsNegative = (settings) => Boolean(settings?.order?.allowNegativeStock);
+
+/**
+ * The single write path for stock. Never call `Product.stock` / `StockBalance.qty`
+ * updates anywhere else.
+ *
+ * @param {object} input
+ * @param {mongoose.ObjectId|string} input.product   - product id (required)
+ * @param {mongoose.ObjectId|string|null} input.warehouse - warehouse id (null = company-level)
+ * @param {number} input.qty     - signed delta (+ in / - out)
+ * @param {string} input.type    - MOVEMENT_TYPES value
+ * @param {object} [input.settings] - cached tenant settings (for the negative-stock knob)
+ * @returns {Promise<{movement, balance, product, previousQty, newQty}>}
+ */
+export const recordMovement = async ({
+  product: productId,
+  warehouse: warehouseId = null,
+  qty,
+  type,
+  refType = 'MANUAL',
+  refId = null,
+  refNo = '',
+  reason = '',
+  note = '',
+  unitCost = 0,
+  movedBy = null,
+  settings = null,
+}) => {
+  const delta = Number(qty || 0);
+  if (!Number.isFinite(delta) || Math.abs(delta) < EPSILON) {
+    throw new BadRequestError('Stock movement quantity must be a non-zero number', 'VALIDATION_ERROR');
+  }
+
+  const product = await Product.findById(productId);
+  if (!product) throw new BadRequestError('Product not found', 'INVALID_REFERENCE');
+
+  const cfg = settings || (await Setting.forCompany(product.companyId));
+  const negativeAllowed = allowsNegative(cfg);
+
+  let warehouse = null;
+  if (warehouseId) {
+    warehouse = await Warehouse.findById(warehouseId);
+    if (!warehouse) throw new BadRequestError('Warehouse not found', 'INVALID_REFERENCE');
+  }
+
+  const balanceKey = {
+    product: product._id,
+    warehouse: warehouse ? warehouse._id : null,
+  };
+
+  let balance = await StockBalance.findOne(balanceKey);
+  if (!balance) {
+    // Migration path: products created before the ledger existed carry their
+    // on-hand only in `Product.stock` with no StockBalance rows. The FIRST
+    // balance ever created for such a product (at company level) is seeded
+    // from that total so the very first movement (e.g. an order dispatch)
+    // starts from the real quantity instead of zero. Once any row exists the
+    // ledger is authoritative - `Product.stock` is kept in lockstep from then
+    // on, so re-seeding would double-count.
+    let legacyQty = 0;
+    if (!warehouse && !(await StockBalance.exists({ product: product._id }))) {
+      legacyQty = Number(product.stock || 0) > 0 ? Number(product.stock) : 0;
+    }
+
+    balance = new StockBalance({
+      ...balanceKey,
+      productName: product.name || '',
+      productSku: product.sku || '',
+      unit: product.unit || 'PCS',
+      warehouseCode: warehouse?.code || '',
+      warehouseName: warehouse?.name || '',
+      qty: legacyQty,
+      reservedQty: 0,
+      lowStockLevel: Number(product.lowStockLevel || 0),
+      lastCost: Number(unitCost || 0),
+    });
+  }
+
+  const previousQty = Number(balance.qty || 0);
+  const newQty = round2(previousQty + delta);
+
+  if (newQty < -EPSILON && !negativeAllowed) {
+    throw new AppError(
+      `Insufficient stock for ${product.name}: only ${previousQty} ${product.unit || 'unit'}(s) available, ${Math.abs(
+        delta
+      )} requested`,
+      {
+        status: 422,
+        code: ErrorCodes.INSUFFICIENT_STOCK,
+        errors: [{ field: 'qty', message: `Only ${previousQty} ${product.unit || 'unit'}(s) in stock` }],
+      }
+    );
+  }
+
+  // Keep the snapshot fields fresh so lists stay readable after a rename.
+  balance.productName = product.name || '';
+  balance.productSku = product.sku || '';
+  balance.unit = product.unit || 'PCS';
+  balance.lowStockLevel = Number(product.lowStockLevel || 0);
+  if (Number(unitCost || 0) > 0) balance.lastCost = round2(unitCost);
+  balance.qty = newQty < 0 ? 0 : newQty; // never persist a negative balance
+  balance.lastMovementAt = new Date();
+  balance.lastMovementType = type;
+  await balance.save();
+
+  const movement = await StockMovement.create({
+    type,
+    product: product._id,
+    productName: product.name || '',
+    productSku: product.sku || '',
+    unit: product.unit || 'PCS',
+    warehouse: warehouse ? warehouse._id : null,
+    warehouseCode: warehouse?.code || '',
+    warehouseName: warehouse?.name || '',
+    qty: delta,
+    balanceAfter: newQty < 0 ? 0 : newQty,
+    unitCost: round2(unitCost),
+    value: round2(delta * Number(unitCost || 0)),
+    refType,
+    refId: refId || null,
+    refNo: refNo || '',
+    reason,
+    note,
+    movedBy: movedBy || null,
+    movedAt: new Date(),
+  });
+
+  // Keep the company-wide total in lockstep. `Product.stock` is what order
+  // booking and invoicing read, so it must always equal the net of all deltas.
+  product.stock = round2(Number(product.stock || 0) + delta);
+  await product.save();
+
+  return { movement, balance, product, previousQty, newQty };
+};
+
+/** Post several movements as one unit (used by GRN / adjustment / transfer). */
+export const recordMovements = async (movements, settings) => {
+  const results = [];
+  for (const m of movements) {
+    results.push(await recordMovement({ ...m, settings }));
+  }
+  return results;
+};
+
+/**
+ * Reverse movements previously booked by a document (GRN cancel, adjustment
+ * cancel). Writes the opposite-signed delta with the original type retained in
+ * the reason so the ledger stays self-explanatory.
+ */
+export const reverseMovementsFor = async (refType, refId, reason, settings, movedBy = null) => {
+  const posted = await StockMovement.find({ refType, refId });
+  if (!posted.length) return [];
+
+  const reversals = [];
+  for (const m of posted) {
+    reversals.push({
+      product: m.product,
+      warehouse: m.warehouse,
+      qty: -Number(m.qty || 0),
+      type: m.type,
+      refType,
+      refId,
+      refNo: m.refNo || '',
+      reason: reason || 'Reversal',
+      note: `Reversal of movement ${String(m._id)}`,
+      unitCost: Number(m.unitCost || 0),
+      movedBy,
+    });
+  }
+  return recordMovements(reversals, settings);
+};
+
+// ---------------------------------------------------------------------------
+// Availability
+// ---------------------------------------------------------------------------
+
+/** On-hand for a product in a warehouse (0 when no balance row exists). */
+export const onHand = async (productId, warehouseId = null) => {
+  const balance = await StockBalance.findOne({ product: productId, warehouse: warehouseId });
+  return Number(balance?.qty || 0);
+};
+
+/** Available to promise (on-hand minus reserved) for a product/warehouse. */
+export const availableQty = async (productId, warehouseId = null) => {
+  const balance = await StockBalance.findOne({ product: productId, warehouse: warehouseId });
+  if (!balance) return 0;
+  return Math.max(0, Number(balance.qty || 0) - Number(balance.reservedQty || 0));
+};
+
+/**
+ * Aggregate available stock for a product across every warehouse (or a single
+ * one). Returns the `Product.stock`-style company total.
+ */
+export const totalOnHand = async (productId) => {
+  const rows = await StockBalance.aggregate([
+    {
+      $match: {
+        companyId: new mongoose.Types.ObjectId(getCompanyId()),
+        isDeleted: { $ne: true },
+        product: new mongoose.Types.ObjectId(String(productId)),
+      },
+    },
+    { $group: { _id: null, qty: { $sum: '$qty' }, reserved: { $sum: '$reservedQty' } } },
+  ]);
+  const row = rows[0];
+  return {
+    qty: Number(row?.qty || 0),
+    reserved: Number(row?.reserved || 0),
+    available: Math.max(0, Number(row?.qty || 0) - Number(row?.reserved || 0)),
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Reservation (order confirm -> dispatch)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reserve stock for a confirmed order so two reps cannot book the same units.
+ * Reservations are held per (product, warehouse); the warehouse defaults to the
+ * tenant's default when the order does not name one. Reserving more than the
+ * on-hand quantity is allowed (it is a soft commitment) but availability
+ * reporting clamps at zero.
+ */
+export const reserveStock = async (lines = [], { warehouseId = null, settings = null } = {}) => {
+  if (!settings?.order?.reserveStockOnConfirm) return;
+  const warehouse = warehouseId || (await resolveDefaultWarehouse(settings))?._id || null;
+  if (!warehouse) return;
+
+  for (const line of lines) {
+    const qty = Number(line.qty || 0);
+    if (qty <= 0) continue;
+    await StockBalance.updateOne(
+      { product: line.product, warehouse },
+      {
+        $inc: { reservedQty: qty },
+        $setOnInsert: {
+          productName: line.name || '',
+          productSku: line.sku || '',
+          unit: line.unit || 'PCS',
+        },
+      },
+      { upsert: true }
+    ).skipTenant();
+  }
+};
+
+/** Release a reservation (order cancelled / rejected before dispatch). */
+export const releaseReservation = async (lines = [], { warehouseId = null, settings = null } = {}) => {
+  if (!settings?.order?.reserveStockOnConfirm) return;
+  const warehouse = warehouseId || (await resolveDefaultWarehouse(settings))?._id || null;
+
+  for (const line of lines) {
+    const qty = Number(line.qty || 0);
+    if (qty <= 0) continue;
+    await StockBalance.updateOne(
+      { product: line.product, warehouse, reservedQty: { $gte: qty } },
+      { $inc: { reservedQty: -qty } }
+    ).skipTenant();
+  }
+};
+
+/**
+ * Book stock OUT for a dispatched order. Consumes the reservation (if any) and
+ * writes one SALES_OUT movement per line so the ledger reflects the sale.
+ *
+ * A pre-flight check validates every line against the company-wide on-hand
+ * total BEFORE any write, so a shortage can never leave the ledger half-updated.
+ */
+export const dispatchOrderStock = async (order, { settings = null, movedBy = null } = {}) => {
+  const cfg = settings || (await Setting.forCompany(order.companyId));
+  const warehouse = order.warehouse || (await resolveDefaultWarehouse(cfg))?._id || null;
+  const negativeAllowed = Boolean(cfg?.order?.allowNegativeStock);
+  const lines = (order.items || []).filter((l) => Number(l.qty || 0) > 0);
+
+  // ---- pre-flight: nothing is written unless the whole dispatch can go out ----
+  if (!negativeAllowed) {
+    for (const line of lines) {
+      const product = await Product.findById(line.product).select('name unit stock');
+      if (!product) {
+        throw new BadRequestError('Product not found', 'INVALID_REFERENCE');
+      }
+      const qty = Number(line.qty || 0);
+      if (Number(product.stock || 0) + EPSILON < qty) {
+        throw new AppError(
+          `Insufficient stock for ${product.name}: only ${product.stock || 0} ${product.unit || 'unit'}(s) available, ${qty} requested`,
+          {
+            status: 422,
+            code: ErrorCodes.INSUFFICIENT_STOCK,
+            errors: [{ field: 'items', message: `Only ${product.stock || 0} ${product.unit || 'unit'}(s) in stock` }],
+          }
+        );
+      }
+    }
+  }
+
+  for (const line of lines) {
+    const qty = Number(line.qty || 0);
+
+    // Consume the reservation first so available doesn't double-count.
+    if (cfg?.order?.reserveStockOnConfirm && warehouse) {
+      await StockBalance.updateOne(
+        { product: line.product, warehouse, reservedQty: { $gte: qty } },
+        { $inc: { reservedQty: -qty } }
+      ).skipTenant();
+    }
+
+    await recordMovement({
+      product: line.product,
+      warehouse,
+      qty: -qty,
+      type: MOVEMENT_TYPES.SALES_OUT,
+      refType: 'ORDER',
+      refId: order._id,
+      refNo: order.orderNo || '',
+      reason: 'Order dispatched',
+      unitCost: Number(line.unitPrice || 0),
+      movedBy,
+      settings: cfg,
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Reservations -> available view (used by inventory list)
+// ---------------------------------------------------------------------------
+
+/** Recompute `Product.stock` from the sum of all warehouse balances. */
+export const recomputeProductStock = async (productId) => {
+  const totals = await StockBalance.aggregate([
+    {
+      $match: {
+        companyId: new mongoose.Types.ObjectId(getCompanyId()),
+        isDeleted: { $ne: true },
+        product: new mongoose.Types.ObjectId(String(productId)),
+      },
+    },
+    { $group: { _id: null, qty: { $sum: '$qty' } } },
+  ]);
+  const qty = round2(Number(totals[0]?.qty || 0));
+  await Product.updateOne({ _id: productId }, { $set: { stock: qty } }).skipTenant();
+  return qty;
+};
+
+// ---------------------------------------------------------------------------
+// Numbering
+// ---------------------------------------------------------------------------
+
+const seriesFor = (settings, key, fallbackPrefix, fallbackPad = 6) => ({
+  prefix: settings?.series?.[key]?.prefix || fallbackPrefix,
+  pad: Number(settings?.series?.[key]?.pad || fallbackPad),
+});
+
+export const nextPurchaseOrderNumber = async (companyId, settings, date = new Date()) => {
+  const { prefix, pad } = seriesFor(settings, 'purchase', 'PO');
+  const fy = getFinancialYearTag(date, Number(settings?.financialYearStartMonth || 4));
+  return nextSeries(companyId, 'PURCHASE', { prefix, pad, fy });
+};
+
+export const nextGrnNumber = async (companyId, settings, date = new Date()) => {
+  const { prefix, pad } = seriesFor(settings, 'grn', 'GRN');
+  const fy = getFinancialYearTag(date, Number(settings?.financialYearStartMonth || 4));
+  return nextSeries(companyId, 'GRN', { prefix, pad, fy });
+};
+
+export const nextAdjustmentNumber = async (companyId, settings, date = new Date()) => {
+  const { prefix, pad } = seriesFor(settings, 'adjustment', 'ADJ', 5);
+  const fy = getFinancialYearTag(date, Number(settings?.financialYearStartMonth || 4));
+  return nextSeries(companyId, 'ADJUSTMENT', { prefix, pad, fy });
+};
+
+export const nextTransferNumber = async (companyId, settings, date = new Date()) => {
+  const { prefix, pad } = seriesFor(settings, 'transfer', 'TRF', 5);
+  const fy = getFinancialYearTag(date, Number(settings?.financialYearStartMonth || 4));
+  return nextSeries(companyId, 'TRANSFER', { prefix, pad, fy });
+};
+
+// ---------------------------------------------------------------------------
+// Status transitions (shared guard)
+// ---------------------------------------------------------------------------
+
+/** Enforce a documented transition map; throws 409 when illegal. */
+export const assertTransition = (map, from, to, label) => {
+  const allowed = map[from] || [];
+  if (!allowed.includes(to)) {
+    throw new ConflictError(
+      `${label} cannot move from ${from} to ${to}`,
+      ErrorCodes.INVALID_STATUS_TRANSITION
+    );
+  }
+};
+
+export { PO_TRANSITIONS, TRANSFER_TRANSITIONS };
+
+/** Purchase-order status transition guard. */
+export const assertPoTransition = (from, to) =>
+  assertTransition(PO_TRANSITIONS, from, to, 'Purchase order');
+
+/** Transfer status transition guard. */
+export const assertTransferTransition = (from, to) =>
+  assertTransition(TRANSFER_TRANSITIONS, from, to, 'Transfer');
+
+// ---------------------------------------------------------------------------
+// Low stock
+// ---------------------------------------------------------------------------
+
+/**
+ * Products whose on-hand has fallen to/below their low-stock level.
+ *
+ * Without a warehouse: compares the live company-wide `Product.stock` snapshot
+ * against each product's `lowStockLevel`. With a warehouse: aggregates that
+ * warehouse's `StockBalance` rows and compares against the same per-product
+ * threshold (falling back to the tenant-wide setting when a product has none).
+ */
+export const lowStockProducts = async (settings, { warehouseId = null, limit = 500 } = {}) => {
+  const fallback = Number(settings?.inventory?.lowStockThreshold || 0);
+  const companyId = new mongoose.Types.ObjectId(getCompanyId());
+
+  if (warehouseId) {
+    return StockBalance.aggregate([
+      {
+        $match: {
+          companyId,
+          isDeleted: { $ne: true },
+          warehouse: new mongoose.Types.ObjectId(String(warehouseId)),
+        },
+      },
+      { $lookup: { from: 'products', localField: 'product', foreignField: '_id', as: 'productDoc' } },
+      { $unwind: { path: '$productDoc', preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          _threshold: {
+            $ifNull: [{ $cond: [{ $gt: ['$productDoc.lowStockLevel', 0] }, '$productDoc.lowStockLevel', fallback] }, fallback],
+          },
+        },
+      },
+      { $match: { $expr: { $lte: ['$qty', '$_threshold'] } } },
+      { $sort: { qty: 1 } },
+      { $limit: limit },
+    ]);
+  }
+
+  return Product.aggregate([
+    { $match: { companyId, isDeleted: { $ne: true }, isActive: { $ne: false } } },
+    {
+      $addFields: {
+        _threshold: { $ifNull: [{ $cond: [{ $gt: ['$lowStockLevel', 0] }, '$lowStockLevel', fallback] }, fallback] },
+      },
+    },
+    { $match: { $expr: { $lte: ['$stock', '$_threshold'] } } },
+    { $sort: { stock: 1 } },
+    { $limit: limit },
+  ]);
+};
+
+export default {
+  resolveDefaultWarehouse,
+  recordMovement,
+  recordMovements,
+  reverseMovementsFor,
+  onHand,
+  availableQty,
+  totalOnHand,
+  reserveStock,
+  releaseReservation,
+  dispatchOrderStock,
+  recomputeProductStock,
+  nextPurchaseOrderNumber,
+  nextGrnNumber,
+  nextAdjustmentNumber,
+  nextTransferNumber,
+  assertPoTransition,
+  assertTransferTransition,
+  lowStockProducts,
+};
