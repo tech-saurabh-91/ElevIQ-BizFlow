@@ -778,6 +778,72 @@ describe('Phase 2 - Announcements', () => {
 });
 
 // ---------------------------------------------------------------------------
+describe('Phase 8 - Platform reports', () => {
+  test('overview returns windowed cross-tenant analytics', async () => {
+    const token = await asSuper();
+    const res = await request
+      .get('/api/platform/reports/overview?dateFrom=2020-01-01')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    const d = res.body.data;
+
+    expect(d).toHaveProperty('window');
+    expect(d).toHaveProperty('summary');
+    expect(d).toHaveProperty('signups');
+    expect(d).toHaveProperty('byStatus');
+    expect(d).toHaveProperty('byPlan');
+    expect(d).toHaveProperty('byRole');
+    expect(d).toHaveProperty('topCompanies');
+
+    // The Alpha company created earlier in this suite must be counted.
+    expect(d.summary.totalCompanies).toBeGreaterThanOrEqual(1);
+    expect(d.summary.totalUsers).toBeGreaterThanOrEqual(1);
+    expect(d.summary.activationRate).toBeGreaterThan(0);
+    expect(Array.isArray(d.signups)).toBe(true);
+    expect(d.signups.length).toBeGreaterThan(0);
+    expect(d.byStatus.length).toBeGreaterThan(0);
+    // Every status row carries a real status string + count.
+    expect(d.byStatus.every((r) => typeof r.status === 'string' && r.count >= 0)).toBe(true);
+  });
+
+  test('top companies are hydrated with names and codes', async () => {
+    const token = await asSuper();
+    const res = await request.get('/api/platform/reports/overview').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+
+    for (const c of res.body.data.topCompanies) {
+      expect(c.name).toBeTruthy();
+      expect(c.code).toBeTruthy();
+      expect(c.users).toBeGreaterThan(0);
+    }
+  });
+
+  test('rejects an invalid date window', async () => {
+    const token = await asSuper();
+    const res = await request
+      .get('/api/platform/reports/overview?dateFrom=not-a-date')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(422);
+  });
+
+  test('requires a platform token', async () => {
+    const res = await request.get('/api/platform/reports/overview');
+    expect(res.status).toBe(401);
+  });
+
+  test('a company token is blocked', async () => {
+    const login = await request.post('/api/auth/login').send(alphaAdmin);
+    const token = login.body.data.accessToken;
+    const res = await request
+      .get('/api/platform/reports/overview')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN');
+  });
+});
+
+// ---------------------------------------------------------------------------
 describe('Phase 2 - Access control', () => {
   test('company tokens are blocked from every platform route', async () => {
     const login = await request.post('/api/auth/login').send(alphaAdmin);

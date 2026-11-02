@@ -13,6 +13,8 @@ import paymentRoutes from './payments.js';
 import inventoryRoutes from './inventory.js';
 import { purchaseOrders, goodsReceipts } from './purchases.js';
 import { attendance, visits, expenses, targets } from './fieldForce.js';
+import reportRoutes from './reports.js';
+import notificationRoutes from './notifications.js';
 import userRoutes from './users.js';
 import settingsRoutes from './settings.js';
 import auditLogRoutes from './auditLogs.js';
@@ -77,7 +79,8 @@ router.use('/field-force/visits', visits);
 router.use('/field-force/expenses', expenses);
 router.use('/field-force/targets', targets);
 
-// ---- Phase 8+ mounts here --------------------------------------------------
-// router.use('/reports', reportRoutes);
+// ---- Phase 8: reports + notifications --------------------------------------
+router.use('/reports', reportRoutes);
+router.use('/notifications', notificationRoutes);
 
 export default router;

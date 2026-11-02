@@ -5,6 +5,7 @@ import companyRoutes from './companies.js';
 import planRoutes from './plans.js';
 import announcementRoutes from './announcements.js';
 import auditLogRoutes from './audit-logs.js';
+import platformReportRoutes from './reports.js';
 import profileRoutes from './profile.js';
 import * as dashboardController from '../../controllers/platform/dashboardController.js';
 import { authenticate } from '../../middlewares/auth.js';
@@ -42,6 +43,7 @@ router.use('/companies', companyRoutes);
 router.use('/plans', planRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/audit-logs', auditLogRoutes);
+router.use('/reports', platformReportRoutes);
 router.use('/profile', profileRoutes);
 
 export default router;

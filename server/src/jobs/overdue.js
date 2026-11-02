@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import Notification from '../models/Notification.js';
+import User from '../models/User.js';
 import { withoutTenant, withTenant } from '../middlewares/tenant.js';
 import logger from '../utils/logger.js';
 
@@ -58,14 +59,27 @@ export const runOverdueReminders = async () => {
           );
 
           const totalBalance = invoices.reduce((s, i) => s + (Number(i.balanceDue) || 0), 0);
+
+          // Deliver to the people who act on overdue money: admins, managers
+          // and accountants. An empty `recipients` with broadcast=false would
+          // be invisible to everyone, so we always resolve real recipients.
+          const actors = await User.find({
+            companyId,
+            isDeleted: { $ne: true },
+            role: { $in: ['COMPANY_ADMIN', 'MANAGER', 'ACCOUNTANT'] },
+          })
+            .select('_id')
+            .skipTenant()
+            .lean();
+
           await Notification.create({
             companyId,
             broadcast: false,
-            recipients: [],
+            recipients: actors.map((u) => u._id),
             type: 'OVERDUE_INVOICE',
             title: `${invoices.length} invoice(s) overdue`,
             body: `Total outstanding ₹${totalBalance.toFixed(2)} across ${invoices.length} overdue invoices.`,
-            link: '/app/invoices?status=OVERDUE',
+            link: '/app/invoices?overdue=true',
             entityType: 'Invoice',
             priority: 'HIGH',
           });

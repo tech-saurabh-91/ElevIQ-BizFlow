@@ -15,7 +15,6 @@ const CompanyLogin = lazy(() => import('@/pages/auth/CompanyLogin'));
 // ---- shared ---------------------------------------------------------------
 const NotFound = lazy(() => import('@/pages/NotFound'));
 const Forbidden = lazy(() => import('@/pages/Forbidden'));
-const Placeholder = lazy(() => import('@/pages/Placeholder'));
 
 // ---- platform -------------------------------------------------------------
 const PlatformDashboard = lazy(() => import('@/pages/platform/PlatformDashboard'));
@@ -26,6 +25,7 @@ const CompanyEdit = lazy(() => import('@/pages/platform/CompanyEdit'));
 const Plans = lazy(() => import('@/pages/platform/Plans'));
 const Announcements = lazy(() => import('@/pages/platform/Announcements'));
 const AuditLogs = lazy(() => import('@/pages/platform/AuditLogs'));
+const PlatformReports = lazy(() => import('@/pages/platform/PlatformReports'));
 const PlatformSettings = lazy(() => import('@/pages/platform/PlatformSettings'));
 const PlatformProfile = lazy(() => import('@/pages/platform/PlatformProfile'));
 
@@ -62,6 +62,10 @@ const Visits = lazy(() => import('@/pages/company/Visits'));
 const Attendance = lazy(() => import('@/pages/company/Attendance'));
 const Targets = lazy(() => import('@/pages/company/Targets'));
 const Expenses = lazy(() => import('@/pages/company/Expenses'));
+
+// ---- Phase 8: reports + notifications -------------------------------------
+const Reports = lazy(() => import('@/pages/company/Reports'));
+const Notifications = lazy(() => import('@/pages/company/Notifications'));
 
 // ---- guards ---------------------------------------------------------------
 
@@ -125,11 +129,6 @@ function RootRedirect() {
   return <Navigate to={user.scope === 'platform' ? '/platform' : '/app'} replace />;
 }
 
-/** Convenience for not-yet-built modules. */
-const Soon = ({ title, phase }) => (
-  <Placeholder title={title} phase={phase} />
-);
-
 export default function App() {
   return (
     <Suspense fallback={<FullPageLoader />}>
@@ -161,7 +160,7 @@ export default function App() {
           <Route path="companies/:id" element={<CompanyDetail />} />
           <Route path="companies/:id/edit" element={<CompanyEdit />} />
           <Route path="plans" element={<Plans />} />
-          <Route path="reports" element={<Soon title="Platform Reports" phase={8} />} />
+          <Route path="reports" element={<PlatformReports />} />
           <Route path="announcements" element={<Announcements />} />
           <Route path="audit-logs" element={<AuditLogs />} />
           <Route path="settings" element={<PlatformSettings />} />
@@ -232,7 +231,7 @@ export default function App() {
           {/* Insights */}
           <Route
             path="reports"
-            element={guard('reports.view', <Soon title="Reports" phase={8} />)}
+            element={guard('reports.view', <Reports />)}
           />
           <Route path="inventory" element={guard('inventory.view', <Inventory />)} />
 
@@ -242,7 +241,7 @@ export default function App() {
           <Route path="audit-logs" element={guard('audit.view', <AuditTrail />)} />
           <Route
             path="notifications"
-            element={guard(null, <Soon title="Notifications" phase={8} />)}
+            element={guard(null, <Notifications />)}
           />
 
           <Route path="*" element={<Navigate to="/app" replace />} />
