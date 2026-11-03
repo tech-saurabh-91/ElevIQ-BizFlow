@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -17,12 +18,16 @@ const required = (key, fallback) => {
   return value;
 };
 
+// Vercel's filesystem is read-only except /tmp (ephemeral).
+const onVercel = Boolean(process.env.VERCEL);
+
 const nodeEnv = process.env.NODE_ENV || 'development';
 
 export const env = {
   nodeEnv,
   isProd: nodeEnv === 'production',
   isTest: nodeEnv === 'test',
+  onVercel,
   isDev: nodeEnv === 'development',
 
   port: parseInt(process.env.PORT || '5000', 10),
@@ -65,7 +70,7 @@ export const env = {
 
   upload: {
     maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '5', 10),
-    dir: process.env.UPLOAD_DIR || 'uploads',
+    dir: onVercel ? path.join(os.tmpdir(), 'uploads') : process.env.UPLOAD_DIR || 'uploads',
   },
 
   log: {
