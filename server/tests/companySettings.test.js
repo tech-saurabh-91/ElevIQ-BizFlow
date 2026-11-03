@@ -171,11 +171,30 @@ describe('Tax: place of supply', () => {
   });
 
   test('the "no tax" regime charges nothing whatever the product rate', async () => {
-    await request.patch('/api/v1/settings').set(as(state.admin)).send({ tax: { regime: 'NONE' } });
-    const order = await orderFor('Goa');
-    expect(order.taxTotal).toBe(0);
-    expect(order.total).toBe(100);
-    await request.patch('/api/v1/settings').set(as(state.admin)).send({ tax: { regime: 'GST' } });
+    // Its own company: the regime is chosen at registration and then locked.
+    const company = await Company.create({
+      code: 'NOTX01',
+      slug: 'notx01',
+      businessName: 'No Tax Co',
+      status: 'ACTIVE',
+      subscriptionEnd: new Date(Date.now() + 365 * 86400000),
+    });
+    await runWithContext({ scope: 'company', companyId: String(company._id) }, async () => {
+      const settings = await Setting.forCompany(company._id);
+      settings.set({ 'tax.regime': 'NONE', 'order.allowNegativeStock': true, 'invoice.rounding': 'NONE' });
+      await settings.save();
+      await User.create({ companyId: company._id, name: 'NT Admin', email: 'admin@notax.test', password: PASSWORD, role: 'COMPANY_ADMIN' });
+    });
+    const token = await login('admin@notax.test');
+    const customer = await request.post('/api/v1/customers').set(as(token)).send({ name: 'NT Buyer' });
+    const product = await request.post('/api/v1/products').set(as(token)).send({ name: 'NT Item', sellingPrice: 100, gstRate: 18 });
+    const order = await request
+      .post('/api/v1/orders')
+      .set(as(token))
+      .send({ customerId: customer.body.data.id, items: [{ product: product.body.data.id, qty: 1 }] });
+    expect(order.status).toBe(201);
+    expect(order.body.data.taxTotal).toBe(0);
+    expect(order.body.data.total).toBe(100);
   });
 });
 
@@ -201,5 +220,91 @@ describe('Maintenance mode', () => {
 
     const admin = await request.get('/api/v1/customers').set(as(state.admin));
     expect(admin.status).toBe(200);
+  });
+});
+
+describe('Settings locked by transactions', () => {
+  // The tax tests above created orders, so this company now has transactions.
+  test('settings report the lock', async () => {
+    const res = await request.get('/api/v1/settings').set(as(state.admin));
+    expect(res.body.data.locks).toMatchObject({ locked: true, canEditSupport: false });
+    expect(res.body.data.locks.transactions).toBeGreaterThan(0);
+    expect(res.body.data.locks.hard).toEqual(expect.arrayContaining(['currency', 'country', 'financialYearStartMonth', 'taxRegime']));
+  });
+
+  test('currency, financial year and tax regime cannot change any more', async () => {
+    for (const body of [{ currency: 'USD' }, { financialYearStartMonth: 1 }, { tax: { regime: 'VAT' } }]) {
+      const res = await request.patch('/api/v1/settings').set(as(state.admin)).send(body);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SETTING_LOCKED');
+    }
+    const company = await Company.findById(state.companyId).lean();
+    expect(company.currency).toBe('INR');
+  });
+
+  test('the company admin cannot change the tax registration number', async () => {
+    const res = await request
+      .patch('/api/v1/settings')
+      .set(as(state.admin))
+      .send({ profile: { gstin: '29BBBBB1111B1Z5' } });
+    expect(res.status).toBe(409);
+    expect(res.body.errors[0].field).toBe('body.profile.gstin');
+  });
+
+  test('saving the form with unchanged locked values still works', async () => {
+    const current = (await request.get('/api/v1/settings').set(as(state.admin))).body.data;
+    const res = await request
+      .patch('/api/v1/settings')
+      .set(as(state.admin))
+      .send({
+        currency: current.currency,
+        financialYearStartMonth: current.financialYearStartMonth,
+        tax: { regime: current.tax.regime },
+        profile: { gstin: current.company.gstin, website: 'https://changed.test' },
+      });
+    expect(res.status).toBe(200);
+  });
+
+  test('a company without transactions can still fix its currency', async () => {
+    const fresh = await Company.create({
+      code: 'FRSH01',
+      slug: 'frsh01',
+      businessName: 'Fresh Co',
+      status: 'ACTIVE',
+      subscriptionEnd: new Date(Date.now() + 365 * 86400000),
+    });
+    await runWithContext({ scope: 'company', companyId: String(fresh._id) }, async () => {
+      await Setting.forCompany(fresh._id);
+      await User.create({ companyId: fresh._id, name: 'Fresh Admin', email: 'admin@fresh.test', password: PASSWORD, role: 'COMPANY_ADMIN' });
+    });
+    const token = await login('admin@fresh.test');
+    const res = await request.patch('/api/v1/settings').set(as(token)).send({ currency: 'AED', currencySymbol: 'AED' });
+    expect(res.status).toBe(200);
+    expect((await Company.findById(fresh._id).lean()).currency).toBe('AED');
+  });
+});
+
+describe('Issued invoices keep the seller details of their day', () => {
+  test('a later tax ID change does not rewrite an issued invoice', async () => {
+    const customer = await request
+      .post('/api/v1/customers')
+      .set(as(state.admin))
+      .send({ name: 'Snapshot Buyer', address: { country: 'India', state: 'Maharashtra' } });
+    const product = await request
+      .post('/api/v1/products')
+      .set(as(state.admin))
+      .send({ name: 'Snapshot Item', sellingPrice: 50, gstRate: 18 });
+    const invoice = await request
+      .post('/api/v1/invoices')
+      .set(as(state.admin))
+      .send({ customerId: customer.body.data.id, items: [{ product: product.body.data.id, qty: 1 }], issue: true });
+    expect(invoice.status).toBe(201);
+
+    // The service provider corrects the registration number afterwards.
+    await Company.updateOne({ _id: state.companyId }, { $set: { gstin: '27ZZZZZ9999Z1Z9' } });
+
+    const Invoice = (await import('../src/models/Invoice.js')).default;
+    const saved = await Invoice.findById(invoice.body.data.id).skipTenant().lean();
+    expect(saved.seller).toMatchObject({ businessName: 'Locale Traders', gstin: '27AAAAA0000A1Z5' });
   });
 });

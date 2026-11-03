@@ -23,6 +23,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAuthStore } from '@/store/authStore';
 import { useCountries, useStates, findCountry } from '@/hooks/useLocations';
 import { formatDate } from '@/utils/format';
+import { cn } from '@/utils/cn';
 
 const REGIME_LABELS = { GST: 'GST', VAT: 'VAT', SALES_TAX: 'Sales tax', NONE: 'No tax' };
 const regimeLabel = (r) => REGIME_LABELS[r] || r || '—';
@@ -302,19 +303,34 @@ function SettingsForm({ data, canUpdate, tab }) {
   const taxIdLabel = country?.tax?.taxIdLabel || 'Tax registration number';
   const isIndia = country?.code === 'IN';
 
-  const applyCountryDefaults = () => {
-    if (!country) return;
+  // ---- Locks: these settings freeze once the company has transactions -----
+  const locks = data?.locks || {};
+  const lockReason = (key) => {
+    if (locks.hard?.includes(key)) return `🔒 Locked: ${locks.transactions} transaction(s) already use it`;
+    if (locks.support?.includes(key) && !locks.canEditSupport) return '🔒 Locked: ask your service provider to change it';
+    return undefined;
+  };
+  const lockProps = (key, className = '') =>
+    lockReason(key)
+      ? { 'aria-disabled': true, tabIndex: -1, className: cn(className, 'pointer-events-none bg-muted/60 text-muted-foreground') }
+      : { className };
+
+  // Before the first transaction a country change is a registration fix, so
+  // its currency, time zone and tax come along. After that it is locked.
+  const onCountryChange = (next) => {
+    if (!next || locks.locked) return;
     const opts = { shouldDirty: true };
-    if (country.currency) {
-      setValue('currency', country.currency, opts);
-      setValue('currencySymbol', country.currencySymbol || country.currency, opts);
+    if (next.currency) {
+      setValue('currency', next.currency, opts);
+      setValue('currencySymbol', next.currencySymbol || next.currency, opts);
     }
-    if (country.timezones?.[0]) setValue('timezone', country.timezones[0], opts);
-    setValue('tax.regime', country.tax?.regime || 'VAT', opts);
-    setValue('tax.taxLabel', country.tax?.label || 'Tax', opts);
-    setValue('tax.defaultTaxRate', String(country.tax?.regime === 'NONE' ? 0 : country.tax?.defaultRate ?? 0), opts);
-    setValue('tax.enableCgstSgst', Boolean(country.tax?.splitIntraState), opts);
-    toast.success(`Applied ${country.name} defaults. Review and save.`);
+    if (next.timezones?.[0]) setValue('timezone', next.timezones[0], opts);
+    setValue('tax.regime', next.tax?.regime || 'VAT', opts);
+    setValue('tax.taxLabel', next.tax?.label || 'Tax', opts);
+    setValue('tax.defaultTaxRate', String(next.tax?.regime === 'NONE' ? 0 : next.tax?.defaultRate ?? 0), opts);
+    setValue('tax.enableCgstSgst', Boolean(next.tax?.splitIntraState), opts);
+    setValue('tax.placeOfSupply', '', opts);
+    toast.success(`Currency, time zone and tax set for ${next.name}. Review and save.`);
   };
 
   const onCurrency = (e) => {
@@ -473,8 +489,8 @@ function SettingsForm({ data, canUpdate, tab }) {
             </FormSection>
 
             <FormSection title="Tax registration">
-              <Field label={taxIdLabel} error={errors.profile?.gstin?.message}>
-                <Input {...register('profile.gstin')} className="uppercase" {...readOnly} />
+              <Field label={taxIdLabel} error={errors.profile?.gstin?.message} hint={lockReason('gstin')}>
+                <Input {...register('profile.gstin')} {...readOnly} {...lockProps('gstin', 'uppercase')} />
               </Field>
               {isIndia ? (
                 <Field label="PAN" error={errors.profile?.pan?.message}>
@@ -488,7 +504,16 @@ function SettingsForm({ data, canUpdate, tab }) {
             </FormSection>
 
             <FormSection title="Registered address">
-              <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="address" disabled={disabled} />
+              <AddressFields
+                register={register}
+                watch={watch}
+                setValue={setValue}
+                errors={errors}
+                prefix="address"
+                disabled={disabled}
+                lockedFields={{ country: lockReason('country'), state: lockReason('state') }}
+                onCountryChange={onCountryChange}
+              />
             </FormSection>
 
             <FormSection title="Maintenance window">
@@ -512,6 +537,7 @@ function SettingsForm({ data, canUpdate, tab }) {
 
       {/* ---------------- Localisation & numbering ---------------- */}
       <div hidden={tab !== 'localisation'}>
+        <LockBanner locks={locks} />
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -522,11 +548,6 @@ function SettingsForm({ data, canUpdate, tab }) {
                   {country ? ` (country: ${country.name}, set in Business profile)` : ''}.
                 </CardDescription>
               </div>
-              {country && canUpdate && (
-                <Button type="button" variant="outline" size="sm" onClick={applyCountryDefaults}>
-                  Apply {country.name} defaults
-                </Button>
-              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -544,8 +565,8 @@ function SettingsForm({ data, canUpdate, tab }) {
                   ))}
                 </Select>
               </Field>
-              <Field label="Currency" error={errors.currency?.message}>
-                <Select value={watch('currency')} onChange={onCurrency} {...readOnly}>
+              <Field label="Currency" error={errors.currency?.message} hint={lockReason('currency')}>
+                <Select value={watch('currency')} onChange={onCurrency} {...readOnly} {...lockProps('currency')}>
                   {!currencies.some((c) => c.code === watch('currency')) && watch('currency') && (
                     <option value={watch('currency')}>{watch('currency')}</option>
                   )}
@@ -559,8 +580,12 @@ function SettingsForm({ data, canUpdate, tab }) {
               <Field label="Currency symbol" error={errors.currencySymbol?.message} hint="Filled from the currency; you can override it">
                 <Input {...register('currencySymbol')} {...readOnly} />
               </Field>
-              <Field label="Financial year starts" error={errors.financialYearStartMonth?.message}>
-                <Select {...register('financialYearStartMonth')} {...readOnly}>
+              <Field
+                label="Financial year starts"
+                error={errors.financialYearStartMonth?.message}
+                hint={lockReason('financialYearStartMonth')}
+              >
+                <Select {...register('financialYearStartMonth')} {...readOnly} {...lockProps('financialYearStartMonth')}>
                   {MONTHS.map((m, i) => (
                     <option key={m} value={i + 1}>
                       {m}
@@ -611,6 +636,7 @@ function SettingsForm({ data, canUpdate, tab }) {
 
       {/* ---------------- Tax & documents ---------------- */}
       <div hidden={tab !== 'documents'}>
+        <LockBanner locks={locks} />
         <Card>
           <CardHeader>
             <CardTitle>Tax</CardTitle>
@@ -621,9 +647,9 @@ function SettingsForm({ data, canUpdate, tab }) {
               <Field
                 label="Tax regime"
                 error={errors.tax?.regime?.message}
-                hint={country ? `${country.name} default: ${regimeLabel(country.tax?.regime)}` : undefined}
+                hint={lockReason('taxRegime') || (country ? `${country.name} default: ${regimeLabel(country.tax?.regime)}` : undefined)}
               >
-                <Select {...register('tax.regime')} {...readOnly}>
+                <Select {...register('tax.regime')} {...readOnly} {...lockProps('taxRegime')}>
                   <option value="GST">GST</option>
                   <option value="VAT">VAT</option>
                   <option value="SALES_TAX">Sales tax</option>
@@ -651,9 +677,14 @@ function SettingsForm({ data, canUpdate, tab }) {
               <Field
                 label="Your state (place of supply)"
                 error={errors.tax?.placeOfSupply?.message}
-                hint="Sales to the same state are intra-state"
+                hint={lockReason('placeOfSupply') || 'Sales to the same state are intra-state'}
               >
-                <Select {...register('tax.placeOfSupply')} {...readOnly} disabled={disabled || regime === 'NONE'}>
+                <Select
+                  {...register('tax.placeOfSupply')}
+                  {...readOnly}
+                  disabled={disabled || regime === 'NONE'}
+                  {...lockProps('placeOfSupply')}
+                >
                   <option value="">Same as registered address</option>
                   {states.map((st) => (
                     <option key={st.code} value={st.name}>
@@ -665,16 +696,18 @@ function SettingsForm({ data, canUpdate, tab }) {
               <div className="space-y-2 sm:col-span-2">
                 <Checkbox
                   label="Prices include tax"
-                  description="Entered prices already contain tax; it is backed out on documents."
+                  description={lockReason('taxInclusive') || 'Entered prices already contain tax; it is backed out on documents.'}
                   {...register('tax.taxInclusive')}
                   disabled={disabled || regime === 'NONE'}
+                  {...lockProps('taxInclusive')}
                 />
                 {regime === 'GST' && (
                   <Checkbox
                     label="Split same-state tax (CGST + SGST)"
-                    description="Same-state sales show CGST + SGST; other states show IGST."
+                    description={lockReason('splitTax') || 'Same-state sales show CGST + SGST; other states show IGST.'}
                     {...register('tax.enableCgstSgst')}
                     disabled={disabled}
+                    {...lockProps('splitTax')}
                   />
                 )}
               </div>
@@ -1103,6 +1136,21 @@ function PermissionsEditor({ data, canUpdate }) {
         loading={resetToDefaults.isPending}
       />
     </Card>
+  );
+}
+
+/** Explains why some fields cannot be edited any more. */
+function LockBanner({ locks }) {
+  if (!locks?.locked) return null;
+  return (
+    <div className="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+      <p className="font-medium">🔒 Some settings are locked</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        This company already has {locks.transactions} transaction(s). Currency, country, financial year and tax regime can
+        no longer change, because saved documents depend on them. Tax registration number, registered state and tax
+        options can only be changed by your service provider.
+      </p>
+    </div>
   );
 }
 

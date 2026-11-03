@@ -6,6 +6,7 @@ import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, DEFAULT_PERMISSIONS, buildDefaultPermissions, COMPANY_ROLE_LIST } from '../../config/constants.js';
 import { toPlain, refOrNull } from './_helpers.js';
 import { assertAddresses } from '../../services/locationService.js';
+import { assertUnlocked, lockInfo } from '../../services/settingLocks.js';
 
 const SECTIONS = ['series', 'tax', 'invoice', 'order', 'inventory', 'collections', 'fieldForce'];
 const SCALARS = [
@@ -54,10 +55,13 @@ const present = (doc, company) => {
   return data;
 };
 
+/** Which settings are frozen because the company already has transactions. */
+const locksFor = async (req) => ({ ...(await lockInfo(req.companyId)), canEditSupport: Boolean(req.isImpersonating) });
+
 /** GET /api/v1/settings - full workspace configuration. */
 export const get = asyncHandler(async (req, res) => {
-  const [doc, company] = await Promise.all([Setting.forCompany(req.companyId), companyOf(req)]);
-  return success(res, { data: present(doc, company) });
+  const [doc, company, locks] = await Promise.all([Setting.forCompany(req.companyId), companyOf(req), locksFor(req)]);
+  return success(res, { data: { ...present(doc, company), locks } });
 });
 
 /** PATCH /api/v1/settings - merge-update the editable configuration. */
@@ -66,6 +70,49 @@ export const update = asyncHandler(async (req, res) => {
   const before = toPlain(doc);
   const payload = req.body || {};
   await assertAddresses(payload, { address: 'body.address' });
+
+  // Currency, country, financial year and tax regime freeze after the first
+  // transaction; tax ID / state / inclusive pricing need the service provider.
+  const company = await companyOf(req);
+  await assertUnlocked(
+    req.companyId,
+    {
+      currency: company?.currency,
+      country: company?.address?.country,
+      financialYearStartMonth: company?.financialYearStartMonth,
+      taxRegime: doc.tax?.regime,
+      gstin: company?.gstin,
+      state: company?.address?.state,
+      placeOfSupply: doc.tax?.placeOfSupply,
+      taxInclusive: doc.tax?.taxInclusive,
+      splitTax: doc.tax?.enableCgstSgst,
+    },
+    {
+      currency: payload.currency,
+      country: payload.address?.country,
+      financialYearStartMonth: payload.financialYearStartMonth,
+      taxRegime: payload.tax?.regime,
+      gstin: payload.profile?.gstin,
+      state: payload.address?.state,
+      placeOfSupply: payload.tax?.placeOfSupply,
+      taxInclusive: payload.tax?.taxInclusive,
+      splitTax: payload.tax?.enableCgstSgst,
+    },
+    {
+      allowSupport: Boolean(req.isImpersonating),
+      errorPaths: {
+        currency: 'body.currency',
+        country: 'body.address.country',
+        financialYearStartMonth: 'body.financialYearStartMonth',
+        taxRegime: 'body.tax.regime',
+        gstin: 'body.profile.gstin',
+        state: 'body.address.state',
+        placeOfSupply: 'body.tax.placeOfSupply',
+        taxInclusive: 'body.tax.taxInclusive',
+        splitTax: 'body.tax.enableCgstSgst',
+      },
+    }
+  );
 
   SECTIONS.forEach((section) => {
     if (payload[section]) {
@@ -121,7 +168,10 @@ export const update = asyncHandler(async (req, res) => {
     description: 'Company settings updated',
   });
 
-  return success(res, { message: 'Settings saved', data: present(doc, await companyOf(req)) });
+  return success(res, {
+    message: 'Settings saved',
+    data: { ...present(doc, await companyOf(req)), locks: await locksFor(req) },
+  });
 });
 
 /** PUT /api/v1/settings/permissions - replace the role -> permission matrix. */

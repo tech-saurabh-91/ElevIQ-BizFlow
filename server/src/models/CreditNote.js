@@ -76,6 +76,10 @@ const creditNoteSchema = new mongoose.Schema(
     customerCode: { type: String, default: '', trim: true },
     customerPhone: { type: String, default: '', trim: true },
     customerGstin: { type: String, default: '', trim: true },
+
+    // Seller (our company) as it was when the document was issued, so a
+    // reprint years later shows the registration details valid at the time.
+    seller: { type: Object, default: null },
     billingAddress: { type: addressSchema, default: () => ({}) },
 
     salesman: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },

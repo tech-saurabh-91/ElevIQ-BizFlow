@@ -39,4 +39,20 @@ export const taxRows = (taxTotal, breakup = {}, loc) => {
   return rows;
 };
 
-export default { pdfLocale, taxRows };
+/** Frozen copy of the company's document details, taken when a document is issued. */
+export const sellerSnapshot = (company = {}) => ({
+  code: company.code || '',
+  businessName: company.businessName || '',
+  legalName: company.legalName || '',
+  gstin: company.gstin || '',
+  pan: company.pan || '',
+  phone: company.phone || '',
+  email: company.email || '',
+  address: company.address ? { ...company.address } : {},
+});
+
+/** Company details to print: the issue-time snapshot when there is one. */
+export const sellerFor = (document, company = {}) =>
+  document?.seller?.businessName ? { ...company, ...document.seller } : company;
+
+export default { pdfLocale, taxRows, sellerSnapshot, sellerFor };

@@ -11,7 +11,8 @@ import api, { apiError, toFieldErrors } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AddressFields } from '@/components/company/form-utils';
+import { AddressFields, LocaleFields } from '@/components/company/form-utils';
+import { useCountries, findCountry } from '@/hooks/useLocations';
 import { Input, Select, Field } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -46,6 +47,10 @@ const schema = z.object({
   state: z.string().trim().max(80).optional().or(z.literal('')),
   country: z.string().trim().max(80).optional().or(z.literal('')),
   pincode: z.string().trim().max(12).optional().or(z.literal('')),
+  currency: z.string().trim().max(8).optional().or(z.literal('')),
+  currencySymbol: z.string().trim().max(6).optional().or(z.literal('')),
+  timezone: z.string().trim().max(60).optional().or(z.literal('')),
+  financialYearStartMonth: z.string().optional().or(z.literal('')),
   graceDays: z.coerce.number().int().min(0, 'Cannot be negative').max(60, 'Max 60 days').optional(),
   userLimit: z.coerce.number().int().min(1, 'At least 1').max(10000).optional(),
 });
@@ -93,6 +98,10 @@ export default function CompanyEdit() {
     formState: { errors, isSubmitting, isDirty },
   } = useForm({ resolver: zodResolver(schema) });
 
+  const { data: countries = [] } = useCountries();
+  const editCountry = findCountry(countries, watch('country'));
+  const lockedReason = company?.transactions > 0 ? '🔒 Locked: the company already has transactions' : '';
+
   // Populate the form once the company loads.
   useEffect(() => {
     if (!company) return;
@@ -113,6 +122,10 @@ export default function CompanyEdit() {
       state: company.address?.state || '',
       country: company.address?.country || '',
       pincode: company.address?.pincode || '',
+      currency: company.currency || '',
+      currencySymbol: company.currencySymbol || '',
+      timezone: company.timezone || '',
+      financialYearStartMonth: String(company.financialYearStartMonth || 4),
       graceDays: company.graceDays ?? 7,
       userLimit: company.userLimit ?? company.limits?.maxUsers ?? 5,
     });
@@ -132,6 +145,10 @@ export default function CompanyEdit() {
         gstin: v.gstin,
         pan: v.pan,
         address: { line1: v.line1, line2: v.line2, city: v.city, state: v.state, country: v.country, pincode: v.pincode },
+        currency: v.currency,
+        currencySymbol: v.currencySymbol,
+        timezone: v.timezone,
+        financialYearStartMonth: Number(v.financialYearStartMonth),
         graceDays: v.graceDays,
         userLimit: v.userLimit,
       };
@@ -251,7 +268,33 @@ export default function CompanyEdit() {
         </Section>
 
         <Section icon={Building2} title="Registered address">
-          <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="" />
+          <AddressFields
+            register={register}
+            watch={watch}
+            setValue={setValue}
+            errors={errors}
+            prefix=""
+            lockedFields={{ country: lockedReason }}
+          />
+        </Section>
+
+        <Section
+          icon={Building2}
+          title="Currency, time zone & financial year"
+          description={
+            lockedReason
+              ? `This company has ${company.transactions} transaction(s): currency, country and financial year are locked. Tax registration number and state can still be corrected here.`
+              : 'Editable until the company records its first transaction.'
+          }
+        >
+          <LocaleFields
+            register={register}
+            watch={watch}
+            setValue={setValue}
+            errors={errors}
+            country={editCountry}
+            locked={lockedReason}
+          />
         </Section>
 
         <Section

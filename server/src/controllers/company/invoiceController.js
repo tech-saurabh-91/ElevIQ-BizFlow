@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import logger from '../../utils/logger.js';
-import { pdfLocale, taxRows } from '../../utils/pdfLocale.js';
+import { pdfLocale, taxRows, sellerSnapshot, sellerFor } from '../../utils/pdfLocale.js';
 import dayjs from 'dayjs';
 
 import Invoice from '../../models/Invoice.js';
@@ -288,6 +288,7 @@ const issueInvoice = async (req, invoice, note = '') => {
 
   recalcInvoiceBalance(invoice);
   invoice.status = INVOICE_STATUS.ISSUED;
+  invoice.seller = sellerSnapshot(req.company);
   invoice.issuedAt = new Date();
   invoice.issuedBy = req.user.id;
   refreshInvoiceStatus(invoice);
@@ -938,7 +939,7 @@ const money2 = (n) => Number(n || 0).toFixed(2);
 export const pdf = asyncHandler(async (req, res) => {
   const invoice = await loadInvoice(req, req.params.id);
   const settings = await settingsOf(req);
-  const company = req.company || {};
+  const company = sellerFor(invoice, req.company || {});
   const loc = await pdfLocale(settings, company);
   const customer = invoice.customerId || {};
 

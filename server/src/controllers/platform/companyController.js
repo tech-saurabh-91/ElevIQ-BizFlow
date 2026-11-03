@@ -15,6 +15,7 @@ import { runWithContext } from '../../middlewares/tenantContext.js';
 import * as companyService from '../../services/companyService.js';
 import { signImpersonationToken } from '../../utils/tokens.js';
 import logger from '../../utils/logger.js';
+import { countTransactions } from '../../services/settingLocks.js';
 
 const { serializeCompany, allowedStatusTransitions } = companyService;
 
@@ -165,7 +166,11 @@ export const detail = asyncHandler(async (req, res) => {
   const data = {
     company: serializeCompany(
       { ...company, plan },
-      { allowedTransitions: allowedStatusTransitions(company) }
+      {
+        allowedTransitions: allowedStatusTransitions(company),
+        // > 0 means currency, country and financial year are locked.
+        transactions: await countTransactions(company._id),
+      }
     ),
     stats,
     subscriptions,

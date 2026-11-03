@@ -81,7 +81,8 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
     req.isImpersonating = true;
 
     return runWithContext(
-      { scope: 'company', companyId: req.companyId, userId: req.user.id, impersonatedBy: req.user.id },
+      // impersonatedBy is the platform admin, so audit trails show who really acted.
+      { scope: 'company', companyId: req.companyId, userId: req.user.id, impersonatedBy: String(admin._id) },
       () => next()
     );
   }

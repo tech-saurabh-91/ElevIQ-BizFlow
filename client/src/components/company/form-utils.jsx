@@ -32,7 +32,16 @@ const OTHER_CITY = '__other__';
  * `prefix` is the nested object path (`address`, `shippingAddress`), or '' for
  * flat forms whose fields are named line1/city/state/... directly.
  */
-export function AddressFields({ register, errors, prefix = 'address', watch, setValue, disabled = false }) {
+export function AddressFields({
+  register,
+  errors,
+  prefix = 'address',
+  watch,
+  setValue,
+  disabled = false,
+  lockedFields = {},
+  onCountryChange,
+}) {
   const path = (key) => (prefix ? `${prefix}.${key}` : key);
   const err = (key) => (prefix ? errors?.[prefix]?.[key] : errors?.[key])?.message;
   const set = (key, value) => setValue(path(key), value, { shouldDirty: true, shouldValidate: false });
@@ -57,11 +66,19 @@ export function AddressFields({ register, errors, prefix = 'address', watch, set
   const pinHint = postalCodeError(country, pincode);
   const pinField = register(path('pincode'));
 
+  // `lockedFields` maps country/state to a reason; the value stays in the form
+  // (so it is still submitted) but cannot be changed.
+  const lock = (key) =>
+    lockedFields[key]
+      ? { 'aria-disabled': true, tabIndex: -1, className: 'pointer-events-none bg-muted/60 text-muted-foreground' }
+      : {};
+
   const onCountry = (e) => {
     set('country', e.target.value);
     set('state', '');
     set('city', '');
     setTypingCity(false);
+    onCountryChange?.(findCountry(countries, e.target.value));
   };
   const onState = (e) => {
     set('state', e.target.value);
@@ -91,8 +108,14 @@ export function AddressFields({ register, errors, prefix = 'address', watch, set
       <Field label="Address line 2" error={err('line2')} className="sm:col-span-2">
         <Input {...register(path('line2'))} error={!!err('line2')} placeholder="Area / landmark" disabled={disabled} />
       </Field>
-      <Field label="Country" error={err('country')}>
-        <Select value={country?.name || countryValue} onChange={onCountry} error={!!err('country')} disabled={disabled}>
+      <Field label="Country" error={err('country')} hint={lockedFields.country}>
+        <Select
+          value={country?.name || countryValue}
+          onChange={onCountry}
+          error={!!err('country')}
+          disabled={disabled}
+          {...lock('country')}
+        >
           <option value="">Select country</option>
           {!country && countryValue && <option value={countryValue}>{countryValue}</option>}
           {countries.map((c) => (
@@ -102,12 +125,13 @@ export function AddressFields({ register, errors, prefix = 'address', watch, set
           ))}
         </Select>
       </Field>
-      <Field label="State" error={err('state')}>
+      <Field label="State" error={err('state')} hint={lockedFields.state}>
         <Select
           value={state?.name || stateValue}
           onChange={onState}
           error={!!err('state')}
           disabled={disabled || !country}
+          {...lock('state')}
         >
           <option value="">{!country ? 'Select country first' : statesLoading ? 'Loading…' : 'Select state'}</option>
           {!state && stateValue && <option value={stateValue}>{stateValue}</option>}
@@ -211,3 +235,126 @@ export const dateInput = (value) => {
 };
 
 export default FormSection;
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+// Financial year start by country; everything else runs January-December.
+const FY_START = { IN: 4, GB: 4, NZ: 4, JP: 4, HK: 4, ZA: 3, AU: 7, PK: 7, BD: 7, EG: 7, KE: 7 };
+
+/** Defaults a newly registered company takes from its country. */
+export const countryLocaleDefaults = (country) =>
+  country
+    ? {
+        currency: country.currency || '',
+        currencySymbol: country.currencySymbol || country.currency || '',
+        timezone: country.timezones?.[0] || 'UTC',
+        financialYearStartMonth: String(FY_START[country.code] || 1),
+        taxRegime: country.tax?.regime || 'VAT',
+      }
+    : null;
+
+/**
+ * Currency / time zone / financial year (and, at registration, tax regime).
+ * These are captured when a company is registered and freeze once it has
+ * transactions: pass `locked` with a reason to show them read-only.
+ */
+export function LocaleFields({ register, watch, setValue, errors, country, showRegime = false, locked = '' }) {
+  const { data: countries = [] } = useCountries();
+  const currencies = [];
+  const seen = new Set();
+  countries.forEach((c) => {
+    if (c.currency && !seen.has(c.currency)) {
+      seen.add(c.currency);
+      currencies.push({ code: c.currency, symbol: c.currencySymbol || c.currency });
+    }
+  });
+  currencies.sort((a, b) => a.code.localeCompare(b.code));
+
+  let zones = [];
+  try {
+    zones = Intl.supportedValuesOf('timeZone');
+  } catch {
+    zones = ['UTC'];
+  }
+  const local = country?.timezones || [];
+  const currency = watch('currency');
+  const lockProps = locked
+    ? { 'aria-disabled': true, tabIndex: -1, className: 'pointer-events-none bg-muted/60 text-muted-foreground' }
+    : {};
+
+  const onCurrency = (e) => {
+    setValue('currency', e.target.value, { shouldDirty: true });
+    const match = currencies.find((c) => c.code === e.target.value);
+    if (match) setValue('currencySymbol', match.symbol, { shouldDirty: true });
+  };
+
+  return (
+    <>
+      <Field label="Currency" error={errors?.currency?.message} hint={locked || undefined}>
+        <Select value={currency || ''} onChange={onCurrency} {...lockProps}>
+          <option value="">Select currency</option>
+          {currency && !seen.has(currency) && <option value={currency}>{currency}</option>}
+          {currencies.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.code} ({c.symbol})
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Time zone" error={errors?.timezone?.message}>
+        <Select {...register('timezone')}>
+          {local.length > 0 && (
+            <optgroup label={country.name}>
+              {local.map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          <optgroup label="All time zones">
+            {zones
+              .filter((tz) => !local.includes(tz))
+              .map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz.replace(/_/g, ' ')}
+                </option>
+              ))}
+          </optgroup>
+        </Select>
+      </Field>
+      <Field label="Financial year starts" error={errors?.financialYearStartMonth?.message} hint={locked || undefined}>
+        <Select {...register('financialYearStartMonth')} {...lockProps}>
+          {MONTH_NAMES.map((m, i) => (
+            <option key={m} value={String(i + 1)}>
+              {m}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {showRegime && (
+        <Field label="Tax regime" error={errors?.taxRegime?.message} hint={country ? `${country.name} default` : undefined}>
+          <Select {...register('taxRegime')}>
+            <option value="GST">GST</option>
+            <option value="VAT">VAT</option>
+            <option value="SALES_TAX">Sales tax</option>
+            <option value="NONE">No tax</option>
+          </Select>
+        </Field>
+      )}
+    </>
+  );
+}

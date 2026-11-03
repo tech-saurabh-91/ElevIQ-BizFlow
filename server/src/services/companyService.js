@@ -11,6 +11,7 @@ import { runWithContext } from '../middlewares/tenantContext.js';
 import { withoutTenant } from '../middlewares/tenant.js';
 import logger from '../utils/logger.js';
 import { assertAddresses, findCountry } from './locationService.js';
+import { assertUnlocked } from './settingLocks.js';
 
 /**
  * Platform company lifecycle service.
@@ -188,6 +189,7 @@ export const serializeCompany = (c, extras = {}) => {
     timezone: c.timezone,
     currency: c.currency,
     currencySymbol: c.currencySymbol,
+    financialYearStartMonth: c.financialYearStartMonth,
 
     plan: c.plan
       ? { id: String(c.plan._id || c.plan), code: c.plan.code, name: c.plan.name }
@@ -253,6 +255,7 @@ export const createCompany = async (payload, actor) => {
     billingCycle,
     startDate,
     endDate,
+    taxRegime,
     ...companyFields
   } = payload;
 
@@ -335,11 +338,14 @@ export const createCompany = async (payload, actor) => {
       const settings = await Setting.forCompany(company._id);
       if (plan?.features) settings.featureFlags = { ...plan.features };
       // Start the workspace on its country's currency, time zone and tax.
+      const tax = { ...(locale.tax || {}), ...(taxRegime ? { regime: taxRegime } : {}) };
+      if (taxRegime === 'NONE') tax.defaultTaxRate = 0;
       settings.set({
         timezone: company.timezone,
         currency: company.currency,
         currencySymbol: company.currencySymbol,
-        ...(locale.tax ? { tax: { ...settings.tax.toObject(), ...locale.tax, placeOfSupply: company.address?.state || '' } } : {}),
+        financialYearStartMonth: company.financialYearStartMonth,
+        ...(Object.keys(tax).length ? { tax: { ...settings.tax.toObject(), ...tax, placeOfSupply: '' } } : {}),
       });
       await settings.save();
     });
@@ -438,6 +444,23 @@ export const updateCompany = async (id, fields, actor) => {
   const before = await getCompanyOr404(id);
   await assertAddresses(fields, { address: 'body' });
 
+  // The platform may correct the tax ID or registered state, but never the
+  // currency, country or financial year once the company has transactions.
+  await assertUnlocked(
+    before._id,
+    {
+      currency: before.currency,
+      country: before.address?.country,
+      financialYearStartMonth: before.financialYearStartMonth,
+    },
+    {
+      currency: fields.currency,
+      country: fields.address?.country,
+      financialYearStartMonth: fields.financialYearStartMonth,
+    },
+    { allowSupport: true, errorPaths: { currency: 'body.currency', country: 'body.country', financialYearStartMonth: 'body.financialYearStartMonth' } }
+  );
+
   const set = {};
   const assignable = [
     'businessName',
@@ -485,6 +508,23 @@ export const updateCompany = async (id, fields, actor) => {
   if (!Object.keys(set).length) return serializeCompany(before);
 
   await Company.updateOne({ _id: before._id }, { $set: set }, { runValidators: true }).skipTenant();
+
+  // Keep the workspace settings mirror in step with the company record.
+  const mirror = {};
+  ['timezone', 'currency', 'currencySymbol', 'financialYearStartMonth'].forEach((k) => {
+    if (set[k] !== undefined) mirror[k] = set[k];
+  });
+  const oldState = before.address?.state || '';
+  const newState = set.address?.state;
+  await runWithContext({ scope: 'company', companyId: String(before._id) }, async () => {
+    const settings = await Setting.forCompany(before._id);
+    if (Object.keys(mirror).length) settings.set(mirror);
+    // A moved office takes its place of supply with it.
+    if (newState !== undefined && newState !== oldState && (settings.tax?.placeOfSupply || '') === oldState) {
+      settings.set('tax.placeOfSupply', '');
+    }
+    if (settings.isModified()) await settings.save();
+  });
 
   await recordPlatformAudit(actor, {
     action: AUDIT_ACTIONS.UPDATE,

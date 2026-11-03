@@ -112,7 +112,10 @@ export const createCompanySchema = z.object({
 
   timezone: z.string().trim().max(60).optional(),
   currency: z.string().trim().max(8).optional(),
-  currencySymbol: z.string().trim().max(4).optional(),
+  currencySymbol: z.string().trim().max(6).optional(),
+  financialYearStartMonth: z.coerce.number().int().min(1).max(12).optional(),
+  // Set once at registration; locks with the first transaction.
+  taxRegime: z.enum(['GST', 'VAT', 'SALES_TAX', 'NONE']).optional(),
 
   // ---- plan + billing ----
   planId: objectIdSchema.optional().or(z.literal('')),

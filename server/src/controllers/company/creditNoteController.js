@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
-import { pdfLocale, taxRows } from '../../utils/pdfLocale.js';
+import { pdfLocale, taxRows, sellerSnapshot, sellerFor } from '../../utils/pdfLocale.js';
 import dayjs from 'dayjs';
 
 import CreditNote from '../../models/CreditNote.js';
@@ -185,6 +185,7 @@ const issueCreditNote = async (req, note, text = '') => {
   }
 
   note.status = CREDIT_NOTE_STATUS.ISSUED;
+  note.seller = sellerSnapshot(req.company);
   note.issuedAt = new Date();
   note.issuedBy = req.user.id;
   pushHistory(note, CREDIT_NOTE_STATUS.ISSUED, req, text || 'Credit note issued');
@@ -685,7 +686,7 @@ const money2 = (n) => Number(n || 0).toFixed(2);
 export const pdf = asyncHandler(async (req, res) => {
   const note = await loadCreditNote(req, req.params.id);
   const settings = await settingsOf(req);
-  const company = req.company || {};
+  const company = sellerFor(note, req.company || {});
   const loc = await pdfLocale(settings, company);
   const customer = note.customerId || {};
 

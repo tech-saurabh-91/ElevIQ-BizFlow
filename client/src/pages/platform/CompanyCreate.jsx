@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -11,7 +11,8 @@ import api, { apiError, toFieldErrors } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AddressFields } from '@/components/company/form-utils';
+import { AddressFields, LocaleFields, countryLocaleDefaults } from '@/components/company/form-utils';
+import { useCountries, findCountry } from '@/hooks/useLocations';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ErrorAlert } from '@/components/ui/alert';
@@ -61,6 +62,12 @@ const schema = z
     country: z.string().trim().max(80).optional().or(z.literal('')),
     pincode: z.string().trim().max(12).optional().or(z.literal('')),
 
+    currency: z.string().trim().max(8).optional().or(z.literal('')),
+    currencySymbol: z.string().trim().max(6).optional().or(z.literal('')),
+    timezone: z.string().trim().max(60).optional().or(z.literal('')),
+    financialYearStartMonth: z.string().optional().or(z.literal('')),
+    taxRegime: z.enum(['GST', 'VAT', 'SALES_TAX', 'NONE']).optional(),
+
     planId: z.string().optional().or(z.literal('')),
     startMode: z.enum(['TRIAL', 'PAID', 'CUSTOM']),
     trialDays: z.coerce.number().int().min(0, 'Cannot be negative').max(120, 'Max 120 days').optional(),
@@ -104,6 +111,11 @@ const DEFAULTS = {
   city: '',
   state: '',
   country: 'India',
+  currency: '',
+  currencySymbol: '',
+  timezone: '',
+  financialYearStartMonth: '',
+  taxRegime: undefined,
   pincode: '',
   planId: '',
   startMode: 'TRIAL',
@@ -153,11 +165,24 @@ export default function CompanyCreate() {
     handleSubmit,
     watch,
     setValue,
+    getValues,
     setError,
     formState: { errors, isSubmitting },
   } = useForm({ resolver: zodResolver(schema), defaultValues: DEFAULTS });
 
   const startMode = watch('startMode');
+
+  // Currency, time zone, financial year and tax follow the chosen country.
+  const { data: countries = [] } = useCountries();
+  const country = findCountry(countries, watch('country'));
+  const applyCountry = (next) => {
+    const d = countryLocaleDefaults(next);
+    if (!d) return;
+    Object.entries(d).forEach(([k, v]) => setValue(k, v, { shouldDirty: true }));
+  };
+  useEffect(() => {
+    if (country && !getValues('currency')) applyCountry(country);
+  }, [country]);
   const selectedPlan = plans.find((p) => p.id === watch('planId'));
 
   const mutation = useMutation({
@@ -182,6 +207,10 @@ export default function CompanyCreate() {
         gstin: values.gstin,
         pan: values.pan,
         address,
+        ...(values.currency ? { currency: values.currency, currencySymbol: values.currencySymbol || values.currency } : {}),
+        ...(values.timezone ? { timezone: values.timezone } : {}),
+        ...(values.financialYearStartMonth ? { financialYearStartMonth: Number(values.financialYearStartMonth) } : {}),
+        ...(values.taxRegime ? { taxRegime: values.taxRegime } : {}),
         planId: values.planId,
         startMode: values.startMode,
         trialDays: values.startMode === 'TRIAL' ? values.trialDays : undefined,
@@ -298,7 +327,22 @@ export default function CompanyCreate() {
         </Section>
 
         <Section icon={Building2} title="Registered address" description="Billing and dispatch address">
-          <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="" />
+          <AddressFields
+            register={register}
+            watch={watch}
+            setValue={setValue}
+            errors={errors}
+            prefix=""
+            onCountryChange={applyCountry}
+          />
+        </Section>
+
+        <Section
+          icon={Building2}
+          title="Currency, time zone & tax"
+          description="Filled from the country. Currency, financial year and tax regime lock once the company records its first transaction."
+        >
+          <LocaleFields register={register} watch={watch} setValue={setValue} errors={errors} country={country} showRegime />
         </Section>
 
         <Section icon={CreditCard} title="Plan & billing" description="How this tenant is provisioned">
