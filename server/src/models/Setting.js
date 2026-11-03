@@ -44,8 +44,8 @@ const settingSchema = new mongoose.Schema(
     // Tax config (GST / VAT)
     tax: {
       type: {
-        regime: { type: String, enum: ['GST', 'VAT', 'NONE'], default: 'GST' },
-        defaultTaxRate: { type: Number, default: 18 },
+        regime: { type: String, enum: ['GST', 'VAT', 'SALES_TAX', 'NONE'], default: 'GST' },
+        defaultTaxRate: { type: Number, default: 18, min: 0, max: 100 },
         taxInclusive: { type: Boolean, default: false },
         placeOfSupply: { type: String, default: '' },
         enableCgstSgst: { type: Boolean, default: true },

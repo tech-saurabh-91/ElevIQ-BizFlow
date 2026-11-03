@@ -33,7 +33,7 @@ const signedQty = z.coerce.number().refine((n) => Number.isFinite(n) && n !== 0,
 
 const positiveQty = z.coerce.number().positive('Quantity must be greater than zero').max(1e9);
 const rate = z.coerce.number().min(0).max(1e9).optional();
-const taxRate = z.coerce.number().min(0).max(28).optional();
+const taxRate = z.coerce.number().min(0).max(100).optional();
 
 // ---------------------------------------------------------------------------
 // Stock ledger / balances

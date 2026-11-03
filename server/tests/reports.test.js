@@ -497,6 +497,9 @@ describe('Phase 8 - overdue reminder job', () => {
 
     // Start from a clean slate so the counts below are exact.
     await Notification.deleteMany({ type: 'OVERDUE_INVOICE' }).hardDelete();
+    // Remind from the first overdue day (the default waits 3 days).
+    const { default: Setting } = await import('../src/models/Setting.js');
+    await Setting.updateMany({}, { $set: { 'collections.overdueReminderDays': 0 } }).skipTenant();
 
     const first = await runOverdueReminders();
     expect(first.notifications).toBeGreaterThanOrEqual(2); // primary + other tenant
@@ -534,5 +537,19 @@ describe('Phase 8 - overdue reminder job', () => {
     // INV-T-0002 was PARTIALLY_PAID with a due date in the past.
     const refreshed = await Invoice.findOne({ invoiceNo: 'INV-T-0002' }).skipTenant();
     expect(refreshed.status).toBe('OVERDUE');
+  });
+});
+
+describe('Overdue reminder delay (Collections setting)', () => {
+  it('waits until an invoice is overdue by the configured number of days', async () => {
+    const { runOverdueReminders } = await import('../src/jobs/overdue.js');
+    const { default: Setting } = await import('../src/models/Setting.js');
+    await Notification.deleteMany({ type: 'OVERDUE_INVOICE' }).hardDelete();
+    await Setting.updateMany({}, { $set: { 'collections.overdueReminderDays': 3650 } }).skipTenant();
+
+    await runOverdueReminders();
+    expect(await Notification.find({ companyId: state.companyId, type: 'OVERDUE_INVOICE' }).skipTenant()).toHaveLength(0);
+
+    await Setting.updateMany({}, { $set: { 'collections.overdueReminderDays': 0 } }).skipTenant();
   });
 });

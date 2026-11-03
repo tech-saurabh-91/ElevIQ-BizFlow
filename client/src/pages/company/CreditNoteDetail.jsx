@@ -33,6 +33,8 @@ import {
   creditNoteReasonLabel,
   openCreditNotePdf,
 } from '@/components/company/invoice-shared';
+import { breakupRows } from '@/utils/tax';
+import { useTaxLabels } from '@/hooks/useLocations';
 
 const addressLines = (address = {}) =>
   [address.line1, address.line2, address.city, address.state, address.pincode, address.country]
@@ -40,6 +42,7 @@ const addressLines = (address = {}) =>
     .join(', ');
 
 export default function CreditNoteDetail() {
+  const { tax: taxSettings, taxIdLabel } = useTaxLabels();
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -310,11 +313,9 @@ export default function CreditNoteDetail() {
                   <TotalRow label="Discount" value={`− ${money(note.discountTotal)}`} />
                   <TotalRow label="Taxable value" value={money(note.taxableTotal)} />
                   <TotalRow label="Tax" value={money(note.taxTotal)} />
-                  <TotalRow
-                    label="CGST / SGST"
-                    value={`${money(note.taxBreakup?.cgst)} / ${money(note.taxBreakup?.sgst)}`}
-                    muted
-                  />
+                  {breakupRows(note.taxBreakup, taxSettings).map((r) => (
+                    <TotalRow key={r.label} label={r.label} value={r.value.map(money).join(' / ')} muted />
+                  ))}
                   <TotalRow
                     label="Round off"
                     value={`${Number(note.roundOff) >= 0 ? '+' : '−'} ${money(
@@ -386,7 +387,7 @@ export default function CreditNoteDetail() {
               )}
               {(note.customerGstin || customer.gstin) && (
                 <p className="text-xs text-muted-foreground">
-                  GSTIN {note.customerGstin || customer.gstin}
+                  {taxIdLabel} {note.customerGstin || customer.gstin}
                 </p>
               )}
               {billing && <p className="text-xs text-muted-foreground">{billing}</p>}

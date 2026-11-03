@@ -34,6 +34,8 @@ import {
   orderIdOf,
   paymentModeLabel,
 } from '@/components/company/order-shared';
+import { breakupRows, buyerStateOf } from '@/utils/tax';
+import { useTaxLabels } from '@/hooks/useLocations';
 
 const text = (max = 200) => z.string().trim().max(max).optional().or(z.literal(''));
 const numberText = (message) =>
@@ -116,6 +118,7 @@ const toFormValues = (order) => ({
 });
 
 export default function OrderEditor() {
+  const { taxIdLabel } = useTaxLabels();
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
@@ -257,8 +260,9 @@ export default function OrderEditor() {
         products: productMap,
         priceList: options?.priceList,
         settings: options?.settings,
+        buyerState: buyerStateOf(options?.customer),
       }),
-    [watchedItems, productMap, options?.priceList, options?.settings]
+    [watchedItems, productMap, options?.priceList, options?.settings, options?.customer]
   );
 
   const money = (value) => formatMoney(value, options?.settings?.currency || company?.currency || 'INR');
@@ -496,7 +500,7 @@ export default function OrderEditor() {
                     options?.customer
                       ? `${options.customer.code || 'No code'} · ${
                           options.customer.phone || 'No phone'
-                        }${options.customer.gstin ? ` · GSTIN ${options.customer.gstin}` : ''}`
+                        }${options.customer.gstin ? ` · ${taxIdLabel} ${options.customer.gstin}` : ''}`
                       : undefined
                   }
                 >
@@ -801,15 +805,9 @@ export default function OrderEditor() {
                 <Row label="Discount" value={`− ${money(preview.discountTotal)}`} />
                 <Row label="Taxable value" value={money(preview.taxableTotal)} />
                 <Row label="Tax" value={money(preview.taxTotal)} />
-                {options?.settings?.tax?.enableCgstSgst !== false ? (
-                  <Row
-                    label="CGST / SGST"
-                    value={`${money(preview.taxBreakup.cgst)} / ${money(preview.taxBreakup.sgst)}`}
-                    muted
-                  />
-                ) : (
-                  <Row label="IGST" value={money(preview.taxBreakup.igst)} muted />
-                )}
+                {breakupRows(preview.taxBreakup, options?.settings?.tax).map((r) => (
+                  <Row key={r.label} label={r.label} value={r.value.map(money).join(' / ')} muted />
+                ))}
                 <Row
                   label="Round off"
                   value={`${preview.roundOff >= 0 ? '+' : '−'} ${money(Math.abs(preview.roundOff))}`}

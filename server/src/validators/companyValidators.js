@@ -126,7 +126,7 @@ export const productCreateSchema = z.object({
   conversion: z.coerce.number().positive().max(100000).optional(),
 
   hsnCode: softString(20),
-  gstRate: z.coerce.number().min(0).max(28).optional(),
+  gstRate: z.coerce.number().min(0).max(100).optional(),
 
   mrp: money,
   sellingPrice: money,
@@ -368,6 +368,22 @@ export const settingsUpdateSchema = z.object({
   logo: softString(500),
   address: addressSchema.optional(),
 
+  // Registration details (stored on the Company). Code and registered
+  // business name stay platform-managed.
+  profile: z
+    .object({
+      legalName: softString(200),
+      businessType: z.enum(['RETAIL', 'WHOLESALE', 'BOTH']).optional(),
+      email: z.string().trim().toLowerCase().email('Enter a valid email').optional().or(z.literal('')),
+      phone: softString(20),
+      website: softString(200),
+      gstin: softString(30),
+      pan: softString(20),
+      taxId: softString(40),
+    })
+    .partial()
+    .optional(),
+
   timezone: softString(60),
   currency: softString(8),
   currencySymbol: softString(4),
@@ -390,8 +406,8 @@ export const settingsUpdateSchema = z.object({
 
   tax: z
     .object({
-      regime: z.enum(['GST', 'VAT', 'NONE']).optional(),
-      defaultTaxRate: z.coerce.number().min(0).max(28).optional(),
+      regime: z.enum(['GST', 'VAT', 'SALES_TAX', 'NONE']).optional(),
+      defaultTaxRate: z.coerce.number().min(0).max(100).optional(),
       taxInclusive: z.boolean().optional(),
       placeOfSupply: softString(80),
       enableCgstSgst: z.boolean().optional(),

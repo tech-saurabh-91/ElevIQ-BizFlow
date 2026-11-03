@@ -7,6 +7,7 @@ import { Field, Textarea } from '@/components/ui/input';
 import { ErrorAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { titleCase } from '@/utils/format';
+import { taxBreakupFor, effectiveTaxRate } from '@/utils/tax';
 
 /**
  * Shared Phase 5 invoice / credit-note helpers: status vocabularies, action
@@ -341,10 +342,10 @@ export const priceInvoiceLine = (row, { products, priceList, settings }) => {
       ? Number(entry?.discountPercent || 0)
       : Number(row.discountPercent);
 
-  const taxRate =
-    row.taxRate === '' || row.taxRate == null
-      ? Number(product?.gstRate ?? 0)
-      : Number(row.taxRate);
+  const taxRate = effectiveTaxRate(
+    row.taxRate === '' || row.taxRate == null ? product?.gstRate ?? 0 : row.taxRate,
+    settings
+  );
 
   const gross = round2(qty * unitPrice);
   const discountAmount = round2((gross * discountPercent) / 100);
@@ -377,7 +378,7 @@ export const priceInvoiceLine = (row, { products, priceList, settings }) => {
   };
 };
 
-export const computeInvoicePreview = ({ items = [], products, priceList, settings }) => {
+export const computeInvoicePreview = ({ items = [], products, priceList, settings, buyerState }) => {
   const lines = items
     .map((row) => priceInvoiceLine(row, { products, priceList, settings }))
     .filter(Boolean);
@@ -394,10 +395,7 @@ export const computeInvoicePreview = ({ items = [], products, priceList, setting
   const roundOff = round2(rounded - rawTotal);
   const total = round2(rounded);
 
-  const splitCgst = settings?.tax?.enableCgstSgst !== false;
-  const taxBreakup = splitCgst
-    ? { cgst: round2(taxTotal / 2), sgst: round2(taxTotal - round2(taxTotal / 2)), igst: 0 }
-    : { cgst: 0, sgst: 0, igst: taxTotal };
+  const taxBreakup = taxBreakupFor(taxTotal, settings, buyerState);
 
   return {
     lines,

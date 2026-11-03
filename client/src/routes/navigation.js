@@ -30,6 +30,7 @@ import {
   Warehouse,
   ClipboardList,
   LineChart,
+  Globe2,
 } from 'lucide-react';
 
 // ---- Platform (Service Provider) ------------------------------------------
@@ -40,6 +41,7 @@ export const platformNav = [
       { to: '/platform', label: 'Dashboard', icon: LayoutDashboard, end: true },
       { to: '/platform/companies', label: 'Companies', icon: Building2, permission: 'companies.view' },
       { to: '/platform/plans', label: 'Plans', icon: CreditCard, permission: 'plans.view' },
+      { to: '/platform/locations', label: 'Locations', icon: Globe2, permission: 'settings.view' },
     ],
   },
   {

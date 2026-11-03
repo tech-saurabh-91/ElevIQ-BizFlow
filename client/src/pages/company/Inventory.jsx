@@ -43,7 +43,7 @@ import {
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { useLookups } from '@/hooks/useLookups';
-import { formatDate, formatNumber, titleCase } from '@/utils/format';
+import { formatDate, formatNumber, titleCase, formatMoney } from '@/utils/format';
 import StatCard from '@/components/company/stat-card';
 import { WorkflowDialog } from '@/components/company/fieldforce-shared';
 import {
@@ -72,12 +72,7 @@ const TABS = [
   { value: 'receipts', label: 'Goods receipts', icon: PackagePlus },
 ];
 
-const money = (value, currency = 'INR') =>
-  new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0));
+const money = (value, currency) => formatMoney(value, currency, undefined, { decimals: 0 });
 
 /** Small helper to build a URL-param setter bound to the current search state. */
 const useSetParam = (params, setParams) =>

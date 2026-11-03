@@ -5,6 +5,10 @@ import { listDocuments } from '../../utils/query.js';
 import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS } from '../../config/constants.js';
 import { toPlain, loadDoc } from './_helpers.js';
+import { assertAddresses } from '../../services/locationService.js';
+
+// Address blocks any master may carry; postal codes are checked against the country.
+const ADDRESS_FIELDS = { address: 'body.address', shippingAddress: 'body.shippingAddress' };
 
 /** True for plain JSON objects (not arrays, dates or ObjectIds). */
 const isPlainObject = (value) =>
@@ -79,6 +83,7 @@ export const buildCrudController = (config) => {
 
   const create = asyncHandler(async (req, res) => {
     let payload = { ...req.body };
+    await assertAddresses(payload, ADDRESS_FIELDS);
     if (beforeCreate) payload = (await beforeCreate(payload, req)) || payload;
 
     const doc = await Model.create(payload);
@@ -99,6 +104,7 @@ export const buildCrudController = (config) => {
 
   const update = asyncHandler(async (req, res) => {
     let payload = { ...req.body };
+    await assertAddresses(payload, ADDRESS_FIELDS);
     if (beforeUpdate) payload = (await beforeUpdate(payload, req)) || payload;
 
     const doc = await loadDoc(Model, req.params.id, { filter: detailFilter(req), label });

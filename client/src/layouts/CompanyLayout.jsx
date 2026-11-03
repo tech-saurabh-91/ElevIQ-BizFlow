@@ -8,6 +8,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { companyNav, filterNav } from '@/routes/navigation';
 import { useUIStore } from '@/store/uiStore';
+import { useCountries, findCountry } from '@/hooks/useLocations';
+import { setFormatDefaults } from '@/utils/format';
 
 /**
  * Company workspace shell: /app/*
@@ -21,6 +23,17 @@ export default function CompanyLayout() {
   const setMobileNav = useUIStore((s) => s.setMobileNav);
   const mobileNavOpen = useUIStore((s) => s.mobileNavOpen);
   const location = useLocation();
+  const { data: countries = [] } = useCountries();
+  const countryCode = findCountry(countries, company?.country)?.code;
+
+  // Every money/date on screen follows the company's localisation settings.
+  // Applied during render (idempotent) so the first paint is already correct.
+  setFormatDefaults({
+    currency: settings?.currency || company?.currency,
+    locale: countryCode ? `en-${countryCode}` : undefined,
+    timeZone: settings?.timezone || company?.timezone,
+    dateFormat: settings?.dateFormat,
+  });
 
   if (bootstrapping) {
     return (

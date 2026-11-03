@@ -27,7 +27,7 @@ const invoiceItemSchema = z.object({
   qty: z.coerce.number().positive('Quantity must be greater than zero').max(1_000_000),
   unitPrice: z.coerce.number().min(0, 'Price cannot be negative').max(1e12).optional(),
   discountPercent: z.coerce.number().min(0).max(100, 'Discount cannot exceed 100%').optional(),
-  taxRate: z.coerce.number().min(0).max(28, 'Tax rate cannot exceed 28%').optional(),
+  taxRate: z.coerce.number().min(0).max(100, 'Tax rate cannot exceed 100%').optional(),
   note: softString(300),
 });
 

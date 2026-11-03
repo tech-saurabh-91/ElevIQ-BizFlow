@@ -29,6 +29,7 @@ const Announcements = lazy(() => import('@/pages/platform/Announcements'));
 const AuditLogs = lazy(() => import('@/pages/platform/AuditLogs'));
 const PlatformReports = lazy(() => import('@/pages/platform/PlatformReports'));
 const PlatformSettings = lazy(() => import('@/pages/platform/PlatformSettings'));
+const Locations = lazy(() => import('@/pages/platform/Locations'));
 const PlatformProfile = lazy(() => import('@/pages/platform/PlatformProfile'));
 
 // ---- company --------------------------------------------------------------
@@ -166,6 +167,7 @@ export default function App() {
           <Route path="announcements" element={<Announcements />} />
           <Route path="audit-logs" element={<AuditLogs />} />
           <Route path="settings" element={<PlatformSettings />} />
+          <Route path="locations" element={<Locations />} />
           <Route path="profile" element={<PlatformProfile />} />
           <Route path="*" element={<Navigate to="/platform" replace />} />
         </Route>

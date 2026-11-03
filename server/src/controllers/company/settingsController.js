@@ -1,9 +1,11 @@
 import Setting from '../../models/Setting.js';
+import Company from '../../models/Company.js';
 import { success } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, DEFAULT_PERMISSIONS, buildDefaultPermissions, COMPANY_ROLE_LIST } from '../../config/constants.js';
 import { toPlain, refOrNull } from './_helpers.js';
+import { assertAddresses } from '../../services/locationService.js';
 
 const SECTIONS = ['series', 'tax', 'invoice', 'order', 'inventory', 'collections', 'fieldForce'];
 const SCALARS = [
@@ -18,17 +20,44 @@ const SCALARS = [
   'maintenanceMessage',
 ];
 
-/** GET /api/v1/settings - full workspace configuration. */
-export const get = asyncHandler(async (req, res) => {
-  const doc = await Setting.forCompany(req.companyId);
-  const data = toPlain(doc);
+// The Company document is the single source for the registered profile,
+// address and localisation; Setting keeps a mirror for document generation.
+const LOCALE_KEYS = ['timezone', 'currency', 'currencySymbol', 'financialYearStartMonth'];
+const PROFILE_KEYS = ['legalName', 'businessType', 'email', 'phone', 'website', 'gstin', 'pan', 'taxId'];
 
+const hasAddress = (a) => Boolean(a && (a.line1 || a.city || a.state || a.pincode));
+
+const companyOf = (req) => Company.findById(req.companyId).populate('plan', 'name code').lean();
+
+/** Settings payload with the company's registration data merged in. */
+const present = (doc, company) => {
+  const data = toPlain(doc);
+  if (company) {
+    LOCALE_KEYS.forEach((k) => {
+      if (company[k] !== undefined && company[k] !== null && company[k] !== '') data[k] = company[k];
+    });
+    // Older workspaces kept a separate settings address; prefer the registered one.
+    data.address = hasAddress(company.address) ? company.address : data.address || {};
+    data.company = {
+      code: company.code,
+      businessName: company.businessName,
+      status: company.status,
+      plan: company.plan ? { name: company.plan.name, code: company.plan.code } : null,
+      registeredAt: company.createdAt,
+      ...Object.fromEntries(PROFILE_KEYS.map((k) => [k, company[k] || ''])),
+    };
+  }
   // Always return a complete matrix so the admin UI can render every toggle.
   data.rolePermissions = { ...buildDefaultPermissions(), ...(doc.rolePermissions || {}) };
   data.permissionCatalog = DEFAULT_PERMISSIONS;
   data.roles = COMPANY_ROLE_LIST;
+  return data;
+};
 
-  return success(res, { data });
+/** GET /api/v1/settings - full workspace configuration. */
+export const get = asyncHandler(async (req, res) => {
+  const [doc, company] = await Promise.all([Setting.forCompany(req.companyId), companyOf(req)]);
+  return success(res, { data: present(doc, company) });
 });
 
 /** PATCH /api/v1/settings - merge-update the editable configuration. */
@@ -36,6 +65,7 @@ export const update = asyncHandler(async (req, res) => {
   const doc = await Setting.forCompany(req.companyId);
   const before = toPlain(doc);
   const payload = req.body || {};
+  await assertAddresses(payload, { address: 'body.address' });
 
   SECTIONS.forEach((section) => {
     if (payload[section]) {
@@ -64,21 +94,34 @@ export const update = asyncHandler(async (req, res) => {
 
   await doc.save();
 
+  // Write the registered profile, address and localisation to the Company so
+  // login, dashboard and documents all read the same values.
+  const companySet = {};
+  LOCALE_KEYS.forEach((k) => {
+    if (payload[k] !== undefined) companySet[k] = payload[k];
+  });
+  if (payload.address) companySet.address = { ...doc.get('address') };
+  if (payload.profile) {
+    PROFILE_KEYS.forEach((k) => {
+      if (payload.profile[k] !== undefined) companySet[k] = payload.profile[k];
+    });
+  }
+  if (payload.logo !== undefined) companySet.logo = payload.logo;
+  if (Object.keys(companySet).length) {
+    await Company.updateOne({ _id: req.companyId }, { $set: companySet });
+  }
+
   audit(req, {
     action: AUDIT_ACTIONS.UPDATE,
     entityType: 'Setting',
     entityId: doc._id,
     entityLabel: 'Company settings',
     before,
-    after: toPlain(doc),
+    after: { ...toPlain(doc), ...(payload.profile ? { profile: payload.profile } : {}) },
     description: 'Company settings updated',
   });
 
-  const data = toPlain(doc);
-  data.rolePermissions = { ...buildDefaultPermissions(), ...(doc.rolePermissions || {}) };
-  data.permissionCatalog = DEFAULT_PERMISSIONS;
-  data.roles = COMPANY_ROLE_LIST;
-  return success(res, { message: 'Settings saved', data });
+  return success(res, { message: 'Settings saved', data: present(doc, await companyOf(req)) });
 });
 
 /** PUT /api/v1/settings/permissions - replace the role -> permission matrix. */

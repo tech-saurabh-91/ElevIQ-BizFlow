@@ -15,6 +15,8 @@ import { ErrorAlert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useLookups } from '@/hooks/useLookups';
 import { formatMoney, formatNumber } from '@/utils/format';
+import { useTaxLabels } from '@/hooks/useLocations';
+import { useAuthStore } from '@/store/authStore';
 
 const text = (max = 200) => z.string().trim().max(max).optional().or(z.literal(''));
 const amount = z
@@ -77,7 +79,8 @@ const toDefaults = (initial) => ({
   conversion: numInput(initial?.conversion),
 
   hsnCode: initial?.hsnCode || '',
-  gstRate: numInput(initial?.gstRate, '18'),
+  // New products start on the company's default tax rate.
+  gstRate: numInput(initial?.gstRate, String(useAuthStore.getState().settings?.tax?.defaultTaxRate ?? 18)),
 
   mrp: numInput(initial?.mrp),
   sellingPrice: numInput(initial?.sellingPrice),
@@ -97,6 +100,7 @@ const toDefaults = (initial) => ({
 });
 
 function ProductForm({ mode, initial, onClose, onSaved }) {
+  const { taxLabel } = useTaxLabels();
   const [formError, setFormError] = useState('');
   const [serverErrors, setServerErrors] = useState([]);
   const { lookups } = useLookups();
@@ -228,8 +232,8 @@ function ProductForm({ mode, initial, onClose, onSaved }) {
         <Field label="HSN code" error={errors.hsnCode?.message}>
           <Input {...register('hsnCode')} placeholder="1006" />
         </Field>
-        <Field label="GST rate (%)" error={errors.gstRate?.message}>
-          <Input type="number" min="0" max="28" step="0.01" {...register('gstRate')} placeholder="18" />
+        <Field label={`${taxLabel} rate (%)`} error={errors.gstRate?.message}>
+          <Input type="number" min="0" max="100" step="0.01" {...register('gstRate')} placeholder="18" />
         </Field>
       </FormSection>
 
@@ -287,6 +291,7 @@ function ProductForm({ mode, initial, onClose, onSaved }) {
 }
 
 export default function Products() {
+  const { taxLabel } = useTaxLabels();
   const { company } = useAuth();
   const { lookups } = useLookups();
 
@@ -348,7 +353,7 @@ export default function Products() {
     },
     {
       key: 'gst',
-      header: 'GST',
+      header: taxLabel,
       className: 'text-right',
       render: (row) => <span className="text-sm">{formatNumber(row.gstRate || 0)}%</span>,
     },

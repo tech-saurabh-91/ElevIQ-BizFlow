@@ -7,6 +7,7 @@ import { Field, Textarea } from '@/components/ui/input';
 import { ErrorAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { titleCase } from '@/utils/format';
+import { taxBreakupFor, effectiveTaxRate } from '@/utils/tax';
 
 /**
  * Shared Phase 4 order helpers: workflow actions, document downloads and the
@@ -269,7 +270,7 @@ export const priceLine = (row, { products, priceList, settings }) => {
     row.discountPercent === '' || row.discountPercent == null
       ? Number(entry?.discountPercent || 0)
       : Number(row.discountPercent);
-  const taxRate = Number(product.gstRate ?? 0);
+  const taxRate = effectiveTaxRate(product.gstRate ?? 0, settings);
 
   const gross = round2(qty * unitPrice);
   const discountAmount = round2((gross * discountPercent) / 100);
@@ -303,7 +304,7 @@ export const priceLine = (row, { products, priceList, settings }) => {
 };
 
 /** Whole-order preview (subtotal → discount → tax → rounding → total). */
-export const computeOrderPreview = ({ items = [], products, priceList, settings }) => {
+export const computeOrderPreview = ({ items = [], products, priceList, settings, buyerState }) => {
   const lines = items.map((row) => priceLine(row, { products, priceList, settings })).filter(Boolean);
 
   const subtotal = round2(lines.reduce((s, l) => s + l.qty * l.unitPrice, 0));
@@ -318,10 +319,7 @@ export const computeOrderPreview = ({ items = [], products, priceList, settings 
   const roundOff = round2(rounded - rawTotal);
   const total = round2(rounded);
 
-  const splitCgst = Boolean(settings?.tax?.enableCgstSgst);
-  const taxBreakup = splitCgst
-    ? { cgst: round2(taxTotal / 2), sgst: round2(taxTotal - round2(taxTotal / 2)), igst: 0 }
-    : { cgst: 0, sgst: 0, igst: taxTotal };
+  const taxBreakup = taxBreakupFor(taxTotal, settings, buyerState);
 
   return {
     lines,

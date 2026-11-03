@@ -29,6 +29,8 @@ import {
   findInvoicePriceEntry,
   idOf,
 } from '@/components/company/invoice-shared';
+import { breakupRows, buyerStateOf } from '@/utils/tax';
+import { useTaxLabels } from '@/hooks/useLocations';
 
 const text = (max = 200) => z.string().trim().max(max).optional().or(z.literal(''));
 const numberText = (message) =>
@@ -146,6 +148,7 @@ const orderRowFromOption = (row) => ({
 });
 
 export default function InvoiceEditor() {
+  const { taxIdLabel } = useTaxLabels();
   const { id } = useParams();
   const isEdit = Boolean(id);
   const [searchParams] = useSearchParams();
@@ -372,8 +375,9 @@ export default function InvoiceEditor() {
         products: productMap,
         priceList: options?.priceList,
         settings: options?.settings,
+        buyerState: buyerStateOf(options?.customer),
       }),
-    [watchedItems, productMap, options?.priceList, options?.settings]
+    [watchedItems, productMap, options?.priceList, options?.settings, options?.customer]
   );
 
   const currency = options?.settings?.currency || company?.currency || 'INR';
@@ -676,7 +680,7 @@ export default function InvoiceEditor() {
                       options?.customer
                         ? `${options.customer.code || 'No code'} · ${
                             options.customer.phone || 'No phone'
-                          }${options.customer.gstin ? ` · GSTIN ${options.customer.gstin}` : ''}${
+                          }${options.customer.gstin ? ` · ${taxIdLabel} ${options.customer.gstin}` : ''}${
                             Number(options.customer.outstanding) > 0
                               ? ` · Outstanding ${formatMoney(
                                   options.customer.outstanding,
@@ -991,15 +995,9 @@ export default function InvoiceEditor() {
                 <Row label="Discount" value={`− ${money(preview.discountTotal)}`} />
                 <Row label="Taxable value" value={money(preview.taxableTotal)} />
                 <Row label="Tax" value={money(preview.taxTotal)} />
-                {options?.settings?.tax?.enableCgstSgst !== false ? (
-                  <Row
-                    label="CGST / SGST"
-                    value={`${money(preview.taxBreakup.cgst)} / ${money(preview.taxBreakup.sgst)}`}
-                    muted
-                  />
-                ) : (
-                  <Row label="IGST" value={money(preview.taxBreakup.igst)} muted />
-                )}
+                {breakupRows(preview.taxBreakup, options?.settings?.tax).map((r) => (
+                  <Row key={r.label} label={r.label} value={r.value.map(money).join(' / ')} muted />
+                ))}
                 <Row
                   label="Round off"
                   value={`${preview.roundOff >= 0 ? '+' : '−'} ${money(Math.abs(preview.roundOff))}`}

@@ -39,7 +39,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
-import { formatDate, formatNumber, titleCase } from '@/utils/format';
+import { formatDate, formatNumber, titleCase, formatMoney } from '@/utils/format';
 import StatCard from '@/components/company/stat-card';
 import {
   EXPENSE_CATEGORIES,
@@ -135,11 +135,7 @@ function ExpenseForm({ open, mode, initial, onClose, onSaved }) {
 
   const canSubmit = Boolean(form.amount) && Number(form.amount) > 0;
   const money = (v) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: company?.currency || 'INR',
-      maximumFractionDigits: 0,
-    }).format(Number(v || 0));
+    formatMoney(v, company?.currency, undefined, { decimals: 0 });
 
   return (
     <Dialog
@@ -443,11 +439,7 @@ export default function Expenses() {
   };
 
   const money = (value) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: company?.currency || 'INR',
-      maximumFractionDigits: 0,
-    }).format(Number(value || 0));
+    formatMoney(value, company?.currency, undefined, { decimals: 0 });
 
   const downloadXlsx = async () => {
     try {

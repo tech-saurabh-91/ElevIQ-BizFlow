@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
+import logger from '../../utils/logger.js';
+import { pdfLocale, taxRows } from '../../utils/pdfLocale.js';
 import dayjs from 'dayjs';
 
 import Invoice from '../../models/Invoice.js';
@@ -30,6 +32,7 @@ import {
   buildDirectInvoiceLines,
   syncOrderInvoicing,
 } from '../../services/invoiceService.js';
+import { taxBreakupFor, sellerStateOf, buyerStateOf } from '../../services/orderService.js';
 
 /** Relations returned on every invoice read so the UI never needs a second call. */
 const POPULATE = [
@@ -226,7 +229,8 @@ const snapshotFor = ({ customer, order, payload, settings, req, existing = null 
     paymentTerms,
     creditDays,
     poReference: resolve('poReference', order?.poReference || existing?.poReference || ''),
-    placeOfSupply: resolve('placeOfSupply', settings?.tax?.placeOfSupply || customer?.address?.state || existing?.placeOfSupply || ''),
+    // Place of supply is where the buyer receives the goods (decides CGST/SGST vs IGST).
+    placeOfSupply: resolve('placeOfSupply', existing?.placeOfSupply || buyerStateOf(customer) || ''),
 
     notes: resolve('notes', order?.notes || existing?.notes || ''),
     terms: resolve('terms', settings?.invoice?.terms || existing?.terms || ''),
@@ -433,6 +437,10 @@ export const create = asyncHandler(async (req, res) => {
   }
 
   const snapshot = snapshotFor({ customer, order, payload, settings, req });
+  priced.taxBreakup = taxBreakupFor(priced.totals.taxTotal, settings, {
+    sellerState: sellerStateOf(settings, req.company),
+    buyerState: snapshot.placeOfSupply,
+  });
 
   const invoice = new Invoice({
     ...snapshot,
@@ -500,6 +508,10 @@ export const update = asyncHandler(async (req, res) => {
   }
 
   const snapshot = snapshotFor({ customer, order: null, payload, settings, req, existing: invoice });
+  priced.taxBreakup = taxBreakupFor(priced.totals.taxTotal, settings, {
+    sellerState: sellerStateOf(settings, req.company),
+    buyerState: snapshot.placeOfSupply || invoice.placeOfSupply,
+  });
   Object.assign(invoice, snapshot, priced.totals, {
     items: priced.lines,
     taxBreakup: priced.taxBreakup,
@@ -795,7 +807,10 @@ export const formOptions = asyncHandler(async (req, res) => {
           regime: settings?.tax?.regime || 'GST',
           taxInclusive: Boolean(settings?.tax?.taxInclusive),
           enableCgstSgst: settings?.tax?.enableCgstSgst !== false,
-          defaultTaxRate: Number(settings?.tax?.defaultTaxRate || 18),
+          label: settings?.tax?.taxLabel || 'Tax',
+          // Company state: same-state sales split into CGST + SGST, others IGST.
+          sellerState: sellerStateOf(settings, req.company),
+          defaultTaxRate: Number(settings?.tax?.defaultTaxRate ?? 18),
         },
         invoice: {
           rounding: settings?.invoice?.rounding || 'NEAREST',
@@ -924,6 +939,7 @@ export const pdf = asyncHandler(async (req, res) => {
   const invoice = await loadInvoice(req, req.params.id);
   const settings = await settingsOf(req);
   const company = req.company || {};
+  const loc = await pdfLocale(settings, company);
   const customer = invoice.customerId || {};
 
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -941,7 +957,7 @@ export const pdf = asyncHandler(async (req, res) => {
   doc.font('Helvetica').fontSize(8).fillColor('#555');
   const companyLine = [
     company.code ? `Code: ${company.code}` : '',
-    company.gstin ? `GSTIN: ${company.gstin}` : '',
+    company.gstin && loc.showTaxId ? `${loc.taxIdLabel}: ${company.gstin}` : '',
     company.phone || '',
     company.email || '',
   ]
@@ -950,7 +966,7 @@ export const pdf = asyncHandler(async (req, res) => {
   if (companyLine) doc.text(companyLine, left, 62);
   doc.fillColor('#000');
 
-  doc.font('Helvetica-Bold').fontSize(14).text('TAX INVOICE', right - 180, 40, { width: 180, align: 'right' });
+  doc.font('Helvetica-Bold').fontSize(14).text(loc.regime === 'NONE' ? 'INVOICE' : 'TAX INVOICE', right - 180, 40, { width: 180, align: 'right' });
   doc.font('Helvetica').fontSize(9);
   doc.text(`Invoice No: ${invoice.invoiceNo || '—'}`, right - 220, 62, { width: 220, align: 'right' });
   doc.text(
@@ -981,7 +997,7 @@ export const pdf = asyncHandler(async (req, res) => {
     doc.text(`Phone: ${invoice.customerPhone || customer.phone}`, left, 172, { width: 240 });
   }
   if (invoice.customerGstin || customer.gstin) {
-    doc.text(`GSTIN: ${invoice.customerGstin || customer.gstin}`, left, 186, { width: 240 });
+    doc.text(`${loc.taxIdLabel}: ${invoice.customerGstin || customer.gstin}`, left, 186, { width: 240 });
   }
 
   doc.font('Helvetica-Bold').fontSize(9).text('PAYMENT', 300, 130);
@@ -995,11 +1011,11 @@ export const pdf = asyncHandler(async (req, res) => {
   const cols = [
     { x: left, w: 26, label: '#' },
     { x: left + 26, w: 200, label: 'Item' },
-    { x: left + 226, w: 55, label: 'HSN' },
+    { x: left + 226, w: 55, label: loc.codeLabel },
     { x: left + 281, w: 45, label: 'Qty', align: 'right' },
     { x: left + 326, w: 62, label: 'Rate', align: 'right' },
     { x: left + 388, w: 45, label: 'Disc', align: 'right' },
-    { x: left + 433, w: 42, label: 'GST%', align: 'right' },
+    { x: left + 433, w: 42, label: `${loc.taxLabel}%`, align: 'right' },
     { x: right - 80, w: 80, label: 'Amount', align: 'right' },
   ];
 
@@ -1037,7 +1053,7 @@ export const pdf = asyncHandler(async (req, res) => {
     ['Subtotal', invoice.subtotal],
     ['Discount', -Number(invoice.discountTotal || 0)],
     ['Taxable', invoice.taxableTotal],
-    ['Tax', invoice.taxTotal],
+    ...taxRows(invoice.taxTotal, invoice.taxBreakup, loc),
     ['Round off', invoice.roundOff],
     ['Total', invoice.total],
     ['Paid', -Number(invoice.amountPaid || 0)],
@@ -1051,12 +1067,29 @@ export const pdf = asyncHandler(async (req, res) => {
   });
   doc.font('Helvetica-Bold').fontSize(11);
   doc.text('Balance due', 360, y + 2, { width: 110, align: 'right' });
-  doc.text(`${settings?.currencySymbol || 'Rs.'} ${money2(invoice.balanceDue)}`, 475, y + 2, {
+  doc.text(`${loc.money} ${money2(invoice.balanceDue)}`, 475, y + 2, {
     width: 80,
     align: 'right',
   });
 
   const footerY = Math.max(y + 36, 700);
+
+  // UPI "scan to pay" QR for the open balance (India, when enabled in settings).
+  const vpa = settings?.invoice?.upiVpa;
+  if (settings?.invoice?.showQr !== false && vpa && loc.currency === 'INR' && Number(invoice.balanceDue) > 0) {
+    try {
+      const { default: QRCode } = await import('qrcode');
+      const upi =
+        `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(company.businessName || '')}` +
+        `&am=${money2(invoice.balanceDue)}&cu=INR&tn=${encodeURIComponent(invoice.invoiceNo || '')}`;
+      const png = await QRCode.toBuffer(upi, { margin: 1, width: 240 });
+      doc.image(png, right - 80, footerY - 6, { width: 80 });
+      doc.font('Helvetica').fontSize(7).fillColor('#555');
+      doc.text(`Scan to pay (UPI) ${vpa}`, right - 110, footerY + 76, { width: 110, align: 'center' });
+    } catch (err) {
+      logger.warn(`UPI QR skipped for ${invoice.invoiceNo}: ${err.message}`);
+    }
+  }
   doc.font('Helvetica').fontSize(8).fillColor('#555');
   if (invoice.terms) doc.text(`Terms: ${invoice.terms}`, left, footerY, { width: 340 });
   if (invoice.notes) doc.text(`Notes: ${invoice.notes}`, left, footerY + 22, { width: 340 });

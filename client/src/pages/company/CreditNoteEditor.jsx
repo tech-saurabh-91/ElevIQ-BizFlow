@@ -24,6 +24,7 @@ import {
   creditNoteReasonLabel,
   priceInvoiceLine,
 } from '@/components/company/invoice-shared';
+import { breakupRows, buyerStateOf } from '@/utils/tax';
 
 const text = (max = 500) => z.string().trim().max(max).optional().or(z.literal(''));
 
@@ -217,8 +218,9 @@ export default function CreditNoteEditor() {
         products: new Map(),
         priceList: null,
         settings: options?.settings,
+        buyerState: options?.invoice?.placeOfSupply,
       }),
-    [includedItems, options?.settings]
+    [includedItems, options?.settings, options?.invoice?.placeOfSupply]
   );
 
   // ---- Save ---------------------------------------------------------------
@@ -658,15 +660,9 @@ export default function CreditNoteEditor() {
                 <Row label="Discount" value={`− ${money(preview.discountTotal)}`} />
                 <Row label="Taxable value" value={money(preview.taxableTotal)} />
                 <Row label="Tax" value={money(preview.taxTotal)} />
-                {options?.settings?.tax?.enableCgstSgst !== false ? (
-                  <Row
-                    label="CGST / SGST"
-                    value={`${money(preview.taxBreakup.cgst)} / ${money(preview.taxBreakup.sgst)}`}
-                    muted
-                  />
-                ) : (
-                  <Row label="IGST" value={money(preview.taxBreakup.igst)} muted />
-                )}
+                {breakupRows(preview.taxBreakup, options?.settings?.tax).map((r) => (
+                  <Row key={r.label} label={r.label} value={r.value.map(money).join(' / ')} muted />
+                ))}
                 <Row
                   label="Round off"
                   value={`${preview.roundOff >= 0 ? '+' : '−'} ${money(Math.abs(preview.roundOff))}`}

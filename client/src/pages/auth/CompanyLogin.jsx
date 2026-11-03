@@ -22,7 +22,17 @@ export default function CompanyLogin() {
   const navigate = useNavigate();
   const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
-  const [serverError, setServerError] = useState(null);
+  // Set when the workspace signed this user out for maintenance.
+  const [serverError, setServerError] = useState(() => {
+    try {
+      const message = sessionStorage.getItem('eleviq.maintenance');
+      if (message === null) return null;
+      sessionStorage.removeItem('eleviq.maintenance');
+      return { code: 'MAINTENANCE', message: message || 'The workspace is under maintenance. Please try again later.' };
+    } catch {
+      return null;
+    }
+  });
   // Set when the same login + password exists in several companies.
   const [workspaces, setWorkspaces] = useState(null);
 
@@ -85,6 +95,7 @@ export default function CompanyLogin() {
                 COMPANY_SUSPENDED: 'Company suspended',
                 COMPANY_EXPIRED: 'Subscription expired',
                 ACCOUNT_LOCKED: 'Account locked',
+                MAINTENANCE: 'Under maintenance',
               }[serverError.code] || 'Sign in failed'
             }
             message={serverError.message}

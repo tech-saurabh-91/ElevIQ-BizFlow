@@ -11,6 +11,7 @@ import api, { apiError, toFieldErrors } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { AddressFields } from '@/components/company/form-utils';
 import { Input, Select, Field } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -87,6 +88,8 @@ export default function CompanyEdit() {
     handleSubmit,
     reset,
     setError,
+    watch,
+    setValue,
     formState: { errors, isSubmitting, isDirty },
   } = useForm({ resolver: zodResolver(schema) });
 
@@ -248,24 +251,7 @@ export default function CompanyEdit() {
         </Section>
 
         <Section icon={Building2} title="Registered address">
-          <Field label="Address line 1" error={errors.line1?.message} className="sm:col-span-2">
-            <Input {...register('line1')} error={!!errors.line1} />
-          </Field>
-          <Field label="Address line 2" error={errors.line2?.message} className="sm:col-span-2">
-            <Input {...register('line2')} error={!!errors.line2} />
-          </Field>
-          <Field label="City" error={errors.city?.message}>
-            <Input {...register('city')} error={!!errors.city} />
-          </Field>
-          <Field label="State" error={errors.state?.message}>
-            <Input {...register('state')} error={!!errors.state} />
-          </Field>
-          <Field label="Country" error={errors.country?.message}>
-            <Input {...register('country')} error={!!errors.country} />
-          </Field>
-          <Field label="PIN code" error={errors.pincode?.message}>
-            <Input {...register('pincode')} error={!!errors.pincode} />
-          </Field>
+          <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="" />
         </Section>
 
         <Section

@@ -252,6 +252,15 @@ export const loginCompany = async ({ identifier, password, companyCode, ip, user
     );
   }
 
+  // ---- Maintenance window: only company admins may sign in ---------------
+  if (user.role !== COMPANY_ROLES.COMPANY_ADMIN) {
+    const gate = await withTenant(company._id, () => Setting.forCompany(company._id)).catch(() => null);
+    if (gate?.maintenanceMode) {
+      const { maintenanceError } = await import('../middlewares/auth.js');
+      throw maintenanceError(gate);
+    }
+  }
+
   // ---- Issue tokens -----------------------------------------------------
   const { accessToken, refreshToken, jti } = await issueTokens({
     userId: String(user._id),
@@ -296,6 +305,7 @@ export const loginCompany = async ({ identifier, password, companyCode, ip, user
       businessType: company.businessType,
       status: company.status,
       timezone: company.timezone,
+      country: company.address?.country || '',
       financialYearStartMonth: company.financialYearStartMonth,
     },
     user: {
@@ -420,6 +430,8 @@ export const refreshTokens = async ({ token, ip, userAgent, res }) => {
       currencySymbol: company.currencySymbol,
       businessType: company.businessType,
       status: company.status,
+      timezone: company.timezone,
+      country: company.address?.country || '',
     },
     user: {
       id: String(user._id),

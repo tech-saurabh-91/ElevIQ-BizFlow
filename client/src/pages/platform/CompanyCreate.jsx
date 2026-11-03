@@ -11,11 +11,12 @@ import api, { apiError, toFieldErrors } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { AddressFields } from '@/components/company/form-utils';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ErrorAlert } from '@/components/ui/alert';
 import { Dialog } from '@/components/ui/dialog';
-import { formatMoney } from '@/utils/format';
+import { formatMoney, formatDate } from '@/utils/format';
 
 const PASSWORD_RULES = z
   .string()
@@ -151,6 +152,7 @@ export default function CompanyCreate() {
     register,
     handleSubmit,
     watch,
+    setValue,
     setError,
     formState: { errors, isSubmitting },
   } = useForm({ resolver: zodResolver(schema), defaultValues: DEFAULTS });
@@ -296,24 +298,7 @@ export default function CompanyCreate() {
         </Section>
 
         <Section icon={Building2} title="Registered address" description="Billing and dispatch address">
-          <Field label="Address line 1" error={errors.line1?.message} className="sm:col-span-2">
-            <Input {...register('line1')} error={!!errors.line1} placeholder="7, MIDC Road" />
-          </Field>
-          <Field label="Address line 2" error={errors.line2?.message} className="sm:col-span-2">
-            <Input {...register('line2')} error={!!errors.line2} placeholder="Sector 14" />
-          </Field>
-          <Field label="City" error={errors.city?.message}>
-            <Input {...register('city')} error={!!errors.city} placeholder="Pune" />
-          </Field>
-          <Field label="State" error={errors.state?.message}>
-            <Input {...register('state')} error={!!errors.state} placeholder="Maharashtra" />
-          </Field>
-          <Field label="Country" error={errors.country?.message}>
-            <Input {...register('country')} error={!!errors.country} placeholder="India" />
-          </Field>
-          <Field label="PIN code" error={errors.pincode?.message}>
-            <Input {...register('pincode')} error={!!errors.pincode} placeholder="411019" />
-          </Field>
+          <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="" />
         </Section>
 
         <Section icon={CreditCard} title="Plan & billing" description="How this tenant is provisioned">
@@ -467,7 +452,7 @@ export default function CompanyCreate() {
                 </button>
               </dd>
               <dt className="text-muted-foreground">Subscription ends</dt>
-              <dd>{created.company.subscriptionEnd ? new Date(created.company.subscriptionEnd).toLocaleDateString() : '—'}</dd>
+              <dd>{created.company.subscriptionEnd ? formatDate(created.company.subscriptionEnd) : '—'}</dd>
             </dl>
             <p className="rounded-md bg-warning/10 px-3 py-2 text-xs text-warning-foreground dark:text-warning">
               The administrator must change this password at first sign-in. It is shown only once.

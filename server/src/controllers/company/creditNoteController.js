@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
+import { pdfLocale, taxRows } from '../../utils/pdfLocale.js';
 import dayjs from 'dayjs';
 
 import CreditNote from '../../models/CreditNote.js';
@@ -23,6 +24,7 @@ import {
   applyCreditNote,
   reverseCreditNote,
 } from '../../services/invoiceService.js';
+import { taxBreakupFor, sellerStateOf, buyerStateOf } from '../../services/orderService.js';
 
 const POPULATE = [
   {
@@ -305,6 +307,11 @@ export const create = asyncHandler(async (req, res) => {
   }));
 
   const priced = await buildCreditNoteLinesFromInvoice(invoice, items, settings);
+  // A credit note reverses its invoice, so it follows the invoice's place of supply.
+  priced.taxBreakup = taxBreakupFor(priced.totals.taxTotal, settings, {
+    sellerState: sellerStateOf(settings, req.company),
+    buyerState: invoice.placeOfSupply || buyerStateOf(customer),
+  });
 
   const note = new CreditNote({
     ...snapshotFromInvoice(invoice, customer, payload),
@@ -370,6 +377,11 @@ export const update = asyncHandler(async (req, res) => {
       }));
 
   const priced = await buildCreditNoteLinesFromInvoice(invoice, items, settings);
+  // A credit note reverses its invoice, so it follows the invoice's place of supply.
+  priced.taxBreakup = taxBreakupFor(priced.totals.taxTotal, settings, {
+    sellerState: sellerStateOf(settings, req.company),
+    buyerState: invoice.placeOfSupply || buyerStateOf(invoice.billingAddress ? { address: invoice.billingAddress } : null),
+  });
 
   if (payload.creditNoteDate !== undefined) {
     note.creditNoteDate = dateOrNull(payload.creditNoteDate) || note.creditNoteDate;
@@ -530,6 +542,7 @@ export const formOptions = asyncHandler(async (req, res) => {
       customerId: String(doc.customerId),
       customerName: doc.customerName,
       orderNo: doc.orderNo || '',
+      placeOfSupply: doc.placeOfSupply || '',
       items,
     };
   }
@@ -550,6 +563,10 @@ export const formOptions = asyncHandler(async (req, res) => {
         tax: {
           taxInclusive: Boolean(settings?.tax?.taxInclusive),
           enableCgstSgst: settings?.tax?.enableCgstSgst !== false,
+          regime: settings?.tax?.regime || 'GST',
+          label: settings?.tax?.taxLabel || 'Tax',
+          // Company state: same-state sales split into CGST + SGST, others IGST.
+          sellerState: sellerStateOf(settings, req.company),
         },
         invoice: {
           rounding: settings?.invoice?.rounding || 'NEAREST',
@@ -669,6 +686,7 @@ export const pdf = asyncHandler(async (req, res) => {
   const note = await loadCreditNote(req, req.params.id);
   const settings = await settingsOf(req);
   const company = req.company || {};
+  const loc = await pdfLocale(settings, company);
   const customer = note.customerId || {};
 
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -686,7 +704,7 @@ export const pdf = asyncHandler(async (req, res) => {
   doc.font('Helvetica').fontSize(8).fillColor('#555');
   const companyLine = [
     company.code ? `Code: ${company.code}` : '',
-    company.gstin ? `GSTIN: ${company.gstin}` : '',
+    company.gstin && loc.showTaxId ? `${loc.taxIdLabel}: ${company.gstin}` : '',
     company.phone || '',
     company.email || '',
   ]
@@ -718,7 +736,7 @@ export const pdf = asyncHandler(async (req, res) => {
     doc.text(`Phone: ${note.customerPhone || customer.phone}`, left, 168, { width: 240 });
   }
   if (note.customerGstin || customer.gstin) {
-    doc.text(`GSTIN: ${note.customerGstin || customer.gstin}`, left, 182, { width: 240 });
+    doc.text(`${loc.taxIdLabel}: ${note.customerGstin || customer.gstin}`, left, 182, { width: 240 });
   }
 
   doc.font('Helvetica-Bold').fontSize(9).text('REASON', 300, 126);
@@ -731,11 +749,11 @@ export const pdf = asyncHandler(async (req, res) => {
   const cols = [
     { x: left, w: 26, label: '#' },
     { x: left + 26, w: 200, label: 'Item' },
-    { x: left + 226, w: 55, label: 'HSN' },
+    { x: left + 226, w: 55, label: loc.codeLabel },
     { x: left + 281, w: 45, label: 'Qty', align: 'right' },
     { x: left + 326, w: 62, label: 'Rate', align: 'right' },
     { x: left + 388, w: 45, label: 'Disc', align: 'right' },
-    { x: left + 433, w: 42, label: 'GST%', align: 'right' },
+    { x: left + 433, w: 42, label: `${loc.taxLabel}%`, align: 'right' },
     { x: right - 80, w: 80, label: 'Amount', align: 'right' },
   ];
 
@@ -773,7 +791,7 @@ export const pdf = asyncHandler(async (req, res) => {
     ['Subtotal', note.subtotal],
     ['Discount', -Number(note.discountTotal || 0)],
     ['Taxable', note.taxableTotal],
-    ['Tax', note.taxTotal],
+    ...taxRows(note.taxTotal, note.taxBreakup, loc),
     ['Round off', note.roundOff],
     ['Credit total', note.total],
   ];
@@ -785,7 +803,7 @@ export const pdf = asyncHandler(async (req, res) => {
   });
   doc.font('Helvetica-Bold').fontSize(11);
   doc.text('Applied to invoice', 350, y + 2, { width: 120, align: 'right' });
-  doc.text(`${settings?.currencySymbol || 'Rs.'} ${money2(note.appliedAmount)}`, 475, y + 2, {
+  doc.text(`${loc.money} ${money2(note.appliedAmount)}`, 475, y + 2, {
     width: 80,
     align: 'right',
   });

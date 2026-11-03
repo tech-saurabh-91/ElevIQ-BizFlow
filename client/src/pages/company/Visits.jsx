@@ -36,7 +36,7 @@ import {
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { useLookups } from '@/hooks/useLookups';
-import { formatDate, formatDateTime, formatNumber, titleCase } from '@/utils/format';
+import { formatDate, formatDateTime, formatNumber, titleCase, formatMoney } from '@/utils/format';
 import StatCard from '@/components/company/stat-card';
 import {
   VISIT_STATUSES,
@@ -325,11 +325,7 @@ export default function Visits() {
   };
 
   const money = (value) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: company?.currency || 'INR',
-      maximumFractionDigits: 0,
-    }).format(Number(value || 0));
+    formatMoney(value, company?.currency, undefined, { decimals: 0 });
 
   const columns = [
     {

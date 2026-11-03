@@ -329,7 +329,7 @@ describe('Phase 3 - Products', () => {
     const res = await request
       .post('/api/v1/products')
       .set(as(state.adminToken))
-      .send({ name: 'Bad GST Product', gstRate: 40 });
+      .send({ name: 'Bad GST Product', gstRate: 140 }); // rates are 0-100% (any country)
     expect(res.status).toBe(422);
     expect(res.body.errors.some((e) => e.field === 'gstRate')).toBe(true);
   });

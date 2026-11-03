@@ -36,7 +36,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
-import { formatMoney, formatNumber, formatDate } from '@/utils/format';
+import { formatMoney, formatNumber, formatDate, formatShortDate } from '@/utils/format';
 import StatCard from '@/components/company/stat-card';
 import {
   TrendChart,
@@ -80,15 +80,12 @@ const periodLabel = (p) => {
   if (!p) return '';
   const s = String(p);
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    return new Date(`${s}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    return formatShortDate(`${s}T00:00:00Z`, { day: '2-digit', month: 'short', timeZone: 'UTC' });
   }
   const week = s.match(/-W(\d{1,2})$/);
   if (week) return `W${week[1]}`;
   if (/^\d{4}-\d{2}$/.test(s)) {
-    return new Date(`${s}-01T00:00:00`).toLocaleDateString('en-IN', {
-      month: 'short',
-      year: '2-digit',
-    });
+    return formatShortDate(`${s}-01T00:00:00Z`, { month: 'short', year: '2-digit', timeZone: 'UTC' });
   }
   return s;
 };

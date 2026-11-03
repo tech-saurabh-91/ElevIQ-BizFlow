@@ -15,7 +15,7 @@ import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, MOVEMENT_TYPES, PURCHASE_ORDER_STATUS, GRN_STATUS } from '../../config/constants.js';
 import { AppError, BadRequestError, ConflictError, ErrorCodes } from '../../utils/errors.js';
 import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
-import { computeTotals, priceLineValues } from '../../services/orderService.js';
+import { computeTotals, priceLineValues, taxBreakupFor, sellerStateOf } from '../../services/orderService.js';
 import {
   recordMovement,
   reverseMovementsFor,
@@ -134,7 +134,7 @@ export const createPo = asyncHandler(async (req, res) => {
     source: 'WEB',
   });
 
-  applyPoTotals(doc, settings);
+  applyPoTotals(doc, settings, req.company);
   pushHistory(doc, PURCHASE_ORDER_STATUS.DRAFT, req, 'Created');
   doc.poNo = await nextPurchaseOrderNumber(req.companyId, settings, doc.poDate);
   await doc.save();
@@ -196,7 +196,7 @@ export const updatePo = asyncHandler(async (req, res) => {
   if (payload.items !== undefined) {
     const { lines } = await buildPoLines(payload.items, settings);
     doc.items = lines;
-    applyPoTotals(doc, settings);
+    applyPoTotals(doc, settings, req.company);
   }
 
   await doc.save();
@@ -826,8 +826,13 @@ const buildPoLines = async (raw = [], settings) => {
   return { lines };
 };
 
-const applyPoTotals = (doc, settings) => {
-  const { totals, taxBreakup } = computeTotals(doc.items, settings);
+// On a purchase the supplier sells to us: their state vs ours decides the split.
+const applyPoTotals = (doc, settings, company) => {
+  const { totals } = computeTotals(doc.items, settings);
+  const taxBreakup = taxBreakupFor(totals.taxTotal, settings, {
+    sellerState: doc.supplierAddress?.state || '',
+    buyerState: sellerStateOf(settings, company),
+  });
   doc.subtotal = totals.subtotal;
   doc.discountTotal = totals.discountTotal;
   doc.taxableTotal = totals.taxableTotal;

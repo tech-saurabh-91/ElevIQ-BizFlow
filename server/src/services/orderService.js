@@ -62,7 +62,8 @@ export const priceLineValues = (input, settings) => {
 
   const unitPrice = Number(input.unitPrice || 0);
   const discountPercent = Number(input.discountPercent || 0);
-  const taxRate = Number(input.taxRate || 0);
+  // "No tax" regime: nothing is charged whatever the product's rate says.
+  const taxRate = settings?.tax?.regime === 'NONE' ? 0 : Number(input.taxRate || 0);
 
   if (unitPrice < 0) {
     throw new BadRequestError('Unit price cannot be negative', 'VALIDATION_ERROR');
@@ -70,8 +71,8 @@ export const priceLineValues = (input, settings) => {
   if (discountPercent < 0 || discountPercent > 100) {
     throw new BadRequestError('Discount must be between 0 and 100', 'VALIDATION_ERROR');
   }
-  if (taxRate < 0 || taxRate > 28) {
-    throw new BadRequestError('Tax rate cannot exceed 28%', 'VALIDATION_ERROR');
+  if (taxRate < 0 || taxRate > 100) {
+    throw new BadRequestError('Tax rate must be between 0 and 100%', 'VALIDATION_ERROR');
   }
 
   const gross = round2(qty * unitPrice);
@@ -107,6 +108,33 @@ export const priceLineValues = (input, settings) => {
   };
 };
 
+const sameText = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+
+/** The company's own state for place-of-supply checks. */
+export const sellerStateOf = (settings, company) => settings?.tax?.placeOfSupply || company?.address?.state || '';
+
+/** Where the goods go: the customer's shipping state, else the billing state. */
+export const buyerStateOf = (party) => party?.shippingAddress?.state || party?.address?.state || '';
+
+/**
+ * Split a document's tax into CGST/SGST/IGST.
+ *
+ * GST with the "split same-state tax" setting: a sale inside the seller's
+ * state is CGST + SGST (half each); a sale to another state is IGST. Any other
+ * regime (VAT, sales tax, GST without split) keeps one amount in `igst`,
+ * which documents label with the tenant's tax label.
+ */
+export const taxBreakupFor = (taxTotal, settings, { sellerState, buyerState } = {}) => {
+  const total = round2(taxTotal || 0);
+  const regime = settings?.tax?.regime || 'GST';
+  if (regime === 'NONE' || !total) return { cgst: 0, sgst: 0, igst: 0 };
+  const split = regime === 'GST' && settings?.tax?.enableCgstSgst !== false;
+  const sameState = !buyerState || !sellerState || sameText(buyerState, sellerState);
+  return split && sameState
+    ? { cgst: round2(total / 2), sgst: round2(total - round2(total / 2)), igst: 0 }
+    : { cgst: 0, sgst: 0, igst: total };
+};
+
 /** Whole-document totals from already-priced lines. */
 export const computeTotals = (lines, settings) => {
   const subtotal = round2(lines.reduce((s, l) => s + l.qty * l.unitPrice, 0));
@@ -120,10 +148,9 @@ export const computeTotals = (lines, settings) => {
   const roundOff = round2(rounded - rawTotal);
   const total = round2(rounded);
 
-  const splitGst = Boolean(settings?.tax?.enableCgstSgst);
-  const taxBreakup = splitGst
-    ? { cgst: round2(taxTotal / 2), sgst: round2(taxTotal - round2(taxTotal / 2)), igst: 0 }
-    : { cgst: 0, sgst: 0, igst: taxTotal };
+  // Without a buyer state the sale is treated as same-state; document
+  // controllers re-split with the real states via taxBreakupFor().
+  const taxBreakup = taxBreakupFor(taxTotal, settings);
 
   return {
     totals: { subtotal, discountTotal, taxableTotal, taxTotal, roundOff, total },

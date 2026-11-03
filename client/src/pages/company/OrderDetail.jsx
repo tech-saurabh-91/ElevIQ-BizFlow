@@ -35,6 +35,8 @@ import {
   orderActionsFor,
   paymentModeLabel,
 } from '@/components/company/order-shared';
+import { breakupRows } from '@/utils/tax';
+import { useTaxLabels } from '@/hooks/useLocations';
 
 const ACTION_BUTTONS = {
   submit: { label: 'Submit order', icon: Send },
@@ -51,6 +53,7 @@ const addressLines = (address = {}) =>
     .join(', ');
 
 export default function OrderDetail() {
+  const { tax: taxSettings, taxIdLabel } = useTaxLabels();
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -290,11 +293,9 @@ export default function OrderDetail() {
                   <TotalRow label="Discount" value={`− ${money(order.discountTotal)}`} />
                   <TotalRow label="Taxable value" value={money(order.taxableTotal)} />
                   <TotalRow label="Tax" value={money(order.taxTotal)} />
-                  <TotalRow
-                    label={`CGST / SGST`}
-                    value={`${money(order.taxBreakup?.cgst)} / ${money(order.taxBreakup?.sgst)}`}
-                    muted
-                  />
+                  {breakupRows(order.taxBreakup, taxSettings).map((r) => (
+                    <TotalRow key={r.label} label={r.label} value={r.value.map(money).join(' / ')} muted />
+                  ))}
                   <TotalRow
                     label="Round off"
                     value={`${Number(order.roundOff) >= 0 ? '+' : '−'} ${money(
@@ -364,7 +365,7 @@ export default function OrderDetail() {
               )}
               {(order.customerGstin || customer.gstin) && (
                 <p className="text-xs text-muted-foreground">
-                  GSTIN {order.customerGstin || customer.gstin}
+                  {taxIdLabel} {order.customerGstin || customer.gstin}
                 </p>
               )}
               {(billing || customer.address?.line1) && (

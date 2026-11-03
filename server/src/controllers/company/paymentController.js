@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
+import { pdfLocale, taxRows } from '../../utils/pdfLocale.js';
 import dayjs from 'dayjs';
 
 import Payment from '../../models/Payment.js';
@@ -537,6 +538,7 @@ export const formOptions = asyncHandler(async (req, res) => {
       settings: {
         currency: settings?.currency || 'INR',
         currencySymbol: settings?.currencySymbol || '₹',
+        collections: { fifoAllocationDefault: settings?.collections?.fifoAllocationDefault !== false },
       },
     },
   });
@@ -646,6 +648,7 @@ export const pdf = asyncHandler(async (req, res) => {
   const payment = await loadPayment(req, req.params.id);
   const settings = await settingsOf(req);
   const company = req.company || {};
+  const loc = await pdfLocale(settings, company);
   const customer = payment.customerId || {};
 
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -661,7 +664,7 @@ export const pdf = asyncHandler(async (req, res) => {
   doc.font('Helvetica').fontSize(8).fillColor('#555');
   const companyLine = [
     company.code ? `Code: ${company.code}` : '',
-    company.gstin ? `GSTIN: ${company.gstin}` : '',
+    company.gstin && loc.showTaxId ? `${loc.taxIdLabel}: ${company.gstin}` : '',
     company.phone || '',
     company.email || '',
   ]
@@ -720,7 +723,7 @@ export const pdf = asyncHandler(async (req, res) => {
 
   doc.font('Helvetica').fontSize(9);
   doc.text('Total received', 350, y, { width: 120, align: 'right' });
-  doc.text(`${settings?.currencySymbol || 'Rs.'} ${money2(payment.amount)}`, 475, y, { width: 80, align: 'right' });
+  doc.text(`${loc.money} ${money2(payment.amount)}`, 475, y, { width: 80, align: 'right' });
   y += 14;
   doc.text('Applied to invoices', 350, y, { width: 120, align: 'right' });
   doc.text(money2(payment.amountApplied), 475, y, { width: 80, align: 'right' });

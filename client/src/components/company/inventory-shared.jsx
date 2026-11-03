@@ -219,7 +219,7 @@ export function LineEditor({
                 value={line.taxRate ?? ''}
                 onChange={(e) => update(idx, { taxRate: e.target.value })}
                 min="0"
-                max="28"
+                max="100"
                 step="0.5"
                 className="text-right"
                 aria-label={`Tax rate for line ${idx + 1}`}

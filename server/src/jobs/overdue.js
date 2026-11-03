@@ -58,7 +58,14 @@ export const runOverdueReminders = async () => {
             { $set: { status: 'OVERDUE' } }
           );
 
-          const totalBalance = invoices.reduce((s, i) => s + (Number(i.balanceDue) || 0), 0);
+          // Remind only once an invoice is at least `overdueReminderDays` late
+          // (Collections setting); the OVERDUE status above still flips on the due date.
+          const graceDays = Number(settings?.collections?.overdueReminderDays ?? 0);
+          const cutoff = dayjs(startOfToday).subtract(graceDays, 'day').toDate();
+          const due = invoices.filter((i) => new Date(i.dueDate) < cutoff);
+          if (!due.length) return;
+          const totalBalance = due.reduce((s, i) => s + (Number(i.balanceDue) || 0), 0);
+          const money = `${settings?.currency || ''} ${totalBalance.toFixed(2)}`.trim();
 
           // The cron runs hourly, so remind at most once per company per day:
           // otherwise every overdue stack would drop 24 identical items in the
@@ -87,8 +94,8 @@ export const runOverdueReminders = async () => {
             broadcast: false,
             recipients: actors.map((u) => u._id),
             type: 'OVERDUE_INVOICE',
-            title: `${invoices.length} invoice(s) overdue`,
-            body: `Total outstanding ₹${totalBalance.toFixed(2)} across ${invoices.length} overdue invoices.`,
+            title: `${due.length} invoice(s) overdue`,
+            body: `Total outstanding ${money} across ${due.length} overdue invoice(s)${graceDays ? ` (${graceDays}+ days late)` : ''}.`,
             link: '/app/invoices?overdue=true',
             entityType: 'Invoice',
             priority: 'HIGH',

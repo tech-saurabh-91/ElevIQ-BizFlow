@@ -25,7 +25,7 @@ const productSchema = new mongoose.Schema(
 
     // Tax
     hsnCode: { type: String, default: '', trim: true },
-    gstRate: { type: Number, default: 18, min: 0, max: 28 },
+    gstRate: { type: Number, default: 18, min: 0, max: 100 },
 
     // Pricing (price lists can override per customer)
     mrp: money(),

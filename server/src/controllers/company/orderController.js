@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
+import { pdfLocale, taxRows } from '../../utils/pdfLocale.js';
 import dayjs from 'dayjs';
 
 import Order from '../../models/Order.js';
@@ -37,6 +38,9 @@ import {
   assertCreditLimit,
   nextOrderNumber,
   submittedStatus,
+  taxBreakupFor,
+  sellerStateOf,
+  buyerStateOf,
 } from '../../services/orderService.js';
 import {
   reserveStock,
@@ -217,6 +221,10 @@ const snapshotFrom = (customer, payload, settings, priceList, req, existing = nu
 const priceOrder = async (req, customer, priceList, rawItems, settings) => {
   const products = await loadProducts(rawItems);
   const priced = buildOrderLines(rawItems, { products, priceList, settings });
+  priced.taxBreakup = taxBreakupFor(priced.totals.taxTotal, settings, {
+    sellerState: sellerStateOf(settings, req.company),
+    buyerState: buyerStateOf(customer),
+  });
   const stock = assertStockAvailable(priced.lines, products, settings);
   const credit = assertCreditLimit(customer, priced.totals.total, settings);
 
@@ -775,7 +783,10 @@ export const formOptions = asyncHandler(async (req, res) => {
           regime: settings?.tax?.regime || 'GST',
           taxInclusive: Boolean(settings?.tax?.taxInclusive),
           enableCgstSgst: settings?.tax?.enableCgstSgst !== false,
-          defaultTaxRate: Number(settings?.tax?.defaultTaxRate || 18),
+          label: settings?.tax?.taxLabel || 'Tax',
+          // Company state: same-state sales split into CGST + SGST, others IGST.
+          sellerState: sellerStateOf(settings, req.company),
+          defaultTaxRate: Number(settings?.tax?.defaultTaxRate ?? 18),
         },
         order: {
           approvalThreshold: Number(settings?.order?.approvalThreshold || 0),
@@ -908,6 +919,7 @@ export const pdf = asyncHandler(async (req, res) => {
   const order = await loadOrder(req, req.params.id);
   const settings = await settingsOf(req);
   const company = req.company || {};
+  const loc = await pdfLocale(settings, company);
 
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
   const filename = `order-${(order.orderNo || order._id).toString().replace(/[^a-z0-9-]/gi, '')}.pdf`;
@@ -923,7 +935,7 @@ export const pdf = asyncHandler(async (req, res) => {
   doc.font('Helvetica').fontSize(8).fillColor('#555');
   const companyLine = [
     company.code ? `Code: ${company.code}` : '',
-    company.gstin ? `GSTIN: ${company.gstin}` : '',
+    company.gstin && loc.showTaxId ? `${loc.taxIdLabel}: ${company.gstin}` : '',
     company.phone || '',
     company.email || '',
   ]
@@ -962,7 +974,7 @@ export const pdf = asyncHandler(async (req, res) => {
     doc.text(`Phone: ${order.customerPhone || customer.phone}`, left, 158, { width: 240 });
   }
   if (order.customerGstin || customer.gstin) {
-    doc.text(`GSTIN: ${order.customerGstin || customer.gstin}`, left, 172, { width: 240 });
+    doc.text(`${loc.taxIdLabel}: ${order.customerGstin || customer.gstin}`, left, 172, { width: 240 });
   }
 
   doc.font('Helvetica-Bold').fontSize(9).text('SHIP TO', 300, 116);
@@ -982,11 +994,11 @@ export const pdf = asyncHandler(async (req, res) => {
   const cols = [
     { x: left, w: 26, label: '#' },
     { x: left + 26, w: 200, label: 'Item' },
-    { x: left + 226, w: 55, label: 'HSN' },
+    { x: left + 226, w: 55, label: loc.codeLabel },
     { x: left + 281, w: 45, label: 'Qty', align: 'right' },
     { x: left + 326, w: 62, label: 'Rate', align: 'right' },
     { x: left + 388, w: 45, label: 'Disc', align: 'right' },
-    { x: left + 433, w: 42, label: 'GST%', align: 'right' },
+    { x: left + 433, w: 42, label: `${loc.taxLabel}%`, align: 'right' },
     { x: right - 80, w: 80, label: 'Amount', align: 'right' },
   ];
 
@@ -1027,7 +1039,7 @@ export const pdf = asyncHandler(async (req, res) => {
     ['Subtotal', order.subtotal],
     ['Discount', -Number(order.discountTotal || 0)],
     ['Taxable', order.taxableTotal],
-    ['Tax', order.taxTotal],
+    ...taxRows(order.taxTotal, order.taxBreakup, loc),
     ['Round off', order.roundOff],
   ];
   doc.fontSize(9);
@@ -1038,7 +1050,7 @@ export const pdf = asyncHandler(async (req, res) => {
   });
   doc.font('Helvetica-Bold').fontSize(11);
   doc.text('Total', 380, y + 2, { width: 90, align: 'right' });
-  doc.text(`${settings?.currencySymbol || 'Rs.'} ${money2(order.total)}`, 475, y + 2, {
+  doc.text(`${loc.money} ${money2(order.total)}`, 475, y + 2, {
     width: 80,
     align: 'right',
   });

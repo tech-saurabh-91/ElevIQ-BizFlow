@@ -29,7 +29,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { usePermissions } from '@/hooks/usePermissions';
-import { formatDate, formatNumber, titleCase } from '@/utils/format';
+import { formatDate, formatNumber, titleCase, formatTime, formatDateTime } from '@/utils/format';
 import StatCard from '@/components/company/stat-card';
 import {
   ATTENDANCE_STATUSES,
@@ -115,7 +115,7 @@ function TodayPanel({ canManage }) {
               {!isLoading && (
                 <p className="mt-1 text-sm text-muted-foreground">
                   {checkedIn && !checkedOut
-                    ? `Checked in at ${formatDate(attendance?.checkIn?.at)} ${new Date(attendance?.checkIn?.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} — don't forget to check out.`
+                    ? `Checked in at ${formatDateTime(attendance?.checkIn?.at)} — don't forget to check out.`
                     : checkedOut
                       ? `Worked ${minutesToHm(attendance?.workedMinutes)}${attendance?.overtimeMinutes ? ` · ${minutesToHm(attendance.overtimeMinutes)} overtime` : ''}.`
                       : `Start your day by checking in.${config.requireGps ? ' Your GPS location will be captured.' : ''}`}
@@ -339,10 +339,7 @@ export default function Attendance() {
         row.checkIn?.at ? (
           <div className="min-w-0">
             <p className="whitespace-nowrap text-sm">
-              {new Date(row.checkIn.at).toLocaleTimeString('en-IN', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {formatTime(row.checkIn.at)}
             </p>
             {row.checkIn.address && (
               <p className="truncate text-xs text-muted-foreground">{row.checkIn.address}</p>
@@ -358,10 +355,7 @@ export default function Attendance() {
       render: (row) =>
         row.checkOut?.at ? (
           <p className="whitespace-nowrap text-sm">
-            {new Date(row.checkOut.at).toLocaleTimeString('en-IN', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            {formatTime(row.checkOut.at)}
           </p>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>

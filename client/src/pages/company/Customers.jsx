@@ -7,6 +7,7 @@ import { Users } from 'lucide-react';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
+import { useAuthStore } from '@/store/authStore';
 import { AddressFields, FormActions, FormSection, num, numInput, opt } from '@/components/company/form-utils';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,6 +16,7 @@ import { ErrorAlert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useLookups } from '@/hooks/useLookups';
 import { formatMoney, formatNumber } from '@/utils/format';
+import { useTaxLabels } from '@/hooks/useLocations';
 
 const CUSTOMER_TYPES = ['RETAIL', 'WHOLESALE', 'DISTRIBUTOR', 'DEALER'];
 const PAYMENT_TERMS = ['IMMEDIATE', 'NET_7', 'NET_15', 'NET_30', 'NET_45', 'NET_60', 'CUSTOM'];
@@ -74,7 +76,15 @@ const schema = z.object({
   isActive: z.boolean(),
 });
 
-const emptyAddress = { line1: '', line2: '', city: '', state: '', pincode: '', country: 'India' };
+// New addresses start in the company's own country.
+const emptyAddress = () => ({
+  line1: '',
+  line2: '',
+  city: '',
+  state: '',
+  pincode: '',
+  country: useAuthStore.getState().company?.country || '',
+});
 
 const toDefaults = (initial) => ({
   name: initial?.name || '',
@@ -89,8 +99,8 @@ const toDefaults = (initial) => ({
   pan: initial?.pan || '',
   taxId: initial?.taxId || '',
 
-  address: { ...emptyAddress, ...(initial?.address || {}) },
-  shippingAddress: { ...emptyAddress, ...(initial?.shippingAddress || {}) },
+  address: { ...emptyAddress(), ...(initial?.address || {}) },
+  shippingAddress: { ...emptyAddress(), ...(initial?.shippingAddress || {}) },
 
   creditLimit: numInput(initial?.creditLimit),
   creditDays: numInput(initial?.creditDays),
@@ -109,6 +119,7 @@ const toDefaults = (initial) => ({
 });
 
 function CustomerForm({ mode, initial, onClose, onSaved }) {
+  const { taxIdLabel } = useTaxLabels();
   const [formError, setFormError] = useState('');
   const [serverErrors, setServerErrors] = useState([]);
   const { lookups } = useLookups();
@@ -118,6 +129,8 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
     register,
     handleSubmit,
     setError,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(schema),
@@ -223,7 +236,7 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
       </FormSection>
 
       <FormSection title="Tax details" description="Used on invoices and GST reports">
-        <Field label="GSTIN" error={errors.gstin?.message}>
+        <Field label={taxIdLabel} error={errors.gstin?.message}>
           <Input {...register('gstin')} placeholder="27AAAAA0000A1Z5" className="uppercase" />
         </Field>
         <Field label="PAN" error={errors.pan?.message}>
@@ -235,11 +248,11 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
       </FormSection>
 
       <FormSection title="Billing address">
-        <AddressFields register={register} errors={errors} prefix="address" />
+        <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="address" />
       </FormSection>
 
       <FormSection title="Shipping address" description="Leave blank to use the billing address">
-        <AddressFields register={register} errors={errors} prefix="shippingAddress" />
+        <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="shippingAddress" />
       </FormSection>
 
       <FormSection title="Credit & pricing">
@@ -336,6 +349,7 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
 const idOf = (value) => (value && typeof value === 'object' ? value.name || value.code : value);
 
 export default function Customers() {
+  const { taxIdLabel } = useTaxLabels();
   const { company } = useAuth();
 
   const columns = [
@@ -450,7 +464,7 @@ export default function Customers() {
       columns={columns}
       filterKeys={['type', 'isActive']}
       filters={filters}
-      searchPlaceholder="Search by name, code, phone, email or GSTIN…"
+      searchPlaceholder={`Search by name, code, phone, email or ${taxIdLabel}…`}
       createLabel="Add customer"
       createIcon={Users}
       emptyTitle="No customers yet"

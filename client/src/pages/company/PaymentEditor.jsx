@@ -197,9 +197,35 @@ export default function PaymentEditor() {
   );
   const remaining = round2(amount - allocatedTotal);
 
+  // "Allocate oldest invoice first" (Collections setting): spread the amount
+  // over open invoices by due date. It keeps following the amount until the
+  // user edits an allocation by hand.
+  const fifoDefault = options?.settings?.collections?.fifoAllocationDefault !== false;
+  const [autoAllocate, setAutoAllocate] = useState(!isEdit);
+
+  const allocateOldestFirst = () => {
+    let left = amount;
+    const rows = [...(options?.invoices || [])]
+      .sort((a, b) => new Date(a.dueDate || a.invoiceDate || 0) - new Date(b.dueDate || b.invoiceDate || 0))
+      .map((inv) => {
+        const take = round2(Math.min(Number(inv.balanceDue || 0), Math.max(left, 0)));
+        left = round2(left - take);
+        return take > 0
+          ? { invoice: String(inv.id), invoiceNo: inv.invoiceNo, balanceDue: Number(inv.balanceDue || 0), amount: String(take) }
+          : null;
+      })
+      .filter(Boolean);
+    replace(rows);
+  };
+
+  useEffect(() => {
+    if (fifoDefault && autoAllocate && customerId && options?.invoices) allocateOldestFirst();
+  }, [fifoDefault, autoAllocate, customerId, amount, options?.invoices]);
+
   const addInvoiceRow = (invoiceId) => {
     const inv = invoicesById.get(String(invoiceId));
     if (!inv) return;
+    setAutoAllocate(false);
     const exists = watchedAllocations.some((a) => String(a.invoice) === String(inv.id));
     if (exists) return;
     append({
@@ -536,7 +562,7 @@ export default function PaymentEditor() {
                                       type="number"
                                       min="0.01"
                                       step="any"
-                                      {...register(`allocations.${index}.amount`)}
+                                      {...register(`allocations.${index}.amount`, { onChange: () => setAutoAllocate(false) })}
                                       aria-label={`Amount to settle for ${row.invoiceNo || index + 1}`}
                                     />
                                     {over && (
@@ -550,7 +576,10 @@ export default function PaymentEditor() {
                                       type="button"
                                       variant="ghost"
                                       size="sm"
-                                      onClick={() => remove(index)}
+                                      onClick={() => {
+                                        setAutoAllocate(false);
+                                        remove(index);
+                                      }}
                                       aria-label={`Remove allocation for ${row.invoiceNo || index + 1}`}
                                     >
                                       ×
@@ -567,6 +596,23 @@ export default function PaymentEditor() {
                         {optionsQuery.isLoading
                           ? 'Loading open invoices…'
                           : 'No invoices allocated yet. Add an invoice below, or leave the full amount as an advance.'}
+                      </div>
+                    )}
+
+                    {(options?.invoices || []).length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={amount <= 0}
+                          onClick={() => {
+                            setAutoAllocate(false);
+                            allocateOldestFirst();
+                          }}
+                        >
+                          Allocate oldest first
+                        </Button>
                       </div>
                     )}
 

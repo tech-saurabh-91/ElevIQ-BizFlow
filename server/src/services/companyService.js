@@ -10,6 +10,7 @@ import { ConflictError, NotFoundError, BadRequestError } from '../utils/errors.j
 import { runWithContext } from '../middlewares/tenantContext.js';
 import { withoutTenant } from '../middlewares/tenant.js';
 import logger from '../utils/logger.js';
+import { assertAddresses, findCountry } from './locationService.js';
 
 /**
  * Platform company lifecycle service.
@@ -222,6 +223,27 @@ export const serializeCompany = (c, extras = {}) => {
  * touches tenant collections runs inside `runWithContext` so the tenant plugin
  * injects companyId (and fails closed if it is missing).
  */
+/**
+ * Currency / time zone / tax a new company inherits from its country in the
+ * location master. Returns empty objects when the country is unknown.
+ */
+const countryDefaults = async (countryName) => {
+  const country = await findCountry(countryName);
+  if (!country) return { company: {}, tax: null };
+  return {
+    company: {
+      ...(country.currency ? { currency: country.currency, currencySymbol: country.currencySymbol || country.currency } : {}),
+      ...(country.timezones?.[0] ? { timezone: country.timezones[0] } : {}),
+    },
+    tax: {
+      regime: country.tax?.regime || 'VAT',
+      taxLabel: country.tax?.label || 'Tax',
+      defaultTaxRate: country.tax?.regime === 'NONE' ? 0 : country.tax?.defaultRate ?? 0,
+      enableCgstSgst: Boolean(country.tax?.splitIntraState),
+    },
+  };
+};
+
 export const createCompany = async (payload, actor) => {
   const {
     admin,
@@ -258,6 +280,9 @@ export const createCompany = async (payload, actor) => {
   const plan = planId ? await Plan.findOne({ _id: planId, isDeleted: { $ne: true } }).lean() : null;
   if (planId && !plan) throw new NotFoundError('Plan not found', 'NOT_FOUND');
 
+  await assertAddresses(companyFields, { address: 'body' });
+  const locale = await countryDefaults(companyFields.address?.country);
+
   const window = resolveSubscriptionWindow({
     plan,
     startMode,
@@ -273,6 +298,7 @@ export const createCompany = async (payload, actor) => {
   let company;
   try {
     company = await Company.create({
+      ...locale.company,
       ...companyFields,
       code,
       slug,
@@ -307,10 +333,15 @@ export const createCompany = async (payload, actor) => {
     // ---- 2. tenant settings ------------------------------------------------
     await runWithContext({ scope: 'company', companyId }, async () => {
       const settings = await Setting.forCompany(company._id);
-      if (plan?.features) {
-        settings.featureFlags = { ...plan.features };
-        await settings.save();
-      }
+      if (plan?.features) settings.featureFlags = { ...plan.features };
+      // Start the workspace on its country's currency, time zone and tax.
+      settings.set({
+        timezone: company.timezone,
+        currency: company.currency,
+        currencySymbol: company.currencySymbol,
+        ...(locale.tax ? { tax: { ...settings.tax.toObject(), ...locale.tax, placeOfSupply: company.address?.state || '' } } : {}),
+      });
+      await settings.save();
     });
 
     // ---- 3. first administrator -------------------------------------------
@@ -405,6 +436,7 @@ export const createCompany = async (payload, actor) => {
 
 export const updateCompany = async (id, fields, actor) => {
   const before = await getCompanyOr404(id);
+  await assertAddresses(fields, { address: 'body' });
 
   const set = {};
   const assignable = [

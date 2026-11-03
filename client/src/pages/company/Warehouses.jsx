@@ -8,6 +8,7 @@ import { CheckCircle2, Warehouse as WarehouseIcon } from 'lucide-react';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
+import { useAuthStore } from '@/store/authStore';
 import { AddressFields, FormActions, FormSection, num, numInput, opt } from '@/components/company/form-utils';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -50,7 +51,15 @@ const schema = z.object({
   notes: text(500),
 });
 
-const emptyAddress = { line1: '', line2: '', city: '', state: '', pincode: '', country: 'India' };
+// New addresses start in the company's own country.
+const emptyAddress = () => ({
+  line1: '',
+  line2: '',
+  city: '',
+  state: '',
+  pincode: '',
+  country: useAuthStore.getState().company?.country || '',
+});
 
 const toDefaults = (initial) => ({
   name: initial?.name || '',
@@ -60,7 +69,7 @@ const toDefaults = (initial) => ({
   email: initial?.email || '',
   manager: initial?.manager?.id || initial?.manager || '',
   capacity: numInput(initial?.capacity),
-  address: { ...emptyAddress, ...(initial?.address || {}) },
+  address: { ...emptyAddress(), ...(initial?.address || {}) },
   isDefault: initial?.isDefault ?? false,
   isActive: initial?.isActive ?? true,
   notes: initial?.notes || '',
@@ -75,6 +84,8 @@ function WarehouseForm({ mode, initial, onClose, onSaved }) {
     register,
     handleSubmit,
     setError,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm({ resolver: zodResolver(schema), defaultValues: toDefaults(initial) });
 
@@ -166,7 +177,7 @@ function WarehouseForm({ mode, initial, onClose, onSaved }) {
       </FormSection>
 
       <FormSection title="Address">
-        <AddressFields register={register} errors={errors} prefix="address" />
+        <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="address" />
       </FormSection>
 
       <FormSection title="Notes">

@@ -81,6 +81,18 @@ api.interceptors.response.use(
 
     const isAuthCall = /\/auth\/(login|refresh|logout)/.test(url);
 
+    // Workspace in maintenance mode: sign non-admins out and show the message
+    // on the login page.
+    if (status === 503 && code === 'MAINTENANCE' && !isAuthCall) {
+      try {
+        sessionStorage.setItem('eleviq.maintenance', error.response?.data?.message || '');
+      } catch {
+        /* storage unavailable: the login page falls back to a generic notice */
+      }
+      forceLogout();
+      return Promise.reject(error);
+    }
+
     // Impersonation tokens are short-lived (30 min) and have NO refresh cookie
     // of their own - the cookie belongs to the platform admin. Refreshing would
     // silently bounce us out of the workspace, so exit cleanly instead.

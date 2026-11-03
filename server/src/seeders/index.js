@@ -310,6 +310,8 @@ const run = async () => {
   await connectDB();
 
   try {
+    const locations = await (await import('../services/locationService.js')).seedLocations();
+    logger.info(`Locations: ${locations.countries} countries, ${locations.states} states`);
     const superAdmin = await seedSuperAdmin();
     const plans = await seedPlans();
     const growthPlan = plans.find((p) => p.code === 'GROWTH') || plans[1];

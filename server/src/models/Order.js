@@ -38,7 +38,7 @@ const orderItemSchema = new mongoose.Schema(
     discountPercent: { type: Number, default: 0, min: 0, max: 100 },
     discountAmount: money(),
 
-    taxRate: { type: Number, default: 0, min: 0, max: 28 },
+    taxRate: { type: Number, default: 0, min: 0, max: 100 },
     taxableAmount: money(),
     taxAmount: money(),
     lineTotal: money(),

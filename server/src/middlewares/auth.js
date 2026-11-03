@@ -1,7 +1,7 @@
 import env from '../config/env.js';
 import { verifyAccessToken, extractBearer } from '../utils/tokens.js';
 import { UnauthorizedError, ForbiddenError, AppError, ErrorCodes } from '../utils/errors.js';
-import { COMPANY_STATUS, LIVE_COMPANY_STATUSES } from '../config/constants.js';
+import { COMPANY_STATUS, LIVE_COMPANY_STATUSES, COMPANY_ROLES } from '../config/constants.js';
 import { runWithContext } from './tenantContext.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import User from '../models/User.js';
@@ -10,6 +10,13 @@ import Company from '../models/Company.js';
 import Session from '../models/Session.js';
 import Setting from '../models/Setting.js';
 import logger from '../utils/logger.js';
+
+/** 503 raised for non-admin users while the company is in maintenance mode. */
+export const maintenanceError = (settings) =>
+  new AppError(settings?.maintenanceMessage?.trim() || 'The workspace is under maintenance. Please try again later.', {
+    status: 503,
+    code: 'MAINTENANCE',
+  });
 
 /**
  * Core authentication middleware.
@@ -153,6 +160,11 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
     settings = await Setting.forCompany(companyId);
   } catch (e) {
     logger.warn(`Failed to load settings for company ${companyId}: ${e.message}`);
+  }
+
+  // Maintenance window: only company admins keep working.
+  if (settings?.maintenanceMode && user.role !== COMPANY_ROLES.COMPANY_ADMIN) {
+    throw maintenanceError(settings);
   }
 
   req.user = {

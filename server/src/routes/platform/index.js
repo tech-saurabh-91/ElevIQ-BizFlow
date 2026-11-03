@@ -7,6 +7,7 @@ import announcementRoutes from './announcements.js';
 import auditLogRoutes from './audit-logs.js';
 import platformReportRoutes from './reports.js';
 import profileRoutes from './profile.js';
+import { locationAdminRoutes } from '../locations.js';
 import * as dashboardController from '../../controllers/platform/dashboardController.js';
 import { authenticate } from '../../middlewares/auth.js';
 import { requirePlatformScope } from '../../middlewares/rbac.js';
@@ -45,5 +46,6 @@ router.use('/announcements', announcementRoutes);
 router.use('/audit-logs', auditLogRoutes);
 router.use('/reports', platformReportRoutes);
 router.use('/profile', profileRoutes);
+router.use('/locations', locationAdminRoutes);
 
 export default router;
