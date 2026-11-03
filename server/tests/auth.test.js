@@ -180,6 +180,61 @@ describe('Phase 1 - Company auth', () => {
   });
 });
 
+describe('Company login without a company code', () => {
+  const shared = 'shared@both.test';
+
+  const addUser = async (target, { email, password }) => {
+    const User = (await import('../src/models/User.js')).default;
+    const { runWithContext } = await import('../src/middlewares/tenantContext.js');
+    return runWithContext({ scope: 'company', companyId: String(target.company._id) }, () =>
+      User.create({ companyId: target.company._id, name: 'Shared Person', email, password, role: 'SALESMAN' })
+    );
+  };
+
+  beforeAll(async () => {
+    await addUser(companyA, { email: shared, password: 'Alpha#Pass123' });
+    await addUser(companyB, { email: shared, password: 'Beta#Pass123' });
+    await addUser(companyA, { email: 'same@both.test', password: 'Same#Pass123' });
+    await addUser(companyB, { email: 'same@both.test', password: 'Same#Pass123' });
+  });
+
+  test('the same email in two companies logs into the one whose password matches', async () => {
+    const a = await loginCompany({ identifier: shared, password: 'Alpha#Pass123' });
+    expect(a.company.code).toBe('AAAA01');
+    const b = await loginCompany({ identifier: shared, password: 'Beta#Pass123' });
+    expect(b.company.code).toBe('BBBB01');
+  });
+
+  test('a wrong password does not reveal which companies the email belongs to', async () => {
+    const res = await request.post('/api/auth/login').send({ identifier: shared, password: 'Wrong#Pass1' });
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('INVALID_CREDENTIALS');
+    expect(JSON.stringify(res.body)).not.toMatch(/AAAA01|BBBB01/);
+  });
+
+  test('same email and password in two companies asks which workspace, then logs in', async () => {
+    const creds = { identifier: 'same@both.test', password: 'Same#Pass123' };
+    const res = await request.post('/api/auth/login').send(creds);
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('MULTIPLE_ACCOUNTS');
+    expect(res.body.details.map((c) => c.code).sort()).toEqual(['AAAA01', 'BBBB01']);
+
+    const picked = await loginCompany(creds, { companyCode: 'BBBB01' });
+    expect(picked.company.code).toBe('BBBB01');
+  });
+
+  test('an email cannot be registered twice in the same company', async () => {
+    const admin = await loginCompany(companyA.creds);
+    const res = await request
+      .post('/api/v1/users')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'Copy', email: shared, password: 'Copy#Pass123', role: 'SALESMAN' });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('DUPLICATE');
+    expect(res.body.message).toMatch(/email already exists/);
+  });
+});
+
 describe('Phase 1 - Refresh token rotation & reuse detection', () => {
   let agent;
   let firstCookie;

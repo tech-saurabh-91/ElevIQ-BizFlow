@@ -15,7 +15,6 @@ import { toFieldErrors } from '@/api/client';
 const schema = z.object({
   identifier: z.string().trim().min(3, 'Enter your email or phone'),
   password: z.string().min(1, 'Password is required'),
-  companyCode: z.string().trim().optional(),
 });
 
 export default function CompanyLogin() {
@@ -24,24 +23,26 @@ export default function CompanyLogin() {
   const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState(null);
-  const [showCode, setShowCode] = useState(false);
+  // Set when the same login + password exists in several companies.
+  const [workspaces, setWorkspaces] = useState(null);
 
   const {
     register,
     handleSubmit,
+    getValues,
     setError,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { identifier: '', password: '', companyCode: '' },
+    defaultValues: { identifier: '', password: '' },
   });
 
-  const onSubmit = async (values) => {
+  const signIn = async (values, companyCode) => {
     setServerError(null);
     const res = await loginAsCompany({
       identifier: values.identifier,
       password: values.password,
-      companyCode: values.companyCode || undefined,
+      companyCode,
     });
 
     if (res.ok) {
@@ -53,11 +54,16 @@ export default function CompanyLogin() {
       if (res.error?.errors?.length) {
         Object.entries(toFieldErrors(res.error.errors)).forEach(([f, m]) => setError(f, { message: m }));
       }
-      // Multiple accounts found for the same login -> reveal the company code box.
-      if (res.error?.code === 'MULTIPLE_ACCOUNTS') setShowCode(true);
+      if (res.error?.code === 'MULTIPLE_ACCOUNTS' && Array.isArray(res.error.details)) {
+        setWorkspaces(res.error.details);
+        return;
+      }
+      setWorkspaces(null);
       setServerError(res.error);
     }
   };
+
+  const onSubmit = (values) => signIn(values);
 
   return (
     <div>
@@ -79,7 +85,6 @@ export default function CompanyLogin() {
                 COMPANY_SUSPENDED: 'Company suspended',
                 COMPANY_EXPIRED: 'Subscription expired',
                 ACCOUNT_LOCKED: 'Account locked',
-                MULTIPLE_ACCOUNTS: 'Company code required',
               }[serverError.code] || 'Sign in failed'
             }
             message={serverError.message}
@@ -105,32 +110,6 @@ export default function CompanyLogin() {
             <p className="text-xs font-medium text-destructive">{errors.identifier.message}</p>
           )}
         </div>
-
-        {showCode || (
-          <button
-            type="button"
-            onClick={() => setShowCode(true)}
-            className="text-xs font-medium text-brand-600 hover:underline focus-ring rounded"
-          >
-            + Use a company code
-          </button>
-        )}
-
-        {showCode && (
-          <div className="space-y-1.5">
-            <Label htmlFor="companyCode">Company code</Label>
-            <Input
-              id="companyCode"
-              placeholder="e.g. DEMO01"
-              autoCapitalize="characters"
-              error={errors.companyCode?.message}
-              {...register('companyCode')}
-            />
-            <p className="text-xs text-muted-foreground">
-              Only needed if your email/phone exists in more than one company.
-            </p>
-          </div>
-        )}
 
         <div className="space-y-1.5">
           <Label required htmlFor="password">
@@ -171,6 +150,24 @@ export default function CompanyLogin() {
           <LogIn className="h-4 w-4" /> Sign in
         </Button>
       </form>
+
+      {workspaces && (
+        <div className="mt-5 space-y-2 rounded-lg border p-3.5">
+          <p className="text-sm font-medium">This login belongs to more than one company. Choose one:</p>
+          {workspaces.map((w) => (
+            <Button
+              key={w.code}
+              type="button"
+              variant="outline"
+              className="w-full justify-start"
+              disabled={isSubmitting}
+              onClick={() => signIn(getValues(), w.code)}
+            >
+              <Building2 className="h-4 w-4" /> {w.name}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <div className="mt-6 flex items-center justify-between rounded-lg border bg-muted/40 p-3.5 text-xs text-muted-foreground">
         <span>

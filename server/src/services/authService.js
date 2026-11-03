@@ -156,37 +156,24 @@ export const loginCompany = async ({ identifier, password, companyCode, ip, user
     throw new UnauthorizedError('Invalid credentials', ErrorCodes.INVALID_CREDENTIALS);
   }
 
-  // Disambiguate by company code when the login id exists in multiple tenants.
+  // A company code is optional: the login page no longer asks for one, but it is
+  // still accepted to pick an account when the password matches in several.
   if (companyCode) {
     const code = String(companyCode).trim().toUpperCase();
     const company = await withoutTenant(() => Company.findOne({ code, isDeleted: { $ne: true } }).lean());
-    if (!company) throw new UnauthorizedError('Invalid company code', ErrorCodes.INVALID_CREDENTIALS);
+    if (!company) throw new UnauthorizedError('Invalid credentials', ErrorCodes.INVALID_CREDENTIALS);
     candidates = candidates.filter((c) => String(c.companyId) === String(company._id));
     if (!candidates.length) {
-      throw new UnauthorizedError('Invalid credentials for this company', ErrorCodes.INVALID_CREDENTIALS);
+      throw new UnauthorizedError('Invalid credentials', ErrorCodes.INVALID_CREDENTIALS);
     }
-  } else if (candidates.length > 1) {
-    // Ambiguous: return a helpful error listing the companies (codes only).
-    const ids = [...new Set(candidates.map((c) => String(c.companyId)))];
-    const companies = await withoutTenant(() =>
-      Company.find({ _id: { $in: ids }, isDeleted: { $ne: true } })
-        .select('code businessName')
-        .lean()
-    );
-    throw new AppError(
-      'Multiple accounts found for this login. Please enter your company code.',
-      {
-        status: 409,
-        code: 'MULTIPLE_ACCOUNTS',
-        details: companies.map((c) => ({ code: c.code, name: c.businessName })),
-      }
-    );
   }
 
-  const user = candidates[0];
-
   // ---- Lock check -------------------------------------------------------
-  if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+  // The same email/phone may exist in several companies (unique per company
+  // only), so the account is identified by which one the password matches.
+  const isLocked = (c) => c.lockedUntil && new Date(c.lockedUntil) > new Date();
+  const unlocked = candidates.filter((c) => !isLocked(c));
+  if (!unlocked.length) {
     throw new AppError('Account locked due to too many failed attempts. Try again in 15 minutes.', {
       status: 423,
       code: ErrorCodes.ACCOUNT_LOCKED,
@@ -195,18 +182,44 @@ export const loginCompany = async ({ identifier, password, companyCode, ip, user
 
   // ---- Password check ---------------------------------------------------
   const bcrypt = (await import('bcryptjs')).default;
-  const ok = await bcrypt.compare(password, user.password);
-  if (!ok) {
-    const attempts = (user.failedLoginAttempts || 0) + 1;
-    await User.updateOne(
-      { _id: user._id, companyId: user.companyId },
-      {
-        $set: { failedLoginAttempts: attempts },
-        ...(attempts >= 5 ? { $set: { lockedUntil: new Date(Date.now() + 15 * 60 * 1000) } } : {}),
-      }
+  const checks = await Promise.all(unlocked.map((c) => bcrypt.compare(password, c.password)));
+  const matches = unlocked.filter((_c, i) => checks[i]);
+
+  if (!matches.length) {
+    await Promise.all(
+      unlocked.map((c) => {
+        const attempts = (c.failedLoginAttempts || 0) + 1;
+        const lock = attempts >= 5;
+        return User.updateOne(
+          { _id: c._id, companyId: c.companyId },
+          {
+            $set: lock
+              ? { failedLoginAttempts: 0, lockedUntil: new Date(Date.now() + 15 * 60 * 1000) }
+              : { failedLoginAttempts: attempts },
+          }
+        );
+      })
     );
     throw new UnauthorizedError('Invalid credentials', ErrorCodes.INVALID_CREDENTIALS);
   }
+
+  if (matches.length > 1) {
+    // Same login AND same password in several companies: the caller has proven
+    // the password, so it is safe to let them choose the workspace.
+    const ids = [...new Set(matches.map((c) => String(c.companyId)))];
+    const companies = await withoutTenant(() =>
+      Company.find({ _id: { $in: ids }, isDeleted: { $ne: true } })
+        .select('code businessName')
+        .lean()
+    );
+    throw new AppError('This login belongs to more than one company. Choose the workspace to open.', {
+      status: 409,
+      code: 'MULTIPLE_ACCOUNTS',
+      details: companies.map((c) => ({ code: c.code, name: c.businessName })),
+    });
+  }
+
+  const user = matches[0];
 
   if (!user.isActive) throw new ForbiddenError('Your account has been deactivated', 'FORBIDDEN');
   if (user.isDeleted) throw new UnauthorizedError('Invalid credentials', ErrorCodes.INVALID_CREDENTIALS);

@@ -95,7 +95,9 @@ export function Dialog({
         exit={{ opacity: 0, y: 10, scale: 0.98 }}
         transition={{ duration: 0.16, ease: 'easeOut' }}
         className={cn(
-          'relative z-10 flex w-full flex-col overflow-hidden rounded-t-2xl border bg-card shadow-2xl sm:rounded-2xl',
+          // Cap the height to the viewport so long forms scroll inside the body
+          // instead of being cut off above/below the screen.
+          'relative z-10 flex max-h-[95dvh] w-full flex-col overflow-hidden rounded-t-2xl border bg-card shadow-2xl sm:max-h-[90dvh] sm:rounded-2xl',
           sizes[size],
           className
         )}
@@ -117,7 +119,7 @@ export function Dialog({
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">{children}</div>
 
         {footer && (
           <div className="flex flex-wrap items-center justify-end gap-2 border-t bg-muted/30 px-5 py-3.5 sm:px-6">

@@ -6,7 +6,7 @@ import Route from '../../models/Route.js';
 import Session from '../../models/Session.js';
 import { success, created, paginated } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { BadRequestError } from '../../utils/errors.js';
+import { BadRequestError, AppError } from '../../utils/errors.js';
 import { listDocuments } from '../../utils/query.js';
 import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS } from '../../config/constants.js';
@@ -40,6 +40,30 @@ const validateRefs = async (payload) => {
     }
   }
   return out;
+};
+
+/**
+ * Email and phone are unique per company (see the User indexes), so the same
+ * person may exist in another company. Check up front for a clear message
+ * instead of a raw duplicate-key error. Soft-deleted users still hold the value.
+ */
+const assertUniqueLogin = async (payload, excludeId = null) => {
+  const checks = [
+    ['email', payload.email ? String(payload.email).trim().toLowerCase() : ''],
+    ['phone', payload.phone ? String(payload.phone).trim() : ''],
+  ];
+  for (const [field, value] of checks) {
+    if (!value) continue;
+    const filter = { [field]: value, isDeleted: { $in: [true, false] } };
+    if (excludeId) filter._id = { $ne: excludeId };
+    if (await User.exists(filter)) {
+      throw new AppError(`A user with this ${field} already exists in your company`, {
+        status: 409,
+        code: 'DUPLICATE',
+        errors: [{ field: `body.${field}`, message: `This ${field} is already in use` }],
+      });
+    }
+  }
 };
 
 const revokeSessions = async (req, userId, reason = 'ADMIN_ACTION') => {
@@ -131,6 +155,7 @@ export const create = asyncHandler(async (req, res) => {
   );
 
   const payload = await validateRefs(req.body);
+  await assertUniqueLogin(payload);
   let temporaryPassword = null;
 
   if (!payload.password) {
@@ -162,6 +187,7 @@ export const create = asyncHandler(async (req, res) => {
 export const update = asyncHandler(async (req, res) => {
   const doc = await loadDoc(User, req.params.id, { label: 'User' });
   const payload = await validateRefs(req.body);
+  await assertUniqueLogin(payload, doc._id);
 
   if (String(doc._id) === String(req.user.id)) {
     if (payload.isActive === false) {
