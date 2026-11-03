@@ -56,5 +56,22 @@ export const requireFile = (req, _res, next) => {
   return next();
 };
 
+const SPREADSHEET_MIME = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel', // Windows without Excel installed
+  'application/octet-stream', // some browsers send .xlsx without a specific type
+];
+
+/** In-memory .xlsx upload for bulk imports (never written to disk). */
+export const spreadsheetUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter(_req, file, cb) {
+    const isXlsx = /\.xlsx$/i.test(file.originalname || '') && SPREADSHEET_MIME.includes(file.mimetype);
+    if (!isXlsx) return cb(new BadRequestError('Upload the .xlsx template (Excel workbook)', 'INVALID_FILE_TYPE'));
+    return cb(null, true);
+  },
+});
+
 export { uploadRoot };
 export default upload;

@@ -80,7 +80,7 @@ describe('Address postal code validation', () => {
     const res = await request
       .post('/api/v1/customers')
       .set(as(state.admin))
-      .send({ name: 'Bad Pin Store', address: { country: 'India', state: 'Maharashtra', city: 'Pune', pincode: '41A001' } });
+      .send({ name: 'Bad Pin Store', phone: '+91 90000 00001', address: { country: 'India', state: 'Maharashtra', city: 'Pune', pincode: '41A001' } });
     expect(res.status).toBe(422);
     expect(res.body.errors[0]).toMatchObject({ field: 'body.address.pincode' });
   });
@@ -89,13 +89,13 @@ describe('Address postal code validation', () => {
     const short = await request
       .post('/api/v1/customers')
       .set(as(state.admin))
-      .send({ name: 'Short Pin', address: { country: 'India', pincode: '41100' } });
+      .send({ name: 'Short Pin', phone: '+91 90000 00002', address: { country: 'India', state: 'Maharashtra', city: 'Pune', pincode: '41100' } });
     expect(short.status).toBe(422);
 
     const ok = await request
       .post('/api/v1/customers')
       .set(as(state.admin))
-      .send({ name: 'Good Pin', address: { country: 'India', state: 'Maharashtra', pincode: '411002' } });
+      .send({ name: 'Good Pin', phone: '+91 90000 00003', address: { country: 'India', state: 'Maharashtra', city: 'Pune', pincode: '411002' } });
     expect(ok.status).toBe(201);
   });
 });
@@ -140,7 +140,7 @@ describe('Tax: place of supply', () => {
     const customer = await request
       .post('/api/v1/customers')
       .set(as(state.admin))
-      .send({ name: `Buyer ${customerState}`, address: { country: 'India', state: customerState } });
+      .send({ name: `Buyer ${customerState}`, phone: `+91 9${String(customerState.length).padStart(9, '0')}`, address: { country: 'India', state: customerState, city: 'Main' } });
     const product = await request
       .post('/api/v1/products')
       .set(as(state.admin))
@@ -186,7 +186,10 @@ describe('Tax: place of supply', () => {
       await User.create({ companyId: company._id, name: 'NT Admin', email: 'admin@notax.test', password: PASSWORD, role: 'COMPANY_ADMIN' });
     });
     const token = await login('admin@notax.test');
-    const customer = await request.post('/api/v1/customers').set(as(token)).send({ name: 'NT Buyer' });
+    const customer = await request
+      .post('/api/v1/customers')
+      .set(as(token))
+      .send({ name: 'NT Buyer', phone: '+91 90000 00009', address: { country: 'India', state: 'Goa', city: 'Panaji' } });
     const product = await request.post('/api/v1/products').set(as(token)).send({ name: 'NT Item', sellingPrice: 100, gstRate: 18 });
     const order = await request
       .post('/api/v1/orders')
@@ -289,7 +292,7 @@ describe('Issued invoices keep the seller details of their day', () => {
     const customer = await request
       .post('/api/v1/customers')
       .set(as(state.admin))
-      .send({ name: 'Snapshot Buyer', address: { country: 'India', state: 'Maharashtra' } });
+      .send({ name: 'Snapshot Buyer', phone: '+91 90000 00010', address: { country: 'India', state: 'Maharashtra', city: 'Pune' } });
     const product = await request
       .post('/api/v1/products')
       .set(as(state.admin))

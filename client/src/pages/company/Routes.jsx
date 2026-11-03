@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Route as RouteIcon } from 'lucide-react';
+import { Route as RouteIcon, Users } from 'lucide-react';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
@@ -13,9 +13,20 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ErrorAlert } from '@/components/ui/alert';
 import { useLookups } from '@/hooks/useLookups';
+import { usePermissions } from '@/hooks/usePermissions';
+import RouteCustomers from '@/components/company/RouteCustomers';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 
 const BEAT_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-const DAY_LABEL = { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat', SUN: 'Sun' };
+const DAY_LABEL = {
+  MON: 'Mon',
+  TUE: 'Tue',
+  WED: 'Wed',
+  THU: 'Thu',
+  FRI: 'Fri',
+  SAT: 'Sat',
+  SUN: 'Sun',
+};
 
 const text = (max = 200) => z.string().trim().max(max).optional().or(z.literal(''));
 
@@ -111,12 +122,21 @@ function RouteForm({ mode, initial, onClose, onSaved }) {
           <Input {...register('name')} error={!!errors.name} placeholder="Pune East Beat 1" />
         </Field>
         <Field label="Route code" required error={errors.code?.message}>
-          <Input {...register('code')} error={!!errors.code} placeholder="RTE-0001" className="uppercase" />
+          <Input
+            {...register('code')}
+            error={!!errors.code}
+            placeholder="RTE-0001"
+            className="uppercase"
+          />
         </Field>
         <Field label="Territory" error={errors.territory?.message}>
           <Input {...register('territory')} placeholder="Pune East" />
         </Field>
-        <Field label="Sequence" error={errors.sequence?.message} hint="Order in which the route appears">
+        <Field
+          label="Sequence"
+          error={errors.sequence?.message}
+          hint="Order in which the route appears"
+        >
           <Input type="number" min="0" step="1" {...register('sequence')} placeholder="0" />
         </Field>
         <Field label="Warehouse" error={errors.warehouse?.message}>
@@ -147,7 +167,9 @@ function RouteForm({ mode, initial, onClose, onSaved }) {
       <section className="space-y-3">
         <div>
           <h3 className="text-sm font-semibold">Beat days</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">Days the salesman visits this route.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Days the salesman visits this route.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {BEAT_DAYS.map((day) => (
@@ -165,7 +187,9 @@ function RouteForm({ mode, initial, onClose, onSaved }) {
             </label>
           ))}
         </div>
-        {errors.beatDays?.message && <p className="text-xs text-destructive">{errors.beatDays.message}</p>}
+        {errors.beatDays?.message && (
+          <p className="text-xs text-destructive">{errors.beatDays.message}</p>
+        )}
       </section>
 
       <FormSection title="Notes">
@@ -190,6 +214,8 @@ function RouteForm({ mode, initial, onClose, onSaved }) {
 }
 
 export default function Routes() {
+  const { can } = usePermissions();
+  const [customersOf, setCustomersOf] = useState(null);
   const columns = [
     {
       key: 'name',
@@ -216,7 +242,9 @@ export default function Routes() {
       render: (row) => (
         <div className="text-sm">
           <p>{row.assignedTo?.name || 'Unassigned'}</p>
-          <p className="text-xs text-muted-foreground">{row.warehouse?.name || 'Default warehouse'}</p>
+          <p className="text-xs text-muted-foreground">
+            {row.warehouse?.name || 'Default warehouse'}
+          </p>
         </div>
       ),
     },
@@ -247,7 +275,9 @@ export default function Routes() {
       key: 'status',
       header: 'Status',
       render: (row) => (
-        <Badge tone={row.isActive ? 'success' : 'muted'}>{row.isActive ? 'Active' : 'Inactive'}</Badge>
+        <Badge tone={row.isActive ? 'success' : 'muted'}>
+          {row.isActive ? 'Active' : 'Inactive'}
+        </Badge>
       ),
     },
   ];
@@ -266,28 +296,47 @@ export default function Routes() {
   );
 
   return (
-    <ResourcePage
-      title="Routes & Beats"
-      description="Sales routes, beat days and the salesman who covers them"
-      breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Routes & Beats' }]}
-      queryKey={['company', 'routes']}
-      endpoint="/v1/routes"
-      permissionPrefix="customers"
-      columns={columns}
-      filterKeys={['isActive']}
-      filters={filters}
-      searchPlaceholder="Search by name, code, territory or description…"
-      createLabel="Add route"
-      createIcon={RouteIcon}
-      emptyTitle="No routes yet"
-      emptyDescription="Create routes to organise customers into beats for your sales team."
-      formTitle={(mode) => (mode === 'create' ? 'Add route' : 'Edit route')}
-      formDescription="Assign a salesman and warehouse to keep visits and stock in sync."
-      formSize="lg"
-      renderForm={(props) => <RouteForm {...props} />}
-      deleteMessage={(row) =>
-        row ? `“${row.name}” will be removed. Customers on this route will have no beat assigned.` : ''
-      }
-    />
+    <>
+      <ResourcePage
+        title="Routes & Beats"
+        description="Sales routes, beat days and the salesman who covers them"
+        breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Routes & Beats' }]}
+        queryKey={['company', 'routes']}
+        endpoint="/v1/routes"
+        permissionPrefix="customers"
+        columns={columns}
+        filterKeys={['isActive']}
+        filters={filters}
+        searchPlaceholder="Search by name, code, territory or description…"
+        createLabel="Add route"
+        createIcon={RouteIcon}
+        emptyTitle="No routes yet"
+        emptyDescription="Create routes to organise customers into beats for your sales team."
+        formTitle={(mode) => (mode === 'create' ? 'Add route' : 'Edit route')}
+        formDescription="Assign a salesman and warehouse to keep visits and stock in sync."
+        formSize="lg"
+        renderForm={(props) => <RouteForm {...props} />}
+        deleteMessage={(row) =>
+          row
+            ? `“${row.name}” will be removed. Customers on this route will have no beat assigned.`
+            : ''
+        }
+        rowActions={(row, { close }) => (
+          <DropdownMenuItem
+            onClick={() => {
+              close();
+              setCustomersOf(row);
+            }}
+          >
+            <Users className="h-4 w-4" /> Customers
+          </DropdownMenuItem>
+        )}
+      />
+      <RouteCustomers
+        route={customersOf}
+        canEdit={can('customers.update')}
+        onClose={() => setCustomersOf(null)}
+      />
+    </>
   );
 }

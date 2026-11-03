@@ -26,6 +26,8 @@ const customerSchema = new mongoose.Schema(
 
     address: { type: addressSchema, default: () => ({}) },
     shippingAddress: { type: addressSchema, default: () => ({}) },
+    // When true the shipping address is a copy of the billing address.
+    shippingSameAsBilling: { type: Boolean, default: true },
     gps: { type: geoPointSchema, default: () => ({}) },
 
     // Credit control

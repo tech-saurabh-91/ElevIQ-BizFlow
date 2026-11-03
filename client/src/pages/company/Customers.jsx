@@ -1,41 +1,45 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Users } from 'lucide-react';
+import { Upload, Users } from 'lucide-react';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
+import CustomerImport from '@/components/company/CustomerImport';
 import { useAuthStore } from '@/store/authStore';
 import { AddressFields, FormActions, FormSection, num, numInput, opt } from '@/components/company/form-utils';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ErrorAlert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useLookups } from '@/hooks/useLookups';
+import { usePermissions } from '@/hooks/usePermissions';
 import { formatMoney, formatNumber } from '@/utils/format';
 import { useTaxLabels } from '@/hooks/useLocations';
 
 const CUSTOMER_TYPES = ['RETAIL', 'WHOLESALE', 'DISTRIBUTOR', 'DEALER'];
 const PAYMENT_TERMS = ['IMMEDIATE', 'NET_7', 'NET_15', 'NET_30', 'NET_45', 'NET_60', 'CUSTOM'];
+const termLabel = (t) => (t === 'IMMEDIATE' ? 'Immediate' : t === 'CUSTOM' ? 'Custom' : t.replace('NET_', 'Net ') + ' days');
+const termDays = (t) => (t === 'IMMEDIATE' ? 0 : /^NET_(\d+)$/.test(t) ? Number(t.slice(4)) : null);
+
+// Mirrors server/src/services/customerService.js
+const PHONE = /^\+?\d[\d\s-]{5,18}\d$/;
+const GSTIN_IN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const PAN_IN = /^[A-Z]{5}\d{4}[A-Z]$/;
+const digitsOf = (v) => String(v || '').replace(/\D/g, '');
 
 const text = (max = 200) => z.string().trim().max(max).optional().or(z.literal(''));
 const amount = z
   .string()
   .trim()
-  .regex(/^\d*\.?\d*$/, 'Enter a valid amount')
+  .regex(/^\d{0,12}(\.\d{0,2})?$/, 'Enter an amount with up to 2 decimals')
   .optional()
   .or(z.literal(''));
-const whole = z
-  .string()
-  .trim()
-  .regex(/^\d*$/, 'Enter a whole number')
-  .optional()
-  .or(z.literal(''));
-
-const addressShape = z.object({
+const address = z.object({
   line1: text(160),
   line2: text(160),
   city: text(80),
@@ -44,37 +48,57 @@ const addressShape = z.object({
   country: text(80),
 });
 
-const schema = z.object({
-  name: z.string().trim().min(2, 'Customer name is required').max(160),
-  code: text(24),
-  type: z.enum(CUSTOMER_TYPES),
-  contactPerson: text(120),
-  phone: text(20),
-  alternatePhone: text(20),
-  email: z.string().trim().email('Enter a valid email').optional().or(z.literal('')),
-
-  gstin: text(20),
-  pan: text(12),
-  taxId: text(40),
-
-  address: addressShape,
-  shippingAddress: addressShape,
-
-  creditLimit: amount,
-  creditDays: whole,
-  paymentTerms: z.enum(PAYMENT_TERMS),
-  openingBalance: amount,
-
-  priceList: text(40),
-  assignedTo: text(40),
-  route: text(40),
-  warehouse: text(40),
-  territory: text(80),
-
-  tags: text(400),
-  notes: text(1000),
-  isActive: z.boolean(),
-});
+const buildSchema = (isIndia) =>
+  z
+    .object({
+      name: z.string().trim().min(2, 'Customer name is required').max(160),
+      type: z.enum(CUSTOMER_TYPES),
+      contactPerson: text(120),
+      phone: z.string().trim().min(1, 'Phone is required').regex(PHONE, 'Enter a valid phone number'),
+      alternatePhone: z.string().trim().regex(PHONE, 'Enter a valid phone number').optional().or(z.literal('')),
+      email: z.string().trim().email('Enter a valid email').optional().or(z.literal('')),
+      gstin: text(30),
+      pan: text(20),
+      taxId: text(40),
+      address,
+      shippingSameAsBilling: z.boolean(),
+      shippingAddress: address,
+      creditLimit: amount,
+      creditDays: z.string().trim().regex(/^\d{0,3}$/, 'Whole days only').optional().or(z.literal('')),
+      paymentTerms: z.enum(PAYMENT_TERMS),
+      openingBalance: amount,
+      priceList: text(40),
+      assignedTo: text(40),
+      warehouse: text(40),
+      tags: text(400),
+      notes: text(1000),
+      isActive: z.boolean(),
+    })
+    .superRefine((v, ctx) => {
+      const need = (path, message) => ctx.addIssue({ code: 'custom', path, message });
+      ['country', 'state', 'city'].forEach((k) => {
+        if (!v.address[k]) need(['address', k], `${k.charAt(0).toUpperCase() + k.slice(1)} is required`);
+        if (!v.shippingSameAsBilling && !v.shippingAddress[k]) {
+          need(['shippingAddress', k], `${k.charAt(0).toUpperCase() + k.slice(1)} is required`);
+        }
+      });
+      const d = digitsOf(v.phone).length;
+      if (v.phone && (d < 7 || d > 15)) need(['phone'], 'Phone must have 7-15 digits');
+      if (v.alternatePhone && digitsOf(v.alternatePhone) === digitsOf(v.phone)) {
+        need(['alternatePhone'], 'Alternate phone must differ from the phone');
+      }
+      if (isIndia) {
+        const gstin = v.gstin.toUpperCase();
+        if (gstin && !GSTIN_IN.test(gstin)) need(['gstin'], 'GSTIN must be 15 characters, e.g. 27AAAAA0000A1Z5');
+        if (v.pan && !PAN_IN.test(v.pan.toUpperCase())) need(['pan'], 'PAN must look like AAAAA0000A');
+        if (gstin && v.pan && GSTIN_IN.test(gstin) && gstin.slice(2, 12) !== v.pan.toUpperCase()) {
+          need(['pan'], 'PAN does not match the GSTIN');
+        }
+      }
+      const days = Number(v.creditDays || 0);
+      if (days > 365) need(['creditDays'], 'At most 365 days');
+      if (v.paymentTerms === 'CUSTOM' && !(days > 0)) need(['creditDays'], 'Enter the credit days for custom terms');
+    });
 
 // New addresses start in the company's own country.
 const emptyAddress = () => ({
@@ -88,7 +112,6 @@ const emptyAddress = () => ({
 
 const toDefaults = (initial) => ({
   name: initial?.name || '',
-  code: initial?.code || '',
   type: initial?.type || 'RETAIL',
   contactPerson: initial?.contactPerson || '',
   phone: initial?.phone || '',
@@ -100,6 +123,7 @@ const toDefaults = (initial) => ({
   taxId: initial?.taxId || '',
 
   address: { ...emptyAddress(), ...(initial?.address || {}) },
+  shippingSameAsBilling: initial ? initial.shippingSameAsBilling !== false : true,
   shippingAddress: { ...emptyAddress(), ...(initial?.shippingAddress || {}) },
 
   creditLimit: numInput(initial?.creditLimit),
@@ -109,21 +133,35 @@ const toDefaults = (initial) => ({
 
   priceList: initial?.priceList?.id || initial?.priceList || '',
   assignedTo: initial?.assignedTo?.id || initial?.assignedTo || '',
-  route: initial?.route?.id || initial?.route || '',
   warehouse: initial?.warehouse?.id || initial?.warehouse || '',
-  territory: initial?.territory || '',
 
   tags: (initial?.tags || []).join(', '),
   notes: initial?.notes || '',
   isActive: initial?.isActive ?? true,
 });
 
+// Keep only what a field may contain while typing.
+const onlyAmount = (e) => {
+  e.target.value = e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+};
+const onlyDigits = (e) => {
+  e.target.value = e.target.value.replace(/\D/g, '');
+};
+const onlyPhone = (e) => {
+  e.target.value = e.target.value.replace(/[^\d+\s-]/g, '');
+};
+
 function CustomerForm({ mode, initial, onClose, onSaved }) {
-  const { taxIdLabel } = useTaxLabels();
+  const { taxIdLabel, country } = useTaxLabels();
+  const isIndia = country?.code === 'IN';
   const [formError, setFormError] = useState('');
   const [serverErrors, setServerErrors] = useState([]);
   const { lookups } = useLookups();
   const { company } = useAuth();
+  const viewOnly = mode === 'view';
+  // Rough client hint; the server makes the final call.
+  const balanceLocked = mode !== 'create' && Number(initial?.totalOrders || 0) > 0;
+  const schema = useMemo(() => buildSchema(isIndia), [isIndia]);
 
   const {
     register,
@@ -137,32 +175,34 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
     defaultValues: toDefaults(initial),
   });
 
+  const sameAsBilling = watch('shippingSameAsBilling');
+  const terms = watch('paymentTerms');
+  const termsField = register('paymentTerms');
+
   const onSubmit = async (values) => {
     setFormError('');
     setServerErrors([]);
 
     const payload = {
       name: values.name,
-      code: opt(values.code),
       type: values.type,
       contactPerson: values.contactPerson,
       phone: values.phone,
       alternatePhone: values.alternatePhone,
       email: values.email,
-      gstin: values.gstin,
-      pan: values.pan,
+      gstin: values.gstin.toUpperCase(),
+      pan: values.pan.toUpperCase(),
       taxId: values.taxId,
       address: values.address,
-      shippingAddress: values.shippingAddress,
+      shippingSameAsBilling: values.shippingSameAsBilling,
+      shippingAddress: values.shippingSameAsBilling ? values.address : values.shippingAddress,
       creditLimit: num(values.creditLimit),
       creditDays: num(values.creditDays),
       paymentTerms: values.paymentTerms,
-      openingBalance: num(values.openingBalance),
+      ...(balanceLocked ? {} : { openingBalance: num(values.openingBalance) }),
       priceList: opt(values.priceList),
       assignedTo: opt(values.assignedTo),
-      route: opt(values.route),
       warehouse: opt(values.warehouse),
-      territory: values.territory,
       tags: values.tags
         ? values.tags
             .split(',')
@@ -178,7 +218,7 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
         mode === 'create'
           ? await api.post('/v1/customers', payload)
           : await api.patch(`/v1/customers/${initial.id}`, payload);
-      toast.success(mode === 'create' ? 'Customer created' : 'Customer updated');
+      toast.success(mode === 'create' ? `Customer ${res.data?.data?.code || ''} created` : 'Customer updated');
       onSaved(res.data?.data);
     } catch (err) {
       const info = apiError(err);
@@ -189,6 +229,11 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
         setError(field, { type: 'server', message });
       });
     }
+  };
+
+  const fillPanFromGstin = (e) => {
+    const gstin = e.target.value.trim().toUpperCase();
+    if (isIndia && GSTIN_IN.test(gstin) && !watch('pan')) setValue('pan', gstin.slice(2, 12), { shouldDirty: true });
   };
 
   return (
@@ -205,152 +250,247 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
         />
       )}
 
-      <FormSection title="Identity" description="Name, type and the people you deal with">
-        <Field label="Customer name" required error={errors.name?.message}>
-          <Input {...register('name')} error={!!errors.name} placeholder="Sharma General Store" />
-        </Field>
-        <Field label="Customer code" error={errors.code?.message} hint="Leave blank to auto-generate">
-          <Input {...register('code')} error={!!errors.code} placeholder="CUS-00001" className="uppercase" />
-        </Field>
-        <Field label="Customer type" required error={errors.type?.message}>
-          <Select {...register('type')} error={!!errors.type}>
-            {CUSTOMER_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t.charAt(0) + t.slice(1).toLowerCase()}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Contact person" error={errors.contactPerson?.message}>
-          <Input {...register('contactPerson')} placeholder="Ramesh Sharma" />
-        </Field>
-        <Field label="Phone" error={errors.phone?.message}>
-          <Input {...register('phone')} placeholder="+91 98765 43210" />
-        </Field>
-        <Field label="Alternate phone" error={errors.alternatePhone?.message}>
-          <Input {...register('alternatePhone')} placeholder="+91 98765 43211" />
-        </Field>
-        <Field label="Email" error={errors.email?.message} className="sm:col-span-2">
-          <Input type="email" {...register('email')} error={!!errors.email} placeholder="store@example.com" />
-        </Field>
-      </FormSection>
+      {/* A disabled fieldset makes the whole form read-only in view mode. */}
+      <fieldset disabled={viewOnly} className="space-y-6">
+        {mode !== 'create' && (
+          <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Customer code</p>
+              <p className="font-mono font-semibold">{initial?.code}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Outstanding</p>
+              <p className="font-semibold">{formatMoney(initial?.outstanding, company?.currency)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Orders</p>
+              <p className="font-semibold">{formatNumber(initial?.totalOrders || 0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Route / beat</p>
+              <p className="font-semibold">{initial?.route?.name || '—'}</p>
+            </div>
+          </div>
+        )}
 
-      <FormSection title="Tax details" description="Used on invoices and GST reports">
-        <Field label={taxIdLabel} error={errors.gstin?.message}>
-          <Input {...register('gstin')} placeholder="27AAAAA0000A1Z5" className="uppercase" />
-        </Field>
-        <Field label="PAN" error={errors.pan?.message}>
-          <Input {...register('pan')} placeholder="AAAAA0000A" className="uppercase" />
-        </Field>
-        <Field label="Other tax ID" error={errors.taxId?.message} className="sm:col-span-2">
-          <Input {...register('taxId')} placeholder="Optional" />
-        </Field>
-      </FormSection>
+        <FormSection title="Identity" description="Who the customer is">
+          <Field label="Customer name" required error={errors.name?.message}>
+            <Input {...register('name')} error={!!errors.name} placeholder="Sharma General Store" />
+          </Field>
+          <Field label="Customer type" required error={errors.type?.message}>
+            <Select {...register('type')} error={!!errors.type}>
+              {CUSTOMER_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t.charAt(0) + t.slice(1).toLowerCase()}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {mode === 'create' && (
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              The customer code is generated automatically when you save and cannot be changed later.
+            </p>
+          )}
+        </FormSection>
 
-      <FormSection title="Billing address">
-        <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="address" />
-      </FormSection>
+        <FormSection title="Contact">
+          <Field label="Contact person" error={errors.contactPerson?.message}>
+            <Input {...register('contactPerson')} placeholder="Ramesh Sharma" />
+          </Field>
+          <Field label="Phone" required error={errors.phone?.message}>
+            <Input
+              type="tel"
+              inputMode="tel"
+              {...register('phone')}
+              onInput={onlyPhone}
+              error={!!errors.phone}
+              placeholder="+91 98765 43210"
+            />
+          </Field>
+          <Field label="Alternate phone" error={errors.alternatePhone?.message}>
+            <Input
+              type="tel"
+              inputMode="tel"
+              {...register('alternatePhone')}
+              onInput={onlyPhone}
+              error={!!errors.alternatePhone}
+              placeholder="+91 98765 43211"
+            />
+          </Field>
+          <Field label="Email" error={errors.email?.message}>
+            <Input type="email" {...register('email')} error={!!errors.email} placeholder="store@example.com" />
+          </Field>
+        </FormSection>
 
-      <FormSection title="Shipping address" description="Leave blank to use the billing address">
-        <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="shippingAddress" />
-      </FormSection>
+        <FormSection title="Tax details" description="Printed on invoices">
+          <Field label={taxIdLabel} error={errors.gstin?.message} hint={isIndia ? '15 characters; the first 2 are the state code' : undefined}>
+            <Input
+              {...register('gstin', { onBlur: fillPanFromGstin })}
+              error={!!errors.gstin}
+              maxLength={isIndia ? 15 : 30}
+              placeholder={isIndia ? '27AAAAA0000A1Z5' : ''}
+              className="uppercase"
+            />
+          </Field>
+          {isIndia ? (
+            <Field label="PAN" error={errors.pan?.message} hint="Filled from the GSTIN">
+              <Input {...register('pan')} error={!!errors.pan} maxLength={10} placeholder="AAAAA0000A" className="uppercase" />
+            </Field>
+          ) : (
+            <Field label="Other tax ID" error={errors.taxId?.message}>
+              <Input {...register('taxId')} placeholder="Optional" />
+            </Field>
+          )}
+        </FormSection>
 
-      <FormSection title="Credit & pricing">
-        <Field label="Credit limit" error={errors.creditLimit?.message} hint={`Currency: ${company?.currency || 'INR'}`}>
-          <Input type="number" min="0" step="0.01" {...register('creditLimit')} placeholder="0.00" />
-        </Field>
-        <Field label="Credit days" error={errors.creditDays?.message}>
-          <Input type="number" min="0" max="365" {...register('creditDays')} placeholder="0" />
-        </Field>
-        <Field label="Payment terms" error={errors.paymentTerms?.message}>
-          <Select {...register('paymentTerms')}>
-            {PAYMENT_TERMS.map((t) => (
-              <option key={t} value={t}>
-                {t === 'IMMEDIATE' ? 'Immediate' : t.replace('NET_', 'Net ')}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Opening balance" error={errors.openingBalance?.message}>
-          <Input type="number" min="0" step="0.01" {...register('openingBalance')} placeholder="0.00" />
-        </Field>
-        <Field label="Price list" error={errors.priceList?.message}>
-          <Select {...register('priceList')}>
-            <option value="">Use product selling price</option>
-            {lookups.priceLists.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} {p.isDefault ? '(default)' : ''}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Assigned salesman" error={errors.assignedTo?.message}>
-          <Select {...register('assignedTo')}>
-            <option value="">Unassigned</option>
-            {lookups.users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} · {u.role.replace(/_/g, ' ')}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </FormSection>
+        <FormSection title="Billing address">
+          <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="address" disabled={viewOnly} />
+        </FormSection>
 
-      <FormSection title="Route & territory">
-        <Field label="Route / beat" error={errors.route?.message}>
-          <Select {...register('route')}>
-            <option value="">No route</option>
-            {lookups.routes.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name} ({r.code})
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Warehouse" error={errors.warehouse?.message}>
-          <Select {...register('warehouse')}>
-            <option value="">Default warehouse</option>
-            {lookups.warehouses.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name} ({w.code})
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Territory" error={errors.territory?.message}>
-          <Input {...register('territory')} placeholder="Pune East" />
-        </Field>
-        <Field label="Tags" error={errors.tags?.message} hint="Comma separated">
-          <Input {...register('tags')} placeholder="key account, festive" />
-        </Field>
-      </FormSection>
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground">Shipping address</h3>
+            <Checkbox label="Same as billing address" {...register('shippingSameAsBilling')} />
+          </div>
+          {sameAsBilling ? (
+            <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+              Goods are delivered to the billing address.
+            </p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AddressFields
+                register={register}
+                watch={watch}
+                setValue={setValue}
+                errors={errors}
+                prefix="shippingAddress"
+                disabled={viewOnly}
+              />
+            </div>
+          )}
+        </section>
 
-      <FormSection title="Notes">
-        <Field label="Internal notes" error={errors.notes?.message} className="sm:col-span-2">
-          <Textarea {...register('notes')} placeholder="Delivery instructions, preferences…" />
-        </Field>
-        <Checkbox
-          label="Active customer"
-          description="Inactive customers stay in reports but cannot be selected on new orders."
-          className="sm:col-span-2"
-          {...register('isActive')}
+        <FormSection title="Credit & payment">
+          <Field label="Payment terms" error={errors.paymentTerms?.message}>
+            <Select
+              {...termsField}
+              onChange={(e) => {
+                termsField.onChange(e);
+                const days = termDays(e.target.value);
+                if (days !== null) setValue('creditDays', String(days), { shouldValidate: true });
+              }}
+            >
+              {PAYMENT_TERMS.map((t) => (
+                <option key={t} value={t}>
+                  {termLabel(t)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field
+            label="Credit days"
+            error={errors.creditDays?.message}
+            hint={terms === 'CUSTOM' ? '1-365 days' : 'Set by the payment terms'}
+          >
+            <Input
+              inputMode="numeric"
+              {...register('creditDays')}
+              onInput={onlyDigits}
+              readOnly={terms !== 'CUSTOM'}
+              className={terms !== 'CUSTOM' ? 'bg-muted/50' : ''}
+              placeholder="0"
+            />
+          </Field>
+          <Field label="Credit limit" error={errors.creditLimit?.message} hint={`In ${company?.currency || 'INR'}; 0 = no limit`}>
+            <Input inputMode="decimal" {...register('creditLimit')} onInput={onlyAmount} placeholder="0.00" />
+          </Field>
+          <Field
+            label="Opening balance"
+            error={errors.openingBalance?.message}
+            hint={balanceLocked ? '🔒 Locked: the customer already has transactions' : 'Amount the customer owes you today'}
+          >
+            <Input
+              inputMode="decimal"
+              {...register('openingBalance')}
+              onInput={onlyAmount}
+              readOnly={balanceLocked}
+              className={balanceLocked ? 'bg-muted/50' : ''}
+              placeholder="0.00"
+            />
+          </Field>
+        </FormSection>
+
+        <FormSection title="Sales defaults" description="Pre-filled on this customer's orders">
+          <Field label="Price list" error={errors.priceList?.message}>
+            <Select {...register('priceList')}>
+              <option value="">Use product selling price</option>
+              {lookups.priceLists.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.isDefault ? '(default)' : ''}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Assigned salesman" error={errors.assignedTo?.message}>
+            <Select {...register('assignedTo')}>
+              <option value="">Unassigned</option>
+              {lookups.users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} · {u.role.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Dispatch warehouse" error={errors.warehouse?.message}>
+            <Select {...register('warehouse')}>
+              <option value="">Default warehouse</option>
+              {lookups.warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name} ({w.code})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Tags" error={errors.tags?.message} hint="Comma separated">
+            <Input {...register('tags')} placeholder="key account, festive" />
+          </Field>
+        </FormSection>
+
+        <FormSection title="Notes">
+          <Field label="Internal notes" error={errors.notes?.message} className="sm:col-span-2">
+            <Textarea {...register('notes')} placeholder="Delivery instructions, preferences…" />
+          </Field>
+          <Checkbox
+            label="Active customer"
+            description="Inactive customers stay in reports but cannot be selected on new orders."
+            className="sm:col-span-2"
+            {...register('isActive')}
+          />
+        </FormSection>
+      </fieldset>
+
+      {viewOnly ? (
+        <div className="flex justify-end border-t pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      ) : (
+        <FormActions
+          onCancel={onClose}
+          loading={isSubmitting}
+          submitLabel={mode === 'create' ? 'Create customer' : 'Save changes'}
         />
-      </FormSection>
-
-      <FormActions
-        onCancel={onClose}
-        loading={isSubmitting}
-        submitLabel={mode === 'create' ? 'Create customer' : 'Save changes'}
-      />
+      )}
     </form>
   );
 }
 
-const idOf = (value) => (value && typeof value === 'object' ? value.name || value.code : value);
-
 export default function Customers() {
   const { taxIdLabel } = useTaxLabels();
   const { company } = useAuth();
+  const { can } = usePermissions();
+  const [importing, setImporting] = useState(false);
 
   const columns = [
     {
@@ -382,12 +522,12 @@ export default function Customers() {
       ),
     },
     {
-      key: 'territory',
-      header: 'Route / territory',
+      key: 'city',
+      header: 'City / salesman',
       render: (row) => (
         <div className="text-sm">
-          <p>{idOf(row.route) || '—'}</p>
-          <p className="text-xs text-muted-foreground">{row.territory || idOf(row.assignedTo) || '—'}</p>
+          <p>{[row.address?.city, row.address?.state].filter(Boolean).join(', ') || '—'}</p>
+          <p className="text-xs text-muted-foreground">{row.assignedTo?.name || 'Unassigned'}</p>
         </div>
       ),
     },
@@ -398,10 +538,8 @@ export default function Customers() {
       className: 'text-right',
       render: (row) => (
         <div className="text-right">
-          <p className="font-medium">{formatMoney(row.outstanding, company?.currency || 'INR')}</p>
-          <p className="text-xs text-muted-foreground">
-            Limit {formatMoney(row.creditLimit, company?.currency || 'INR')}
-          </p>
+          <p className="font-medium">{formatMoney(row.outstanding, company?.currency)}</p>
+          <p className="text-xs text-muted-foreground">Limit {formatMoney(row.creditLimit, company?.currency)}</p>
         </div>
       ),
     },
@@ -419,9 +557,7 @@ export default function Customers() {
     {
       key: 'status',
       header: 'Status',
-      render: (row) => (
-        <Badge tone={row.isActive ? 'success' : 'muted'}>{row.isActive ? 'Active' : 'Inactive'}</Badge>
-      ),
+      render: (row) => <Badge tone={row.isActive ? 'success' : 'muted'}>{row.isActive ? 'Active' : 'Inactive'}</Badge>,
     },
   ];
 
@@ -454,30 +590,40 @@ export default function Customers() {
   );
 
   return (
-    <ResourcePage
-      title="Customers"
-      description="Outlets, distributors and dealers you sell to"
-      breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Customers' }]}
-      queryKey={['company', 'customers']}
-      endpoint="/v1/customers"
-      permissionPrefix="customers"
-      columns={columns}
-      filterKeys={['type', 'isActive']}
-      filters={filters}
-      searchPlaceholder={`Search by name, code, phone, email or ${taxIdLabel}…`}
-      createLabel="Add customer"
-      createIcon={Users}
-      emptyTitle="No customers yet"
-      emptyDescription="Add your first customer to start booking orders."
-      formTitle={(mode) => (mode === 'create' ? 'Add customer' : 'Edit customer')}
-      formDescription="Credit limits and references are tenant-scoped."
-      formSize="xl"
-      renderForm={(props) => <CustomerForm {...props} />}
-      deleteMessage={(row) =>
-        row
-          ? `“${row.name}” will be removed. Customers with transactions cannot be deleted — mark them inactive instead.`
-          : ''
-      }
-    />
+    <>
+      <ResourcePage
+        title="Customers"
+        description="Outlets, distributors and dealers you sell to"
+        breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Customers' }]}
+        queryKey={['company', 'customers']}
+        endpoint="/v1/customers"
+        permissionPrefix="customers"
+        viewable
+        columns={columns}
+        filterKeys={['type', 'isActive']}
+        filters={filters}
+        searchPlaceholder={`Search by name, code, phone, email or ${taxIdLabel}…`}
+        createLabel="Add customer"
+        createIcon={Users}
+        headerActions={
+          can('customers.create') ? (
+            <Button variant="outline" onClick={() => setImporting(true)}>
+              <Upload className="h-4 w-4" /> Import
+            </Button>
+          ) : null
+        }
+        emptyTitle="No customers yet"
+        emptyDescription="Add your first customer, or import many at once from Excel."
+        formTitle={(mode) => ({ create: 'Add customer', edit: 'Edit customer', view: 'Customer details' })[mode]}
+        formSize="xl"
+        renderForm={(props) => <CustomerForm {...props} />}
+        deleteMessage={(row) =>
+          row
+            ? `“${row.name}” will be removed. Customers with transactions cannot be deleted — mark them inactive instead.`
+            : ''
+        }
+      />
+      <CustomerImport open={importing} onClose={() => setImporting(false)} />
+    </>
   );
 }

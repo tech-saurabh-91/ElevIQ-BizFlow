@@ -77,6 +77,7 @@ export const customerCreateSchema = z.object({
 
   address: addressSchema.optional(),
   shippingAddress: addressSchema.optional(),
+  shippingSameAsBilling: z.boolean().optional(),
 
   creditLimit: money,
   creditDays: z.coerce.number().int().min(0).max(365).optional(),

@@ -145,6 +145,11 @@ afterAll(async () => {
 
 // ---------------------------------------------------------------------------
 describe('Phase 3 - Customers', () => {
+  // Phone and a billing country/state/city are required for every customer.
+  const ADDR = { country: 'India', state: 'Maharashtra', city: 'Pune', pincode: '411001' };
+  let phoneSeq = 11100;
+  const minimal = (name) => ({ name, phone: `+9198200${(phoneSeq += 1)}`, address: ADDR });
+
   test('creates a customer with an auto code and plan-limit accounting', async () => {
     const res = await request
       .post('/api/v1/customers')
@@ -159,7 +164,7 @@ describe('Phase 3 - Customers', () => {
         paymentTerms: 'NET_15',
         openingBalance: 12000,
         territory: 'Pune East',
-        address: { line1: 'MG Road', city: 'Pune', state: 'Maharashtra' },
+        address: { line1: 'MG Road', city: 'Pune', state: 'Maharashtra', country: 'India' },
       });
 
     expect(res.status).toBe(201);
@@ -181,7 +186,7 @@ describe('Phase 3 - Customers', () => {
     await request
       .post('/api/v1/customers')
       .set(as(state.adminToken))
-      .send({ name: 'Patel Super Market', type: 'WHOLESALE', phone: '+919820011002' });
+      .send({ name: 'Patel Super Market', type: 'WHOLESALE', phone: '+919820011002', address: ADDR });
 
     const all = await request.get('/api/v1/customers').set(as(state.adminToken));
     expect(all.status).toBe(200);
@@ -231,20 +236,27 @@ describe('Phase 3 - Customers', () => {
     expect(res.body.errors.some((e) => e.field === 'creditDays')).toBe(true);
   });
 
-  test('rejects duplicate customer codes', async () => {
+  test('ignores a client-supplied code: codes are always generated', async () => {
     const res = await request
       .post('/api/v1/customers')
       .set(as(state.adminToken))
-      .send({ name: 'Duplicate Code Store', code: 'CUS-00001' });
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe('DUPLICATE');
+      .send({ ...minimal('Duplicate Code Store'), code: 'CUS-00001' });
+    expect(res.status).toBe(201);
+    expect(res.body.data.code).not.toBe('CUS-00001');
+
+    const renamed = await request
+      .patch(`/api/v1/customers/${res.body.data.id}`)
+      .set(as(state.adminToken))
+      .send({ code: 'HACKED' });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.data.code).toBe(res.body.data.code);
   });
 
   test('soft deletes a customer and hides it from lists', async () => {
     const created = await request
       .post('/api/v1/customers')
       .set(as(state.adminToken))
-      .send({ name: 'Temporary Customer' });
+      .send(minimal('Temporary Customer'));
     const id = created.body.data.id;
     expect(created.status).toBe(201);
 
@@ -268,13 +280,13 @@ describe('Phase 3 - Customers', () => {
     const inside = await request
       .post('/api/v1/customers')
       .set(as(state.adminToken))
-      .send({ name: 'Limit Boundary Store' });
+      .send(minimal('Limit Boundary Store'));
     expect(inside.status).toBe(201);
 
     const over = await request
       .post('/api/v1/customers')
       .set(as(state.adminToken))
-      .send({ name: 'Over Limit Store' });
+      .send(minimal('Over Limit Store'));
     expect(over.status).toBe(403);
     expect(over.body.code).toBe('PLAN_LIMIT_REACHED');
 
@@ -856,14 +868,14 @@ describe('Phase 3 - Tenant isolation & salesman scoping', () => {
     const mine = await request
       .post('/api/v1/customers')
       .set(as(state.adminToken))
-      .send({ name: 'Salesman Assigned Store', assignedTo: String(state.salesman._id) });
+      .send({ name: 'Salesman Assigned Store', phone: '+91 98200 5001', address: { country: 'India', state: 'Maharashtra', city: 'Pune' }, assignedTo: String(state.salesman._id) });
     expect(mine.status).toBe(201);
     state.salesmanCustomerId = mine.body.data.id;
 
     const managers = await request
       .post('/api/v1/customers')
       .set(as(state.adminToken))
-      .send({ name: 'Manager Assigned Store', assignedTo: String(state.manager._id) });
+      .send({ name: 'Manager Assigned Store', phone: '+91 98200 5002', address: { country: 'India', state: 'Maharashtra', city: 'Pune' }, assignedTo: String(state.manager._id) });
     expect(managers.status).toBe(201);
     state.managerCustomerId = managers.body.data.id;
 

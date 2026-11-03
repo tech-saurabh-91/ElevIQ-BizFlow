@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import {
   ArrowDown,
   ArrowUp,
+  Eye,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -63,6 +64,8 @@ export default function ResourcePage({
   canEdit: canEditProp,
   canDelete: canDeleteProp,
   header,
+  headerActions,
+  viewable = false,
   onSaved,
 }) {
   const [params, setParams] = useSearchParams();
@@ -165,7 +168,9 @@ export default function ResourcePage({
     onSaved?.(saved, mode);
   };
 
-  const hasRowMenu = Boolean(canEdit || canDelete || rowActions);
+  // `viewable` forms open read-only via a View action (mode 'view').
+  const canView = Boolean(viewable && renderForm);
+  const hasRowMenu = Boolean(canView || canEdit || canDelete || rowActions);
   const hasActiveFilters =
     Boolean(searchParam) || filterKeys.some((key) => Boolean(params.get(key))) || Boolean(sort);
 
@@ -191,11 +196,16 @@ export default function ResourcePage({
         description={description}
         breadcrumbs={breadcrumbs}
         actions={
-          canCreate && renderForm ? (
-            <Button onClick={() => setForm({ mode: 'create', initial: null })}>
-              <CreateIcon className="h-4 w-4" />
-              {createLabel}
-            </Button>
+          headerActions || (canCreate && renderForm) ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {headerActions}
+              {canCreate && renderForm && (
+                <Button onClick={() => setForm({ mode: 'create', initial: null })}>
+                  <CreateIcon className="h-4 w-4" />
+                  {createLabel}
+                </Button>
+              )}
+            </div>
           ) : null
         }
       />
@@ -329,6 +339,16 @@ export default function ResourcePage({
                       >
                         {({ close }) => (
                           <>
+                            {canView && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  close();
+                                  setForm({ mode: 'view', initial: row });
+                                }}
+                              >
+                                <Eye className="h-4 w-4" /> View
+                              </DropdownMenuItem>
+                            )}
                             {canEdit && (
                               <DropdownMenuItem
                                 onClick={() => {
