@@ -1,7 +1,7 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://YOUR-SERVER-PROJECT.vercel.app/api/:path*" },
-    { "source": "/uploads/:path*", "destination": "https://YOUR-SERVER-PROJECT.vercel.app/uploads/:path*" },
+    { "source": "/api/:path*", "destination": "https://elev-iq-biz-flow.vercel.app/api/:path*" },
+    { "source": "/uploads/:path*", "destination": "https://elev-iq-biz-flow.vercel.app/uploads/:path*" },
     { "source": "/((?!api/|uploads/|assets/).*)", "destination": "/index.html" }
   ]
 }
