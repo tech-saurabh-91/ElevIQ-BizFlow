@@ -8,7 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const logDir = path.resolve(__dirname, '../../', env.log.dir);
-if (!fs.existsSync(logDir)) {
+const useFileLogs = !env.isTest && !env.onVercel;
+if (useFileLogs && !fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
 }
 
@@ -42,7 +43,7 @@ transports.push(
 );
 
 // In non-test environments also persist to rotating-ish daily files.
-if (!env.isTest) {
+if (useFileLogs) {
   transports.push(
     new winston.transports.File({
       filename: path.join(logDir, 'error.log'),
