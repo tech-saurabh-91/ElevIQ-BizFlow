@@ -60,6 +60,16 @@ export const runOverdueReminders = async () => {
 
           const totalBalance = invoices.reduce((s, i) => s + (Number(i.balanceDue) || 0), 0);
 
+          // The cron runs hourly, so remind at most once per company per day:
+          // otherwise every overdue stack would drop 24 identical items in the
+          // inbox and bury everything else.
+          const alreadyReminded = await Notification.exists({
+            companyId,
+            type: 'OVERDUE_INVOICE',
+            createdAt: { $gte: dayjs().subtract(24, 'hour').toDate() },
+          });
+          if (alreadyReminded) return;
+
           // Deliver to the people who act on overdue money: admins, managers
           // and accountants. An empty `recipients` with broadcast=false would
           // be invisible to everyone, so we always resolve real recipients.

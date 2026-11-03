@@ -484,3 +484,55 @@ describe('Phase 8 - notifications', () => {
     expect(after.body.data.some((n) => n.title === 'Welcome aboard')).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Overdue reminder job (the cron runs hourly, so it must self-throttle)
+// ---------------------------------------------------------------------------
+describe('Phase 8 - overdue reminder job', () => {
+  const remindersFor = async (companyId) =>
+    Notification.find({ companyId, type: 'OVERDUE_INVOICE' }).skipTenant();
+
+  it('reminds each company once, addressing the people who can act', async () => {
+    const { runOverdueReminders } = await import('../src/jobs/overdue.js');
+
+    // Start from a clean slate so the counts below are exact.
+    await Notification.deleteMany({ type: 'OVERDUE_INVOICE' }).hardDelete();
+
+    const first = await runOverdueReminders();
+    expect(first.notifications).toBeGreaterThanOrEqual(2); // primary + other tenant
+
+    const primary = await remindersFor(state.companyId);
+    expect(primary).toHaveLength(1);
+    // INV-T-0002 (118) and INV-T-0003 (590) are both past due.
+    expect(primary[0].title).toBe('2 invoice(s) overdue');
+    expect(primary[0].priority).toBe('HIGH');
+
+    // Real recipients: admin, manager and accountant — never the salesman,
+    // and never an empty list (which would be invisible to everybody).
+    const ids = primary[0].recipients.map(String);
+    expect(ids).toContain(String(state.admin._id));
+    expect(ids).toContain(String(state.manager._id));
+    expect(ids).toContain(String(state.accountant._id));
+    expect(ids).not.toContain(String(state.salesman._id));
+
+    // The other tenant gets its own reminder and never sees ours.
+    const other = await remindersFor(state.otherCompanyId);
+    expect(other).toHaveLength(1);
+    expect(other[0].recipients.map(String)).not.toContain(String(state.admin._id));
+  });
+
+  it('does not duplicate the reminder when the hourly cron fires again', async () => {
+    const { runOverdueReminders } = await import('../src/jobs/overdue.js');
+
+    const second = await runOverdueReminders();
+    expect(second.notifications).toBe(0);
+    expect(await remindersFor(state.companyId)).toHaveLength(1);
+    expect(await remindersFor(state.otherCompanyId)).toHaveLength(1);
+  });
+
+  it('still flags newly overdue invoices on every run', async () => {
+    // INV-T-0002 was PARTIALLY_PAID with a due date in the past.
+    const refreshed = await Invoice.findOne({ invoiceNo: 'INV-T-0002' }).skipTenant();
+    expect(refreshed.status).toBe('OVERDUE');
+  });
+});
