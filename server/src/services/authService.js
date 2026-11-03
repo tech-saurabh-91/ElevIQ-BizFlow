@@ -551,10 +551,35 @@ export const forgotPassword = async ({ email, scope }) => {
     $set: { passwordResetToken: hashed, passwordResetExpires: new Date(Date.now() + 30 * 60 * 1000) },
   });
 
-  // Email delivery is wired when SMTP_URL is configured (Phase 9 hardening).
-  logger.info(`Password reset requested for ${email} (scope=${scope}). Token: ${env.isDev ? raw : '[hidden]'}`);
+  const resetUrl = `${env.mail.appUrl}/reset-password?token=${raw}&scope=${scope}`;
+  const to = user.email || (String(user.loginId || '').includes('@') ? user.loginId : null);
 
-  return { ok: true, devToken: env.isDev ? raw : undefined };
+  if (to) {
+    const { sendMail } = await import('./mailer.js');
+    await sendMail({
+      to,
+      subject: 'Reset your ElevIQ SFA password',
+      text: [
+        `Hi ${user.name || ''},`.trim(),
+        '',
+        'We received a request to reset your ElevIQ SFA password.',
+        'Open the link below within 30 minutes to choose a new one:',
+        '',
+        resetUrl,
+        '',
+        'If you did not request this, you can safely ignore this email - your password stays unchanged.',
+        '',
+        '— ElevIQ SFA',
+      ].join('\n'),
+    });
+  } else {
+    logger.info(`Password reset requested for ${email} (scope=${scope}) but the account has no email on file.`);
+  }
+
+  // The raw token is only echoed back outside production so QA can complete
+  // the flow without an SMTP server (and tests can drive the reset endpoint).
+  logger.info(`Password reset requested for ${email} (scope=${scope}). Token: ${env.isProd ? '[hidden]' : raw}`);
+  return { ok: true, devToken: env.isProd ? undefined : raw };
 };
 
 export const resetPassword = async ({ token, password, scope }) => {

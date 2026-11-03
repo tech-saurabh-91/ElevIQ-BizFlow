@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Eye, EyeOff, ShieldCheck, Lock } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -109,6 +109,15 @@ export default function PlatformLogin() {
             </button>
           </div>
           {errors.password && <p className="text-xs font-medium text-destructive">{errors.password.message}</p>}
+        </div>
+
+        <div className="flex justify-end">
+          <Link
+            to="/forgot-password?scope=platform"
+            className="text-xs font-medium text-brand-600 hover:underline focus-ring rounded"
+          >
+            Forgot password?
+          </Link>
         </div>
 
         <Button type="submit" className="w-full" loading={isSubmitting}>

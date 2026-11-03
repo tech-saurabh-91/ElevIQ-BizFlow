@@ -160,7 +160,7 @@ export default function CompanyLogin() {
 
         <div className="flex items-center justify-between">
           <Link
-            to="/login?forgot=1"
+            to="/forgot-password"
             className="text-xs font-medium text-brand-600 hover:underline focus-ring rounded"
           >
             Forgot password?

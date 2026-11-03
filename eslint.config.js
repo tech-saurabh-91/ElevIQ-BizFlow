@@ -11,6 +11,14 @@ export default [
     },
   },
   {
+    // PM2 process file: CommonJS `module.exports` inside an ESM monorepo.
+    files: ['ecosystem.config.js'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { module: 'readonly', exports: 'readonly', require: 'readonly' },
+    },
+  },
+  {
     // Jest specs: declare the runner's globals so `no-undef` doesn't fire.
     files: ['**/tests/**/*.js', '**/*.test.js', '**/*.spec.js'],
     languageOptions: {

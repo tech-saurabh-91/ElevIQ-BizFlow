@@ -11,6 +11,8 @@ import CompanyLayout from '@/layouts/CompanyLayout';
 // ---- auth -----------------------------------------------------------------
 const PlatformLogin = lazy(() => import('@/pages/platform/PlatformLogin'));
 const CompanyLogin = lazy(() => import('@/pages/auth/CompanyLogin'));
+const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 
 // ---- shared ---------------------------------------------------------------
 const NotFound = lazy(() => import('@/pages/NotFound'));
@@ -173,6 +175,20 @@ export default function App() {
           <PublicOnly>
             <AuthLayout variant="company">
               <CompanyLogin />
+            </AuthLayout>
+          </PublicOnly>
+        } />
+        <Route path="/forgot-password" element={
+          <PublicOnly>
+            <AuthLayout variant="company">
+              <ForgotPassword />
+            </AuthLayout>
+          </PublicOnly>
+        } />
+        <Route path="/reset-password" element={
+          <PublicOnly>
+            <AuthLayout variant="company">
+              <ResetPassword />
             </AuthLayout>
           </PublicOnly>
         } />

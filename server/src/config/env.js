@@ -68,6 +68,17 @@ export const env = {
     dir: process.env.UPLOAD_DIR || 'uploads',
   },
 
+  // Outbound email. SMTP_URL is a full SMTP URL, e.g.
+  // smtps://user:pass@smtp.example.com:465  (or smtp://... for STARTTLS).
+  // Leave blank to disable email: the mailer degrades to a logged no-op so
+  // password reset and notifications keep working in development.
+  mail: {
+    url: process.env.SMTP_URL || '',
+    from: process.env.EMAIL_FROM || 'ElevIQ SFA <no-reply@eleviqsfa.com>',
+    // Public base URL of the web app (used to build reset links).
+    appUrl: (process.env.APP_URL || process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, ''),
+  },
+
   log: {
     level: process.env.LOG_LEVEL || 'info',
     dir: process.env.LOG_DIR || 'logs',
