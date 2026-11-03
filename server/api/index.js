@@ -1,5 +1,6 @@
 import app from '../src/app.js';
 import { connectDB } from '../src/config/db.js';
+import logger from '../src/utils/logger.js';
 
 // Reuse one connection across warm invocations of this serverless function.
 let dbReady;
@@ -14,7 +15,8 @@ const ensureDB = () => {
 export default async function handler(req, res) {
   try {
     await ensureDB();
-  } catch {
+  } catch (err) {
+    logger.error(`DB connect failed: ${err.message}`);
     return res.status(503).json({ success: false, message: 'Database unavailable' });
   }
   return app(req, res);
