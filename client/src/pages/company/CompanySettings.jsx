@@ -825,10 +825,16 @@ function SettingsForm({ data, canUpdate, tab }) {
           </CardHeader>
           <CardContent>
             <FormSection>
-              <Field label="Default warehouse" error={errors.inventory?.defaultWarehouse?.message}>
+              <Field
+                label="Primary main warehouse"
+                error={errors.inventory?.defaultWarehouse?.message}
+                hint="Used when an order, purchase or opening stock does not name a warehouse"
+              >
                 <Select {...register('inventory.defaultWarehouse')} {...readOnly}>
                   <option value="">Not set</option>
-                  {lookups.warehouses.map((w) => (
+                  {lookups.warehouses
+                    .filter((w) => (w.type || 'MAIN') === 'MAIN')
+                    .map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.name} ({w.code})
                     </option>

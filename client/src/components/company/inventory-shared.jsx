@@ -28,7 +28,8 @@ export const MOVEMENT_TYPES = [
   'COUNT',
 ];
 
-export const ADJUSTMENT_REASONS = ['COUNT', 'DAMAGE', 'THEFT', 'EXPIRY', 'CORRECTION', 'OTHER'];
+// OPENING = first stock of a new warehouse or product (posted as an opening movement).
+export const ADJUSTMENT_REASONS = ['OPENING', 'COUNT', 'DAMAGE', 'THEFT', 'EXPIRY', 'CORRECTION', 'OTHER'];
 
 export const ADJUSTMENT_STATUSES = ['DRAFT', 'POSTED', 'CANCELLED'];
 export const TRANSFER_STATUSES = ['DRAFT', 'DISPATCHED', 'RECEIVED', 'CANCELLED'];

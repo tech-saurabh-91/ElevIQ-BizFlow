@@ -186,7 +186,8 @@ function ProductForm({ mode, initial, onClose, onSaved }) {
   const { groups, units } = useCatalog();
   const viewOnly = mode === 'view';
   const creating = mode === 'create';
-  const warehouses = lookups.warehouses || [];
+  // Opening stock sits in a main or sub warehouse; vans are loaded by transfer.
+  const warehouses = (lookups.warehouses || []).filter((w) => ['MAIN', 'SUB'].includes(w.type || 'MAIN'));
 
   const schema = useMemo(
     () => buildSchema({ isIndia, units, creating, hasWarehouses: warehouses.length > 0 }),
@@ -568,7 +569,7 @@ function ProductForm({ mode, initial, onClose, onSaved }) {
               </Field>
               <Field label="Warehouse" error={errors.openingWarehouse?.message}>
                 <Select {...register('openingWarehouse')} error={!!errors.openingWarehouse}>
-                  <option value="">{warehouses.length ? 'Default warehouse' : 'No warehouses yet'}</option>
+                  <option value="">{warehouses.length ? 'Primary main warehouse' : 'No warehouses yet'}</option>
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.name} ({w.code})

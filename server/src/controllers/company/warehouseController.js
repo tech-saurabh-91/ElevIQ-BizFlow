@@ -142,6 +142,20 @@ const assertParentRule = async ({ type, parentId, current = null }) => {
   return String(parent._id);
 };
 
+// Registration plates: letters and digits only once spaces are removed.
+const PLATE = /^[A-Z0-9-]{4,15}$/;
+
+/** A van must carry a plausible registration number. */
+const assertVehicleNumber = (vehicleNumber) => {
+  if (!vehicleNumber) throw new BadRequestError('Vehicle number is required for a van', 'VALIDATION_ERROR');
+  if (!PLATE.test(vehicleNumber)) {
+    throw new BadRequestError('Vehicle number may only contain letters and digits, e.g. MH12AB1234', 'VALIDATION_ERROR');
+  }
+};
+
+// Roles that can drive / sell from a van.
+const VAN_ROLES = ['SALESMAN', 'MANAGER', 'WAREHOUSE'];
+
 /** Friendly duplicate message ahead of the unique index back-stop. */
 const assertVehicleFree = async ({ vehicleNumber, excludeId = null }) => {
   if (!vehicleNumber) return;
@@ -189,6 +203,7 @@ const crud = buildCrudController({
     if (type === 'VAN') {
       out.vehicleNumber = normVehicle(out.vehicleNumber);
       out.vehicleType = out.vehicleType || '';
+      assertVehicleNumber(out.vehicleNumber);
       await assertVehicleFree({ vehicleNumber: out.vehicleNumber });
     } else {
       // Vehicle fields only ever describe a van.
@@ -243,6 +258,7 @@ const crud = buildCrudController({
     out.type = type;
     if (type === 'VAN') {
       if (out.vehicleNumber !== undefined) out.vehicleNumber = normVehicle(out.vehicleNumber);
+      assertVehicleNumber(out.vehicleNumber !== undefined ? out.vehicleNumber : current.vehicleNumber);
       await assertVehicleFree({ vehicleNumber: out.vehicleNumber, excludeId: current._id });
     } else {
       out.vehicleNumber = '';
@@ -400,10 +416,27 @@ export const assign = asyncHandler(async (req, res) => {
   if (executive.isActive === false) {
     throw new BadRequestError('That executive is inactive.', 'USER_INACTIVE');
   }
+  if (!VAN_ROLES.includes(executive.role)) {
+    throw new BadRequestError('Vans can be assigned to salesmen, managers or warehouse staff only.', 'INVALID_ROLE');
+  }
 
   const fromDate = req.body.fromDate ? new Date(req.body.fromDate) : new Date();
   if (Number.isNaN(fromDate.getTime())) {
     throw new BadRequestError('Enter a valid start date', 'INVALID_DATE');
+  }
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  if (fromDate > endOfToday) {
+    throw new BadRequestError('The start date cannot be in the future.', 'INVALID_DATE');
+  }
+  // The spell being closed must not end before it began.
+  const open = await VanAssignment.find({ $or: [{ warehouse: wh._id }, { executive: executive._id }], active: true }).lean();
+  const latest = open.reduce((max, a) => Math.max(max, new Date(a.fromDate).getTime()), 0);
+  if (latest && fromDate.getTime() < latest) {
+    throw new BadRequestError(
+      `The start date must be on or after ${new Date(latest).toISOString().slice(0, 10)}, when the current assignment began.`,
+      'INVALID_DATE'
+    );
   }
 
   const userId = getUserId();

@@ -62,7 +62,8 @@ const loadRefs = async (isIndia) => {
   const [units, groups, warehouses] = await Promise.all([
     Unit.find({ isActive: { $ne: false } }).sort({ code: 1 }).lean(),
     ProductCategory.find({ isActive: { $ne: false } }).sort({ name: 1 }).lean(),
-    Warehouse.find({ isActive: { $ne: false } }).select('name code').lean(),
+    // Opening stock is held in main / sub warehouses (vans are loaded by transfer).
+    Warehouse.find({ isActive: { $ne: false }, type: { $in: ['MAIN', 'SUB'] } }).select('name code').lean(),
   ]);
   const names = (level) => [...new Set(groups.filter((g) => g.level === level).map((g) => g.name))];
   return {

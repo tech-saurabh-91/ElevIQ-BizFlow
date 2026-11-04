@@ -161,6 +161,7 @@ export const MOVEMENT_TYPE_LIST = Object.values(MOVEMENT_TYPES);
 
 /** Why a manual stock adjustment was made. */
 export const ADJUSTMENT_REASONS = Object.freeze([
+  'OPENING', // first stock of a new warehouse / product (posts an OPENING movement)
   'COUNT',
   'DAMAGE',
   'THEFT',

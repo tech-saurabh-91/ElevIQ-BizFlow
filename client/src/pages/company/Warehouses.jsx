@@ -207,7 +207,6 @@ function WarehouseForm({ mode, initial, onClose, onSaved }) {
       manager: opt(values.manager),
       capacity: num(values.capacity),
       address: values.address,
-      ...(values.type === 'MAIN' ? { isDefault: values.isDefault } : {}),
       isActive: values.isActive,
       notes: values.notes,
     };
@@ -356,13 +355,6 @@ function WarehouseForm({ mode, initial, onClose, onSaved }) {
         <Field label="Internal notes" error={errors.notes?.message} className="sm:col-span-2">
           <Textarea {...register('notes')} placeholder="Loading bay, access hours…" />
         </Field>
-        {type === 'MAIN' && (
-          <Checkbox
-            label="Default warehouse"
-            description="Stock movements default to this location. Only one warehouse can be default."
-            {...register('isDefault')}
-          />
-        )}
         <Checkbox
           label="Active"
           description="Inactive warehouses cannot be selected on new orders."
@@ -617,7 +609,7 @@ export default function Warehouses() {
   const setDefault = useMutation({
     mutationFn: (row) => api.post(`/v1/warehouses/${row.id}/set-default`),
     onSuccess: () => {
-      toast.success('Default warehouse updated');
+      toast.success('Primary main warehouse updated');
       queryClient.invalidateQueries({ queryKey: ['company', 'warehouses'] });
       queryClient.invalidateQueries({ queryKey: ['company', 'lookups'] });
       queryClient.invalidateQueries({ queryKey: ['company', 'settings'] });
@@ -691,7 +683,11 @@ export default function Warehouses() {
       render: (row) => (
         <div className="flex flex-col items-start gap-1">
           <Badge tone={row.isActive ? 'success' : 'muted'}>{row.isActive ? 'Active' : 'Inactive'}</Badge>
-          {row.isDefault && <Badge tone="info">Default</Badge>}
+          {row.isDefault && (
+            <Badge tone="info" title="Used when a document does not name a warehouse">
+              Primary
+            </Badge>
+          )}
         </div>
       ),
     },
@@ -760,7 +756,7 @@ export default function Warehouses() {
     }
     if (row.type === 'MAIN' && !row.isDefault && row.isActive && can('inventory.manage')) {
       items.push(
-        menuItem(CheckCircle2, 'Set as default', () => {
+        menuItem(CheckCircle2, 'Make primary main warehouse', () => {
           close();
           setDefault.mutate(row);
         })

@@ -1,5 +1,7 @@
 import Setting from '../../models/Setting.js';
 import Company from '../../models/Company.js';
+import Warehouse from '../../models/Warehouse.js';
+import { AppError } from '../../utils/errors.js';
 import { success } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { audit } from '../../middlewares/audit.js';
@@ -71,6 +73,19 @@ export const update = asyncHandler(async (req, res) => {
   const payload = req.body || {};
   await assertAddresses(payload, { address: 'body.address' });
 
+  // Primary main warehouse: where stock goes when a document names none.
+  const primary = payload.inventory?.defaultWarehouse;
+  if (primary) {
+    const wh = await Warehouse.findOne({ _id: primary }).lean();
+    if (!wh || (wh.type || 'MAIN') !== 'MAIN' || wh.isActive === false) {
+      throw new AppError('Choose an active main warehouse', {
+        status: 422,
+        code: 'VALIDATION_ERROR',
+        errors: [{ field: 'body.inventory.defaultWarehouse', message: 'Choose an active main warehouse' }],
+      });
+    }
+  }
+
   // Currency, country, financial year and tax regime freeze after the first
   // transaction; tax ID / state / inclusive pricing need the service provider.
   const company = await companyOf(req);
@@ -140,6 +155,12 @@ export const update = asyncHandler(async (req, res) => {
   }
 
   await doc.save();
+
+  // Keep the warehouse flag in step with the setting.
+  if (primary) {
+    await Warehouse.updateMany({ isDefault: true, _id: { $ne: primary } }, { $set: { isDefault: false } });
+    await Warehouse.updateOne({ _id: primary }, { $set: { isDefault: true } });
+  }
 
   // Write the registered profile, address and localisation to the Company so
   // login, dashboard and documents all read the same values.

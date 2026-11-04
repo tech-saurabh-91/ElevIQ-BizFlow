@@ -496,12 +496,18 @@ const postAdjustmentDoc = async (req, doc, settings, text = '') => {
   }
   if (!doc.items.length) throw new BadRequestError('Adjustment has no lines', 'VALIDATION_ERROR');
 
+  const opening = (line) => (line.reason || doc.reason) === 'OPENING';
+  const negativeOpening = doc.items.find((line) => opening(line) && Number(line.qty) < 0);
+  if (negativeOpening) {
+    throw new BadRequestError('Opening stock quantities must be positive', 'VALIDATION_ERROR');
+  }
+
   for (const line of doc.items) {
     await recordMovement({
       product: line.product,
       warehouse: doc.warehouse,
       qty: Number(line.qty),
-      type: MOVEMENT_TYPES.ADJUSTMENT,
+      type: opening(line) ? MOVEMENT_TYPES.OPENING : MOVEMENT_TYPES.ADJUSTMENT,
       refType: 'ADJUSTMENT',
       refId: doc._id,
       refNo: doc.adjustmentNo,

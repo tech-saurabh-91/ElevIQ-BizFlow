@@ -62,7 +62,9 @@ const crud = buildCrudController({
       const warehouse = data.openingWarehouse
         ? await loadWarehouse(data.openingWarehouse).catch(() => null)
         : await resolveDefaultWarehouse(settings);
-      if (warehouse) data.openingWarehouse = warehouse._id;
+      if (warehouse && !['MAIN', 'SUB'].includes(warehouse.type || 'MAIN')) {
+        errors.push({ field: 'openingWarehouse', message: 'Opening stock goes into a main or sub warehouse, not a van' });
+      } else if (warehouse) data.openingWarehouse = warehouse._id;
       // No warehouses at all yet: stock is held at company level.
       else if (await Warehouse.exists({})) {
         errors.push({ field: 'openingWarehouse', message: 'Choose the warehouse that holds the opening stock' });
