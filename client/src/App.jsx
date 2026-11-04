@@ -52,6 +52,7 @@ const PaymentEditor = lazy(() => import('@/pages/company/PaymentEditor'));
 const PaymentDetail = lazy(() => import('@/pages/company/PaymentDetail'));
 const Products = lazy(() => import('@/pages/company/Products'));
 const CatalogMasters = lazy(() => import('@/pages/company/CatalogMasters'));
+const MyVan = lazy(() => import('@/pages/company/MyVan'));
 const Suppliers = lazy(() => import('@/pages/company/Suppliers'));
 const PriceLists = lazy(() => import('@/pages/company/PriceLists'));
 const Warehouses = lazy(() => import('@/pages/company/Warehouses'));
@@ -237,6 +238,7 @@ export default function App() {
           <Route path="customers" element={guard('customers.view', <Customers />)} />
           <Route path="products" element={guard('products.view', <Products />)} />
           <Route path="catalog" element={guard('products.view', <CatalogMasters />)} />
+          <Route path="my-van" element={<MyVan />} />
           <Route path="suppliers" element={guard('products.view', <Suppliers />)} />
           <Route path="price-lists" element={guard('products.view', <PriceLists />)} />
           <Route path="warehouses" element={guard('inventory.view', <Warehouses />)} />

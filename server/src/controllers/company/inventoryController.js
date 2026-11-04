@@ -1007,3 +1007,42 @@ export default {
   cancelTransfer,
   formOptions,
 };
+
+// ---------------------------------------------------------------------------
+// Opening stock import (per warehouse)
+// ---------------------------------------------------------------------------
+
+/** GET /inventory/opening-stock/import/template?warehouse=<id> */
+export const openingStockTemplate = asyncHandler(async (req, res) => {
+  const { buildTemplate, loadStockWarehouse } = await import('../../services/openingStockImport.js');
+  const warehouse = await loadStockWarehouse(req.query.warehouse);
+  const buffer = await buildTemplate(warehouse);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="opening-stock-${warehouse.code}.xlsx"`);
+  res.send(Buffer.from(buffer));
+});
+
+/** POST /inventory/opening-stock/import?warehouse=<id>&dryRun=true|false */
+export const openingStockImport = asyncHandler(async (req, res) => {
+  const { importOpeningStock, loadStockWarehouse } = await import('../../services/openingStockImport.js');
+  if (!req.file?.buffer) throw new BadRequestError('Choose the filled-in template (.xlsx) to upload', 'FILE_REQUIRED');
+  const warehouse = await loadStockWarehouse(req.query.warehouse);
+  const result = await importOpeningStock(req.file.buffer, {
+    warehouse,
+    dryRun: req.query.dryRun !== 'false',
+    userId: req.user.id,
+    settings: await settingsOf(req),
+  });
+  if (result.imported) {
+    audit(req, {
+      action: AUDIT_ACTIONS.CREATE,
+      entityType: 'StockMovement',
+      entityLabel: `Opening stock ${warehouse.code}`,
+      description: `Imported opening stock for ${result.imported} products into ${warehouse.name}`,
+    });
+  }
+  let message = `All ${result.valid} rows are valid`;
+  if (result.imported) message = `Opening stock added for ${result.imported} products`;
+  else if (result.errors.length) message = `${result.errors.length} problem(s) found, nothing was imported`;
+  return success(res, { message, data: result });
+});

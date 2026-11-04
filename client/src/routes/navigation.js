@@ -91,6 +91,8 @@ export const companyNav = [
   {
     section: 'Field Force',
     items: [
+      // Only for people who can drive a van.
+      { to: '/app/my-van', label: 'My Van', icon: Truck, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'] },
       { to: '/app/visits', label: 'Visits & Check-ins', icon: MapPin, permission: 'fieldforce.visits.view' },
       { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, permission: 'fieldforce.attendance.view' },
       { to: '/app/targets', label: 'Targets', icon: Target, permission: 'fieldforce.targets.view' },
@@ -124,6 +126,7 @@ export const filterNav = (sections, { can, scope, role }) =>
       ...section,
       items: section.items.filter((item) => {
         if (scope === 'platform') return true;
+        if (item.roles && !item.roles.includes(role)) return false;
         if (role === 'COMPANY_ADMIN') return true;
         if (!item.permission) return true;
         return typeof can === 'function' ? can(item.permission) : true;

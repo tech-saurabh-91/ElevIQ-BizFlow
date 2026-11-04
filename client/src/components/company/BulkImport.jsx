@@ -16,7 +16,9 @@ import { ErrorAlert } from '@/components/ui/alert';
  * `endpoint` is the resource root, e.g. /v1/customers (serves
  * /import/template and /import); `noun` is the plural label ("customers").
  */
-export default function BulkImport({ open, onClose, endpoint, noun, invalidate = [], hint }) {
+export default function BulkImport({ open, onClose, endpoint, noun, invalidate = [], hint, params = {}, extra, ready = true, title, description }) {
+  // Extra query parameters (e.g. ?warehouse=) for both the template and the upload.
+  const qs = new URLSearchParams(params).toString();
   const queryClient = useQueryClient();
   const inputRef = useRef(null);
   const [file, setFile] = useState(null);
@@ -39,7 +41,7 @@ export default function BulkImport({ open, onClose, endpoint, noun, invalidate =
   const downloadTemplate = async () => {
     setBusy('template');
     try {
-      const res = await api.get(`${endpoint}/import/template`, { responseType: 'blob' });
+      const res = await api.get(`${endpoint}/import/template${qs ? `?${qs}` : ''}`, { responseType: 'blob' });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
@@ -60,7 +62,7 @@ export default function BulkImport({ open, onClose, endpoint, noun, invalidate =
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await api.post(`${endpoint}/import?dryRun=${dryRun}`, form, {
+      const res = await api.post(`${endpoint}/import?dryRun=${dryRun}${qs ? `&${qs}` : ''}`, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000,
       });
@@ -86,8 +88,8 @@ export default function BulkImport({ open, onClose, endpoint, noun, invalidate =
       open={open}
       onClose={busy ? undefined : close}
       dismissible={!busy}
-      title={`Import ${noun}`}
-      description={`Add many ${noun} at once from the Excel template.`}
+      title={title || `Import ${noun}`}
+      description={description || `Add many ${noun} at once from the Excel template.`}
       size="lg"
       footer={
         <>
@@ -99,7 +101,7 @@ export default function BulkImport({ open, onClose, endpoint, noun, invalidate =
               <Upload className="h-4 w-4" /> Import {result.valid} {noun}
             </Button>
           ) : (
-            <Button type="button" onClick={() => send(true)} disabled={!file} loading={busy === 'check'}>
+            <Button type="button" onClick={() => send(true)} disabled={!file || !ready} loading={busy === 'check'}>
               Check file
             </Button>
           )}
@@ -107,6 +109,7 @@ export default function BulkImport({ open, onClose, endpoint, noun, invalidate =
       }
     >
       <div className="space-y-4 text-sm">
+        {extra}
         <ol className="space-y-3">
           <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
             <span>
@@ -115,7 +118,7 @@ export default function BulkImport({ open, onClose, endpoint, noun, invalidate =
                 Columns marked * are required. {hint}
               </span>
             </span>
-            <Button type="button" variant="outline" size="sm" onClick={downloadTemplate} loading={busy === 'template'}>
+            <Button type="button" variant="outline" size="sm" onClick={downloadTemplate} loading={busy === 'template'} disabled={!ready}>
               <Download className="h-4 w-4" /> Template
             </Button>
           </li>

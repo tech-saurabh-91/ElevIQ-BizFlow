@@ -2,32 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import {
-  ArrowDown,
-  ArrowUp,
-  AlertTriangle,
-  Boxes,
-  ClipboardList,
-  Download,
-  Layers,
-  MoreHorizontal,
-  Package,
-  PackagePlus,
-  Plus,
-  Search,
-  ShoppingCart,
-  Trash2,
-  TrendingUp,
-  Truck,
-  Warehouse,
-  X,
-} from 'lucide-react';
+import { ArrowDown, ArrowUp, AlertTriangle, Boxes, ClipboardList, Download, Layers, MoreHorizontal, Package, PackagePlus, Plus, Search, ShoppingCart, Trash2, TrendingUp, Truck, Warehouse, X, Upload } from 'lucide-react';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/input';
+import { Input, Select, Field } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
@@ -62,6 +43,7 @@ import {
   reasonLabel,
   transferActionsFor,
 } from '@/components/company/inventory-shared';
+import BulkImport from '@/components/company/BulkImport';
 
 const TABS = [
   { value: 'stock', label: 'Stock on hand', icon: Boxes },
@@ -2334,6 +2316,8 @@ function GoodsReceiptsTab() {
 // Page shell
 // ===========================================================================
 export default function Inventory() {
+  const { can } = usePermissions();
+  const [openingOpen, setOpeningOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   const { company } = useAuth();
 
@@ -2362,7 +2346,15 @@ export default function Inventory() {
         title="Inventory"
         description="Stock ledger, warehouse transfers, adjustments and purchasing."
         breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Inventory' }]}
+        actions={
+          can('inventory.adjustments.manage') ? (
+            <Button variant="outline" onClick={() => setOpeningOpen(true)}>
+              <Upload className="h-4 w-4" /> Opening stock
+            </Button>
+          ) : null
+        }
       />
+      <OpeningStockImport open={openingOpen} onClose={() => setOpeningOpen(false)} />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -2422,5 +2414,41 @@ export default function Inventory() {
         <GoodsReceiptsTab />
       </TabPanel>
     </div>
+  );
+}
+
+/** Opening stock for a main / sub warehouse from a pre-filled Excel template. */
+function OpeningStockImport({ open, onClose }) {
+  const { lookups } = useLookups();
+  const [warehouse, setWarehouse] = useState('');
+  const options = (lookups.warehouses || []).filter((w) => ['MAIN', 'SUB'].includes(w.type || 'MAIN'));
+  return (
+    <BulkImport
+      open={open}
+      onClose={() => {
+        setWarehouse('');
+        onClose();
+      }}
+      title="Opening stock"
+      description="Stock a warehouse with what it holds today, from one Excel sheet."
+      endpoint="/v1/inventory/opening-stock"
+      noun="opening stock"
+      params={warehouse ? { warehouse } : {}}
+      ready={Boolean(warehouse)}
+      invalidate={[['company', 'inventory'], ['company', 'products']]}
+      hint="The template lists every product; fill the quantity held today and leave the rest blank."
+      extra={
+        <Field label="Warehouse" required hint="Each product gets opening stock in a warehouse once; later changes are adjustments.">
+          <Select value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
+            <option value="">Choose a main or sub warehouse</option>
+            {options.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name} ({w.code})
+              </option>
+            ))}
+          </Select>
+        </Field>
+      }
+    />
   );
 }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as ctrl from '../../controllers/company/inventoryController.js';
 import { validate } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
+import { spreadsheetUpload } from '../../middlewares/upload.js';
 import { idParamsSchema } from '../../validators/companyValidators.js';
 import {
   stockListQuerySchema,
@@ -31,6 +32,15 @@ router.get('/stock', authorize('inventory.view'), validate({ query: stockListQue
 router.get('/stock/export', authorize('inventory.export'), validate({ query: stockListQuerySchema }), ctrl.exportStock);
 router.get('/movements', authorize('inventory.view'), validate({ query: movementListQuerySchema }), ctrl.listMovements);
 router.get('/stats', authorize('inventory.view'), ctrl.stats);
+
+// Opening stock for a warehouse from Excel (?warehouse=<id>; dryRun=true validates only).
+router.get('/opening-stock/import/template', authorize('inventory.adjustments.manage'), ctrl.openingStockTemplate);
+router.post(
+  '/opening-stock/import',
+  authorize('inventory.adjustments.manage'),
+  spreadsheetUpload.single('file'),
+  ctrl.openingStockImport
+);
 router.get('/low-stock', authorize('inventory.view'), ctrl.lowStock);
 router.get('/form-options', authorize('inventory.view'), ctrl.formOptions);
 

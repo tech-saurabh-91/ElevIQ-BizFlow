@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, History, Truck, Warehouse as WarehouseIcon } from 'lucide-react';
+import { CheckCircle2, History, Truck, Warehouse as WarehouseIcon, Package, ClipboardCheck } from 'lucide-react';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
@@ -36,6 +36,7 @@ import { LoadingState } from '@/components/ui/misc';
 import { useLookups } from '@/hooks/useLookups';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatDate, formatDateTime, formatNumber } from '@/utils/format';
+import { VanStockDialog, DayCloseDialog } from '@/components/company/VanPanels';
 
 /**
  * Warehouses: a shallow hierarchy (MAIN -> SUB/TRANSIT/DAMAGED, MAIN|SUB ->
@@ -605,6 +606,8 @@ export default function Warehouses() {
   const { can } = usePermissions();
   const [assignVan, setAssignVan] = useState(null);
   const [historyVan, setHistoryVan] = useState(null);
+  const [stockVan, setStockVan] = useState(null);
+  const [closeVan, setCloseVan] = useState(null);
 
   const setDefault = useMutation({
     mutationFn: (row) => api.post(`/v1/warehouses/${row.id}/set-default`),
@@ -747,6 +750,16 @@ export default function Warehouses() {
       }
       if (can('inventory.view')) {
         items.push(
+          menuItem(Package, 'Stock & loading', () => {
+            close();
+            setStockVan(row);
+          }),
+          menuItem(ClipboardCheck, 'Day close', () => {
+            close();
+            setCloseVan(row);
+          })
+        );
+        items.push(
           menuItem(History, 'Assignment history', () => {
             close();
             setHistoryVan(row);
@@ -800,6 +813,8 @@ export default function Warehouses() {
 
       {assignVan && <VanAssignDialog van={assignVan} onClose={() => setAssignVan(null)} />}
       {historyVan && <VanHistoryDialog van={historyVan} onClose={() => setHistoryVan(null)} />}
+      {stockVan && <VanStockDialog van={stockVan} canManage={can('inventory.manage')} onClose={() => setStockVan(null)} />}
+      {closeVan && <DayCloseDialog van={closeVan} onClose={() => setCloseVan(null)} />}
     </>
   );
 }

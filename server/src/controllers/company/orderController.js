@@ -47,6 +47,7 @@ import {
   releaseReservation,
   dispatchOrderStock,
 } from '../../services/inventoryService.js';
+import { activeVanOf, assertDayClosed, assertVanStock } from '../../services/vanService.js';
 
 /** Relations returned on every order read so the UI never needs a second call. */
 const POPULATE = [
@@ -216,6 +217,13 @@ const snapshotFrom = (customer, payload, settings, priceList, req, existing = nu
     internalNotes: resolve('internalNotes', ''),
     deliveryInstructions: resolve('deliveryInstructions', ''),
   };
+};
+
+/** Lines booked on a van are checked against the van's own stock. */
+const assertVanWarehouseStock = async (warehouseId, lines, settings) => {
+  if (!warehouseId) return;
+  const van = await Warehouse.findOne({ _id: warehouseId, type: 'VAN' }).lean();
+  if (van) await assertVanStock(van, lines, settings);
 };
 
 /** Run the pricing engine + stock/credit guards for a set of raw items. */
@@ -432,12 +440,20 @@ export const create = asyncHandler(async (req, res) => {
   const settings = await settingsOf(req);
   const payload = await validateRefs({ ...req.body });
 
+  // Van sales: an executive driving a van sells from it, once earlier days
+  // are settled (when the van's day close is mandatory).
+  const seller = payload.salesman || req.user.id;
+  await assertDayClosed(seller, req.company);
+  const driving = await activeVanOf(seller);
+  if (driving && !payload.warehouse) payload.warehouse = String(driving.van._id);
+
   const customer = await getCustomer(payload.customerId);
   const priceList = await getPriceList(customer, payload.priceList);
   const rawItems = normalizeItems(payload.items);
   const { priced, warnings } = await priceOrder(req, customer, priceList, rawItems, settings);
 
   const snapshot = snapshotFrom(customer, payload, settings, priceList, req);
+  await assertVanWarehouseStock(snapshot.warehouse, priced.lines, settings);
 
   const order = new Order({
     ...snapshot,
@@ -505,6 +521,7 @@ export const update = asyncHandler(async (req, res) => {
 
   const { priced, warnings } = await priceOrder(req, customer, priceList, rawItems, settings);
   const snapshot = snapshotFrom(customer, payload, settings, priceList, req, order);
+  await assertVanWarehouseStock(snapshot.warehouse, priced.lines, settings);
 
   Object.assign(order, snapshot, priced.totals, {
     items: priced.lines,

@@ -53,6 +53,9 @@ const stockTransferSchema = new mongoose.Schema(
     transferNo: { type: String, trim: true, uppercase: true, maxlength: 40, default: '' },
     transferDate: { type: Date, default: Date.now, index: true },
 
+    // Why stock moved: a normal transfer, or loading / unloading a van.
+    purpose: { type: String, enum: ['TRANSFER', 'VAN_LOAD', 'VAN_UNLOAD'], default: 'TRANSFER', index: true },
+
     fromWarehouse: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', required: true, index: true },
     fromWarehouseCode: { type: String, default: '', trim: true, uppercase: true },
     fromWarehouseName: { type: String, default: '', trim: true },
