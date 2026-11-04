@@ -2,7 +2,8 @@ import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
 import { cn } from '@/utils/cn';
-import { titleCase } from '@/utils/format';
+import { titleCase, formatMoney } from '@/utils/format';
+import { unitOf, unitOptions } from '@/utils/units';
 
 /**
  * Shared Phase 7 inventory helpers: vocabularies, action availability and a
@@ -105,6 +106,7 @@ export const grnActionsFor = (row, can) => {
  * @param {boolean}  props.signed    - allow negative quantities (adjustments)
  * @param {boolean}  props.showCost  - whether to render the cost column
  * @param {boolean}  props.showTax   - render a tax-% column (purchase orders)
+ * @param {boolean}  props.showUnits - let each line pick a pack unit (cost = purchase price x pack size)
  */
 export function LineEditor({
   value = [],
@@ -116,6 +118,7 @@ export function LineEditor({
   signed = false,
   showCost = true,
   showTax = false,
+  showUnits = false,
   maxRows = 200,
 }) {
   const byId = (id) => products.find((p) => p.id === id);
@@ -135,9 +138,9 @@ export function LineEditor({
   const setProduct = (idx, productId) => {
     const product = byId(productId);
     const line = value[idx] || {};
-    const patch = { product: productId };
+    const patch = { product: productId, unit: product?.unit || '' };
     // Prefill cost from the catalogue only when the field is still empty.
-    if (product && (line.unitCost === undefined || line.unitCost === '' || line.unitCost === null)) {
+    if (product && (line.unitCost === undefined || line.unitCost === '' || line.unitCost === null || line.product !== productId)) {
       patch.unitCost = Number(product.purchasePrice || 0);
     }
     // Same for tax: inherit the product's GST rate unless the user set one.
@@ -145,6 +148,13 @@ export function LineEditor({
       patch.taxRate = Number(product.gstRate || 0);
     }
     update(idx, patch);
+  };
+
+  // Switching to a pack re-prices the line: purchase price per base unit x pack size.
+  const setUnit = (idx, unit) => {
+    const product = byId(value[idx]?.product);
+    const factor = unitOf(product, unit).factor;
+    update(idx, { unit, unitCost: Math.round(Number(product?.purchasePrice || 0) * factor * 100) / 100 });
   };
 
   const addLine = () => {
@@ -236,10 +246,25 @@ export function LineEditor({
             </button>
 
             {product && (
-              <p className="col-span-full -mt-1 text-xs text-muted-foreground">
-                {product.unit || 'PCS'}
-                {product.purchasePrice ? ` · list cost ₹${product.purchasePrice}` : ''}
-              </p>
+              <div className="col-span-full -mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {showUnits && unitOptions(product).length > 1 ? (
+                  <Select
+                    value={line.unit || product.unit}
+                    onChange={(e) => setUnit(idx, e.target.value)}
+                    className="h-7 w-auto text-xs"
+                    aria-label={`Unit for line ${idx + 1}`}
+                  >
+                    {unitOptions(product).map((u, i, all) => (
+                      <option key={u.unit} value={u.unit}>
+                        {u.base ? u.unit : `${u.unit} (${u.factor} ${all[0].unit})`}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <span>{product.unit || 'PCS'}</span>
+                )}
+                {product.purchasePrice ? <span>· list cost {formatMoney(product.purchasePrice)} per {product.unit}</span> : null}
+              </div>
             )}
           </div>
         );

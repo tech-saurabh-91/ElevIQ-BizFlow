@@ -8,6 +8,7 @@ import { ErrorAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { titleCase } from '@/utils/format';
 import { taxBreakupFor, effectiveTaxRate } from '@/utils/tax';
+import { unitOf, unitPriceFor } from '@/utils/units';
 
 /**
  * Shared Phase 4 order helpers: workflow actions, document downloads and the
@@ -251,10 +252,12 @@ export const findPriceEntry = (priceList, productId, qty) => {
   );
 };
 
-export const basePriceFromProduct = (product, priceList, qty) => {
-  const entry = findPriceEntry(priceList, product?.id, qty);
-  if (entry && Number(entry.price) > 0) return Number(entry.price);
-  return Number(product?.sellingPrice ?? product?.mrp ?? 0);
+/** Default price of one `unit` (base unit or a pack) for `qty` of that unit. */
+export const basePriceFromProduct = (product, priceList, qty, unit) => {
+  const factor = unitOf(product, unit).factor;
+  const entry = findPriceEntry(priceList, product?.id, Number(qty) * factor);
+  const perBase = entry && Number(entry.price) > 0 ? Number(entry.price) : Number(product?.sellingPrice ?? product?.mrp ?? 0);
+  return unitPriceFor(product, unit, perBase, Boolean(entry && Number(entry.price) > 0));
 };
 
 /** Derive one priced line exactly like the server does. */
@@ -263,8 +266,9 @@ export const priceLine = (row, { products, priceList, settings }) => {
   if (!product) return null;
 
   const qty = Number(row.qty) || 0;
-  const entry = findPriceEntry(priceList, product.id, qty);
-  const base = entry && Number(entry.price) > 0 ? Number(entry.price) : Number(product.sellingPrice ?? product.mrp ?? 0);
+  const unit = unitOf(product, row.unit);
+  const entry = findPriceEntry(priceList, product.id, qty * unit.factor);
+  const base = basePriceFromProduct(product, priceList, qty, unit.unit);
   const unitPrice = row.unitPrice === '' || row.unitPrice == null ? base : Number(row.unitPrice);
   const discountPercent =
     row.discountPercent === '' || row.discountPercent == null
@@ -293,6 +297,9 @@ export const priceLine = (row, { products, priceList, settings }) => {
   return {
     product,
     qty,
+    unit: unit.unit,
+    unitFactor: unit.factor,
+    baseQty: qty * unit.factor,
     unitPrice: round2(unitPrice),
     discountPercent: round2(discountPercent),
     discountAmount,

@@ -66,6 +66,8 @@ export const productHistoryQuerySchema = paginationSchema.extend({
 // ---------------------------------------------------------------------------
 
 export const poLineSchema = z.object({
+  // Base unit or one of the product's pack units (e.g. CTN).
+  unit: z.string().trim().max(10).optional(),
   product: objectIdSchema,
   qty: positiveQty,
   unitPrice: rate,

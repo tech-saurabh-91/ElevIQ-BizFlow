@@ -153,7 +153,10 @@ export const salesReport = async ({ companyId, window, granularity = 'day', top 
           _id: '$items.product',
           name: { $first: '$items.name' },
           sku: { $first: '$items.sku' },
-          qty: { $sum: '$items.qty' },
+          // Base units, whatever pack each line was sold in.
+          qty: {
+            $sum: { $ifNull: ['$items.baseQty', { $multiply: ['$items.qty', { $ifNull: ['$items.unitFactor', 1] }] }] },
+          },
           value: { $sum: '$items.lineTotal' },
         },
       },

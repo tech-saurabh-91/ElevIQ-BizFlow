@@ -151,6 +151,7 @@ const normalizeItems = (items = []) =>
   items.map((i) => ({
     product: String(i.product?._id || i.product),
     qty: Number(i.qty),
+    unit: i.unit || undefined, // base unit or a pack unit
     freeQty: Number(i.freeQty || 0),
     unitPrice: i.unitPrice,
     discountPercent: i.discountPercent,
@@ -708,7 +709,7 @@ export const formOptions = asyncHandler(async (req, res) => {
   const [customer, products, salesmen, routes, warehouses] = await Promise.all([
     customerId ? Customer.findById(customerId).lean() : null,
     Product.find({ isActive: true })
-      .select('name sku category brand unit hsnCode gstRate mrp sellingPrice dealerPrice stock lowStockLevel isActive')
+      .select('name sku customCode category brand unit packUnits hsnCode gstRate mrp sellingPrice dealerPrice stock lowStockLevel isActive')
       .sort({ name: 1 })
       .limit(1000)
       .lean(),

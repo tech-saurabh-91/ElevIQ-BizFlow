@@ -113,18 +113,31 @@ export const customerListQuerySchema = paginationSchema.extend({
 // ---------------------------------------------------------------------------
 // Products
 // ---------------------------------------------------------------------------
+const packUnitSchema = z.object({
+  unit: z.string().trim().min(1, 'Choose a unit').max(10),
+  factor: z.coerce.number().positive('Must be more than 0').max(100000),
+  barcode: softString(14),
+  price: z.coerce.number().min(0, 'Cannot be negative').max(1e12).optional(),
+});
+
+// The product code (sku) and stock are system-maintained, so they are not
+// accepted here; opening stock is only taken when a product is created.
 export const productCreateSchema = z.object({
   name: z.string().trim().min(2, 'Product name is required').max(180),
-  sku: softString(40),
-  barcode: softString(60),
+  customCode: softString(40),
+  barcode: softString(14),
+
+  classificationId: refId,
+  categoryId: refId,
+  subCategoryId: refId,
+  // Names are accepted for imports and older clients (matched against the master).
+  classification: softString(80),
   category: softString(80),
   subCategory: softString(80),
   brand: softString(80),
 
-  unit: softString(16),
-  unitType: z.enum(['BASE', 'ALT']).optional(),
-  altUnit: softString(16),
-  conversion: z.coerce.number().positive().max(100000).optional(),
+  unit: softString(10),
+  packUnits: z.array(packUnitSchema).max(10).optional(),
 
   hsnCode: softString(20),
   gstRate: z.coerce.number().min(0).max(100).optional(),
@@ -134,9 +147,9 @@ export const productCreateSchema = z.object({
   dealerPrice: money,
   purchasePrice: money,
 
-  openingStock: z.coerce.number().optional(),
-  stock: z.coerce.number().optional(),
-  lowStockLevel: z.coerce.number().min(0).optional(),
+  openingStock: z.coerce.number().min(0, 'Cannot be negative').max(1e9).optional(),
+  openingWarehouse: refId,
+  lowStockLevel: z.coerce.number().min(0).max(1e9).optional(),
 
   image: softString(500),
   description: softString(1000),
@@ -147,11 +160,13 @@ export const productCreateSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export const productUpdateSchema = productCreateSchema.partial();
+export const productUpdateSchema = productCreateSchema.omit({ openingStock: true, openingWarehouse: true }).partial();
 
 export const productListQuerySchema = paginationSchema.extend({
   sort: z.enum(['createdAt', 'name', 'sku', 'sellingPrice', 'stock', 'mrp']).optional(),
   category: softString(80),
+  categoryId: objectIdSchema.optional(),
+  classificationId: objectIdSchema.optional(),
   brand: softString(80),
   isActive: boolQuery,
   lowStock: z.enum(['true', 'false']).optional(),
@@ -400,6 +415,7 @@ export const settingsUpdateSchema = z.object({
       purchase: seriesEntry.optional(),
       grn: seriesEntry.optional(),
       customer: seriesEntry.optional(),
+      product: seriesEntry.optional(),
       supplier: seriesEntry.optional(),
     })
     .partial()

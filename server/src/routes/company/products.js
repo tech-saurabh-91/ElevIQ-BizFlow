@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as ctrl from '../../controllers/company/productController.js';
 import { validate } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
+import { spreadsheetUpload } from '../../middlewares/upload.js';
 import {
   idParamsSchema,
   productCreateSchema,
@@ -14,6 +15,10 @@ const router = Router();
 router.get('/', authorize('products.view'), validate({ query: productListQuerySchema }), ctrl.list);
 
 router.post('/', authorize('products.create'), validate({ body: productCreateSchema }), ctrl.create);
+
+// Bulk import: download the template, then upload it (dryRun=true validates only).
+router.get('/import/template', authorize('products.create'), ctrl.importTemplate);
+router.post('/import', authorize('products.create'), spreadsheetUpload.single('file'), ctrl.importFile);
 
 router
   .route('/:id')

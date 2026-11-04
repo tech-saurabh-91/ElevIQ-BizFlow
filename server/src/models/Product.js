@@ -11,14 +11,40 @@ import { UNIT_TYPES } from '../config/constants.js';
 const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: [true, 'Product name is required'], trim: true, maxlength: 180 },
+    // System product code from the numbering series; never edited.
     sku: { type: String, trim: true, uppercase: true, maxlength: 40, default: '' },
+    // The company's own code for the item (old ERP / manufacturer code), optional.
+    customCode: { type: String, trim: true, maxlength: 40, default: '' },
     barcode: { type: String, default: '', trim: true },
+
+    // Grouping from the Classification -> Category -> Sub-category master.
+    // Names are kept alongside the ids for lists, filters and reports.
+    classification: { type: String, default: '', trim: true },
+    classificationId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductCategory', default: null },
     category: { type: String, default: 'General', trim: true, index: true },
+    categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductCategory', default: null },
     subCategory: { type: String, default: '', trim: true },
+    subCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductCategory', default: null },
     brand: { type: String, default: '', trim: true, index: true },
 
-    // Units
-    unit: { type: String, default: 'PCS', trim: true, maxlength: 16 },
+    // Units: stock is always counted in the base unit (e.g. PCS). Pack units
+    // say how many base units they hold (Packet = 10 PCS, Carton = 120 PCS),
+    // so a line can be sold or bought in any of them.
+    unit: { type: String, default: 'PCS', trim: true, uppercase: true, maxlength: 10 },
+    packUnits: {
+      type: [
+        {
+          _id: false,
+          unit: { type: String, required: true, trim: true, uppercase: true, maxlength: 10 },
+          factor: { type: Number, required: true, min: 1 },
+          barcode: { type: String, default: '', trim: true },
+          // 0 = base selling price x factor
+          price: { type: Number, default: 0, min: 0 },
+        },
+      ],
+      default: [],
+    },
+    // Legacy single alternate unit (pre pack units); read once to migrate.
     unitType: { type: String, enum: UNIT_TYPES, default: 'BASE' },
     altUnit: { type: String, default: '', trim: true, maxlength: 16 },
     conversion: { type: Number, default: 1, min: 0.0001 },
@@ -35,6 +61,8 @@ const productSchema = new mongoose.Schema(
 
     // Stock snapshot / alerts
     openingStock: { type: Number, default: 0 },
+    // Warehouse the opening stock was booked into (set once, at creation).
+    openingWarehouse: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
     stock: { type: Number, default: 0 },
     lowStockLevel: { type: Number, default: 10, min: 0 },
 
@@ -55,6 +83,7 @@ productSchema.index(
 );
 productSchema.index({ companyId: 1, name: 1 });
 productSchema.index({ companyId: 1, barcode: 1 });
+productSchema.index({ companyId: 1, customCode: 1 });
 productSchema.index({ companyId: 1, category: 1, isActive: 1 });
 
 productSchema.plugin(tenantPlugin);

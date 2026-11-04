@@ -324,16 +324,16 @@ describe('Phase 3 - Products', () => {
       .set(as(state.adminToken))
       .send({
         name: 'Dettol Soap 125g',
-        sku: 'SKU-DETTOL',
+        sku: 'SKU-DETTOL', // ignored: codes come from the numbering series
         category: 'Personal Care',
         mrp: 65,
         sellingPrice: 58,
-        stock: 2,
+        openingStock: 2,
         lowStockLevel: 10,
         gstRate: 18,
       });
     expect(second.status).toBe(201);
-    expect(second.body.data.sku).toBe('SKU-DETTOL');
+    expect(second.body.data.sku).toBe('PRD-00002');
     state.lowStockProductId = second.body.data.id;
   });
 
@@ -365,7 +365,7 @@ describe('Phase 3 - Products', () => {
       .get('/api/v1/products?lowStock=true')
       .set(as(state.adminToken));
     expect(low.body.data).toHaveLength(1);
-    expect(low.body.data[0].sku).toBe('SKU-DETTOL');
+    expect(low.body.data[0].sku).toBe('PRD-00002');
   });
 
   test('updates and soft deletes a product', async () => {

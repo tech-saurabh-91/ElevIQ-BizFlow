@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import { AppError, ErrorCodes, BadRequestError } from '../utils/errors.js';
 import { round2 } from '../models/helpers.js';
 import { nextSeries, getFinancialYearTag } from '../utils/numberSeries.js';
+import { lineUnit, baseQtyOf } from './catalogService.js';
 
 /**
  * Order pricing + workflow rules.
@@ -21,15 +22,23 @@ export const findPriceListEntry = (priceList, productId, qty) => {
   return matches[0] || null;
 };
 
-/** Resolve the effective price/discount for one line. */
+/**
+ * Resolve the effective unit, price and discount for one line.
+ *
+ * A line may be in the base unit or one of the product's pack units. Price
+ * lists price the base unit, so a pack costs entry price x pack factor; with
+ * no price-list entry a pack uses its own price, else selling price x factor.
+ */
 export const resolveLinePricing = (product, priceList, input) => {
   const qty = Number(input.qty || 0);
-  const entry = findPriceListEntry(priceList, product._id, qty);
+  const unit = lineUnit(product, input.unit);
+  const entry = findPriceListEntry(priceList, product._id, qty * unit.factor);
 
-  const basePrice =
+  const perBase =
     entry && Number(entry.price) > 0
       ? Number(entry.price)
       : Number(product.sellingPrice ?? product.mrp ?? 0);
+  const basePrice = !unit.base && !entry && unit.price > 0 ? unit.price : round2(perBase * unit.factor);
 
   const unitPrice =
     input.unitPrice === undefined || input.unitPrice === null || input.unitPrice === ''
@@ -46,7 +55,7 @@ export const resolveLinePricing = (product, priceList, input) => {
       ? Number(product.gstRate ?? 0)
       : Number(input.taxRate);
 
-  return { unitPrice, discountPercent, taxRate, priceListEntry: Boolean(entry) };
+  return { unitPrice, discountPercent, taxRate, unit: unit.unit, unitFactor: unit.factor, priceListEntry: Boolean(entry) };
 };
 
 /**
@@ -135,6 +144,21 @@ export const taxBreakupFor = (taxTotal, settings, { sellerState, buyerState } = 
     : { cgst: 0, sgst: 0, igst: total };
 };
 
+const round4 = (n) => Math.round(Number(n) * 10000) / 10000;
+
+/** Packs (boxes, cartons...) are traded in whole numbers. */
+export const assertPackQty = (qty, unitFactor, product, unit, index = 0) => {
+  if (Number(unitFactor) > 1 && Math.abs(Number(qty) - Math.round(Number(qty))) > 1e-9) {
+    throw new BadRequestError(`${product.name}: ${unit} must be a whole number (line ${index + 1})`, 'VALIDATION_ERROR');
+  }
+};
+
+/** Copy a source line's unit onto a derived line (order -> invoice -> credit note). */
+export const unitFieldsFrom = (line, qty) => {
+  const unitFactor = Number(line.unitFactor || 1);
+  return { unit: line.unit || 'PCS', unitFactor, baseQty: round4(Number(qty) * unitFactor) };
+};
+
 /** Whole-document totals from already-priced lines. */
 export const computeTotals = (lines, settings) => {
   const subtotal = round2(lines.reduce((s, l) => s + l.qty * l.unitPrice, 0));
@@ -174,15 +198,19 @@ export const buildOrderLines = (items, { products, priceList, settings }) => {
       throw new BadRequestError(`"${product.name}" is inactive and cannot be ordered`, 'INACTIVE_PRODUCT');
     }
 
-    const { unitPrice, discountPercent, taxRate } = resolveLinePricing(product, priceList, input);
+    const { unitPrice, discountPercent, taxRate, unit, unitFactor } = resolveLinePricing(product, priceList, input);
+    assertPackQty(input.qty, unitFactor, product, unit, index);
 
+    const priced = priceLineValues({ ...input, unitPrice, discountPercent, taxRate }, settings);
     return {
       product: product._id,
       name: product.name,
       sku: product.sku || '',
-      unit: product.unit || 'PCS',
+      unit,
+      unitFactor,
+      baseQty: round4(priced.qty * unitFactor),
       hsnCode: product.hsnCode || '',
-      ...priceLineValues({ ...input, unitPrice, discountPercent, taxRate }, settings),
+      ...priced,
     };
   });
 
@@ -197,10 +225,11 @@ export const assertStockAvailable = (lines, products, settings) => {
   const checkStock = settings?.order?.showStockOnOrder !== false;
   if (allowNegative || !checkStock) return { warnings: [] };
 
+  // Stock is counted in base units, whatever pack each line is in.
   const wanted = new Map();
   lines.forEach((l) => {
     const key = String(l.product);
-    wanted.set(key, (wanted.get(key) || 0) + Number(l.qty));
+    wanted.set(key, (wanted.get(key) || 0) + baseQtyOf(l));
   });
 
   const errors = [];

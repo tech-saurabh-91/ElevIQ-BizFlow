@@ -27,6 +27,7 @@ import {
   Target,
   Route as RouteIcon,
   Tags,
+  Layers,
   Warehouse,
   ClipboardList,
   LineChart,
@@ -80,6 +81,7 @@ export const companyNav = [
     items: [
       { to: '/app/customers', label: 'Customers', icon: Users, permission: 'customers.view' },
       { to: '/app/products', label: 'Products', icon: Package, permission: 'products.view' },
+      { to: '/app/catalog', label: 'Categories & Units', icon: Layers, permission: 'products.view' },
       { to: '/app/suppliers', label: 'Suppliers', icon: Truck, permission: 'products.view' },
       { to: '/app/price-lists', label: 'Price Lists', icon: Tags, permission: 'products.view' },
       { to: '/app/warehouses', label: 'Warehouses', icon: Warehouse, permission: 'inventory.view' },

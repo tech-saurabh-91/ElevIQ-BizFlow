@@ -25,6 +25,10 @@ const purchaseItemSchema = new mongoose.Schema(
     name: { type: String, default: '', trim: true },
     sku: { type: String, default: '', trim: true },
     unit: { type: String, default: 'PCS', trim: true },
+    // Pack unit sold/bought on this line: qty is in `unit`, stock moves
+    // qty x unitFactor base units (baseQty).
+    unitFactor: { type: Number, default: 1, min: 0.0001 },
+    baseQty: { type: Number, default: null },
     hsnCode: { type: String, default: '', trim: true },
 
     qty: { type: Number, required: true, min: 0.0001 },

@@ -19,6 +19,7 @@ import userRoutes from './users.js';
 import settingsRoutes from './settings.js';
 import auditLogRoutes from './auditLogs.js';
 import lookupRoutes from './lookups.js';
+import { units as unitRoutes, categories as categoryRoutes } from './catalog.js';
 import * as dashboardController from '../../controllers/company/dashboardController.js';
 import { authenticate } from '../../middlewares/auth.js';
 import { requireCompanyScope } from '../../middlewares/rbac.js';
@@ -51,6 +52,8 @@ router.get('/dashboard/summary', dashboardController.summary);
 // ---- Phase 3: workspace masters -------------------------------------------
 router.use('/customers', customerRoutes);
 router.use('/products', productRoutes);
+router.use('/units', unitRoutes);
+router.use('/product-categories', categoryRoutes);
 router.use('/suppliers', supplierRoutes);
 router.use('/warehouses', warehouseRoutes);
 router.use('/routes', routeRoutes);

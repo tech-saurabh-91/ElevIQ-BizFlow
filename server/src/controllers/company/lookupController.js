@@ -26,8 +26,8 @@ export const options = asyncHandler(async (req, res) => {
         .sort({ name: 1 })
         .limit(limit)
         .lean(),
-      Product.find({ ...active, ...match(q, ['name', 'sku', 'barcode']) })
-        .select('name sku category unit sellingPrice mrp gstRate stock lowStockLevel')
+      Product.find({ ...active, ...match(q, ['name', 'sku', 'customCode', 'barcode']) })
+        .select('name sku customCode category unit packUnits sellingPrice mrp purchasePrice gstRate stock lowStockLevel')
         .sort({ name: 1 })
         .limit(limit)
         .lean(),

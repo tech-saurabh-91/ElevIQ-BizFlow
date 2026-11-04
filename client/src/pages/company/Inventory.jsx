@@ -1376,6 +1376,7 @@ function PurchaseOrdersTab() {
       items: form.lines.map((l) => ({
         product: l.product,
         qty: Number(l.qty),
+        unit: l.unit || undefined,
         unitPrice: l.unitCost === '' ? 0 : Number(l.unitCost),
         taxRate: l.taxRate === '' ? undefined : Number(l.taxRate),
       })),
@@ -1700,6 +1701,7 @@ function PurchaseOrdersTab() {
             qtyLabel="Order qty"
             costLabel="Unit price"
             showTax
+            showUnits
           />
 
           <label className="flex cursor-pointer items-center gap-2 text-sm">

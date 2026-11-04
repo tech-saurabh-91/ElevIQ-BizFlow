@@ -23,6 +23,8 @@ const refId = objectIdSchema.optional().or(z.literal(''));
 
 const invoiceItemSchema = z.object({
   product: objectIdSchema.optional(),
+  // Base unit or one of the product's pack units (default: base unit).
+  unit: z.string().trim().max(10).optional(),
   orderItemId: objectIdSchema.optional(),
   qty: z.coerce.number().positive('Quantity must be greater than zero').max(1_000_000),
   unitPrice: z.coerce.number().min(0, 'Price cannot be negative').max(1e12).optional(),

@@ -36,6 +36,7 @@ import {
 } from '@/components/company/order-shared';
 import { breakupRows, buyerStateOf } from '@/utils/tax';
 import { useTaxLabels } from '@/hooks/useLocations';
+import { unitOf, unitOptions, stockLabel, describeQty } from '@/utils/units';
 
 const text = (max = 200) => z.string().trim().max(max).optional().or(z.literal(''));
 const numberText = (message) =>
@@ -48,6 +49,7 @@ const itemSchema = z.object({
     .trim()
     .min(1, 'Enter a quantity')
     .refine((v) => Number(v) > 0, 'Quantity must be greater than zero'),
+  unit: z.string().optional().or(z.literal('')),
   unitPrice: numberText('Enter a valid price'),
   discountPercent: z
     .string()
@@ -78,6 +80,7 @@ const schema = z.object({
 const emptyRow = () => ({
   product: '',
   qty: '1',
+  unit: '',
   unitPrice: '',
   discountPercent: '',
   note: '',
@@ -107,6 +110,7 @@ const toFormValues = (order) => ({
       ? order.items.map((item) => ({
           product: orderIdOf(item.product),
           qty: String(item.qty ?? 1),
+          unit: item.unit || '',
           unitPrice: item.unitPrice == null ? '' : String(item.unitPrice),
           discountPercent:
             item.discountPercent == null || Number(item.discountPercent) === 0
@@ -235,8 +239,8 @@ export default function OrderEditor() {
       const product = productMap.get(String(row.product));
       if (!product) return;
       const qty = Number(row.qty) || 1;
-      const entry = findPriceEntry(options.priceList, product.id, qty);
-      setValue(`items.${index}.unitPrice`, String(basePriceFromProduct(product, options.priceList, qty)));
+      const entry = findPriceEntry(options.priceList, product.id, qty * unitOf(product, row.unit).factor);
+      setValue(`items.${index}.unitPrice`, String(basePriceFromProduct(product, options.priceList, qty, row.unit)));
       setValue(`items.${index}.discountPercent`, entry?.discountPercent ? String(entry.discountPercent) : '');
     });
   }, [options, productMap, getValues, setValue]);
@@ -281,15 +285,18 @@ export default function OrderEditor() {
   const stockIssues = useMemo(() => {
     if (!showStock) return [];
     const out = [];
+    // Stock is in base units: add up every line of a product, whatever its pack.
+    const wanted = new Map();
     watchedItems.forEach((row) => {
       const product = productMap.get(String(row.product));
       if (!product) return;
-      const qty = Number(row.qty) || 0;
+      const base = (Number(row.qty) || 0) * unitOf(product, row.unit).factor;
+      wanted.set(product.id, { product, qty: (wanted.get(product.id)?.qty || 0) + base });
+    });
+    wanted.forEach(({ product, qty }) => {
       const available = Number(product.stock || 0);
       if (qty > available) {
-        out.push(
-          `${product.name}: only ${available} ${product.unit || 'unit'} in stock, ${qty} requested.`
-        );
+        out.push(`${product.name}: only ${stockLabel(product)} in stock, ${describeQty(qty, product)} requested.`);
       }
     });
     return out;
@@ -358,6 +365,7 @@ export default function OrderEditor() {
         items: values.items.map((item) => ({
           product: item.product,
           qty: num(item.qty),
+          unit: item.unit || undefined,
           unitPrice: item.unitPrice === '' ? undefined : num(item.unitPrice),
           discountPercent: item.discountPercent === '' ? undefined : num(item.discountPercent),
           note: item.note || '',
@@ -371,12 +379,21 @@ export default function OrderEditor() {
     const product = productMap.get(String(productId));
     if (!product) return;
     const qty = Number(getValues(`items.${index}.qty`)) || 1;
+    // A new product starts in its base unit.
+    setValue(`items.${index}.unit`, product.unit || 'PCS');
     const entry = findPriceEntry(options?.priceList, productId, qty);
-    setValue(`items.${index}.unitPrice`, String(basePriceFromProduct(product, options?.priceList, qty)));
+    setValue(`items.${index}.unitPrice`, String(basePriceFromProduct(product, options?.priceList, qty, product.unit)));
     setValue(
       `items.${index}.discountPercent`,
       entry?.discountPercent ? String(entry.discountPercent) : ''
     );
+  };
+
+  const changeUnit = (index, unit) => {
+    const product = productMap.get(String(getValues(`items.${index}.product`)));
+    if (!product) return;
+    const qty = Number(getValues(`items.${index}.qty`)) || 1;
+    setValue(`items.${index}.unitPrice`, String(basePriceFromProduct(product, options?.priceList, qty, unit)));
   };
 
   const customerOptions = useMemo(() => {
@@ -637,7 +654,10 @@ export default function OrderEditor() {
                         const product = productMap.get(String(row.product));
                         const line = preview.lines[index];
                         const shortStock =
-                          showStock && product && Number(row.qty) > Number(product.stock || 0);
+                          showStock &&
+                          product &&
+                          Number(row.qty) * unitOf(product, row.unit).factor > Number(product.stock || 0);
+                        const units = unitOptions(product);
                         return (
                           <tr key={field.id} className="border-b last:border-0">
                             <td className="py-2 pr-2 align-top">
@@ -667,7 +687,7 @@ export default function OrderEditor() {
                                     shortStock ? 'text-destructive' : 'text-muted-foreground'
                                   }`}
                                 >
-                                  Stock {Number(product.stock || 0)} {product.unit || ''}
+                                  Stock {stockLabel(product)}
                                   {shortStock && (allowNegative ? ' · negative stock allowed' : ' · short')}
                                 </p>
                               )}
@@ -681,6 +701,21 @@ export default function OrderEditor() {
                                 error={!!errors.items?.[index]?.qty}
                                 aria-label={`Quantity for line ${index + 1}`}
                               />
+                              {units.length > 1 ? (
+                                <Select
+                                  className="mt-1 h-8 text-xs"
+                                  {...register(`items.${index}.unit`, { onChange: (e) => changeUnit(index, e.target.value) })}
+                                  aria-label={`Unit for line ${index + 1}`}
+                                >
+                                  {units.map((u) => (
+                                    <option key={u.unit} value={u.unit}>
+                                      {u.base ? u.unit : `${u.unit} (${u.factor} ${units[0].unit})`}
+                                    </option>
+                                  ))}
+                                </Select>
+                              ) : (
+                                product && <p className="mt-1 text-xs text-muted-foreground">{product.unit}</p>
+                              )}
                               {errors.items?.[index]?.qty && (
                                 <p className="mt-1 text-xs text-destructive">
                                   {errors.items[index].qty.message}

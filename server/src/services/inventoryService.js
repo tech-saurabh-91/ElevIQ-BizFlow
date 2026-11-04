@@ -11,6 +11,7 @@ import { round2 } from '../models/helpers.js';
 import { nextSeries, getFinancialYearTag } from '../utils/numberSeries.js';
 import { getCompanyId } from '../middlewares/tenantContext.js';
 import { MOVEMENT_TYPES, PO_TRANSITIONS, TRANSFER_TRANSITIONS } from '../config/constants.js';
+import { baseQtyOf } from './catalogService.js';
 
 /**
  * Inventory domain rules (Phase 7).
@@ -280,7 +281,7 @@ export const reserveStock = async (lines = [], { warehouseId = null, settings = 
   if (!warehouse) return;
 
   for (const line of lines) {
-    const qty = Number(line.qty || 0);
+    const qty = baseQtyOf(line); // stock is counted in base units
     if (qty <= 0) continue;
     await StockBalance.updateOne(
       { product: line.product, warehouse },
@@ -303,7 +304,7 @@ export const releaseReservation = async (lines = [], { warehouseId = null, setti
   const warehouse = warehouseId || (await resolveDefaultWarehouse(settings))?._id || null;
 
   for (const line of lines) {
-    const qty = Number(line.qty || 0);
+    const qty = baseQtyOf(line); // stock is counted in base units
     if (qty <= 0) continue;
     await StockBalance.updateOne(
       { product: line.product, warehouse, reservedQty: { $gte: qty } },
@@ -323,7 +324,7 @@ export const dispatchOrderStock = async (order, { settings = null, movedBy = nul
   const cfg = settings || (await Setting.forCompany(order.companyId));
   const warehouse = order.warehouse || (await resolveDefaultWarehouse(cfg))?._id || null;
   const negativeAllowed = Boolean(cfg?.order?.allowNegativeStock);
-  const lines = (order.items || []).filter((l) => Number(l.qty || 0) > 0);
+  const lines = (order.items || []).filter((l) => baseQtyOf(l) > 0);
 
   // ---- pre-flight: nothing is written unless the whole dispatch can go out ----
   if (!negativeAllowed) {
@@ -332,7 +333,7 @@ export const dispatchOrderStock = async (order, { settings = null, movedBy = nul
       if (!product) {
         throw new BadRequestError('Product not found', 'INVALID_REFERENCE');
       }
-      const qty = Number(line.qty || 0);
+      const qty = baseQtyOf(line); // stock is counted in base units
       if (Number(product.stock || 0) + EPSILON < qty) {
         throw new AppError(
           `Insufficient stock for ${product.name}: only ${product.stock || 0} ${product.unit || 'unit'}(s) available, ${qty} requested`,
@@ -347,7 +348,7 @@ export const dispatchOrderStock = async (order, { settings = null, movedBy = nul
   }
 
   for (const line of lines) {
-    const qty = Number(line.qty || 0);
+    const qty = baseQtyOf(line); // stock is counted in base units
 
     // Consume the reservation first so available doesn't double-count.
     if (cfg?.order?.reserveStockOnConfirm && warehouse) {
@@ -366,7 +367,7 @@ export const dispatchOrderStock = async (order, { settings = null, movedBy = nul
       refId: order._id,
       refNo: order.orderNo || '',
       reason: 'Order dispatched',
-      unitCost: Number(line.unitPrice || 0),
+      unitCost: Number(line.unitPrice || 0) / Number(line.unitFactor || 1),
       movedBy,
       settings: cfg,
     });

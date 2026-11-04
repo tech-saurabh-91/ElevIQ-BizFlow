@@ -153,6 +153,7 @@ const normalizeItems = (items = []) =>
     product: i.product ? String(i.product?._id || i.product) : undefined,
     orderItemId: i.orderItemId ? String(i.orderItemId?._id || i.orderItemId) : undefined,
     qty: Number(i.qty),
+    unit: i.unit || undefined, // base unit or a pack unit
     unitPrice: i.unitPrice,
     discountPercent: i.discountPercent,
     taxRate: i.taxRate,
@@ -639,7 +640,7 @@ export const formOptions = asyncHandler(async (req, res) => {
 
   const [products, warehouses] = await Promise.all([
     Product.find({ isActive: true })
-      .select('name sku category brand unit hsnCode gstRate mrp sellingPrice dealerPrice stock lowStockLevel isActive')
+      .select('name sku customCode category brand unit packUnits hsnCode gstRate mrp sellingPrice dealerPrice stock lowStockLevel isActive')
       .sort({ name: 1 })
       .limit(1000)
       .lean(),

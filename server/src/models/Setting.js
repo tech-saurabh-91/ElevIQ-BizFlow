@@ -36,6 +36,7 @@ const settingSchema = new mongoose.Schema(
         expense: { prefix: { type: String, default: 'EXP' }, pad: { type: Number, default: 5 } },
         visit: { prefix: { type: String, default: 'VIS' }, pad: { type: Number, default: 5 } },
         customer: { prefix: { type: String, default: 'CUS' }, pad: { type: Number, default: 5 } },
+        product: { prefix: { type: String, default: 'PRD' }, pad: { type: Number, default: 5 } },
         supplier: { prefix: { type: String, default: 'SUP' }, pad: { type: Number, default: 5 } },
       },
       default: () => ({}),

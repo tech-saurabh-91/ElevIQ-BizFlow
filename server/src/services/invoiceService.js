@@ -6,7 +6,7 @@ import Customer from '../models/Customer.js';
 import { round2 } from '../models/helpers.js';
 import { AppError, BadRequestError, ConflictError } from '../utils/errors.js';
 import { nextSeries, getFinancialYearTag } from '../utils/numberSeries.js';
-import { priceLineValues, computeTotals, resolveLinePricing } from './orderService.js';
+import { priceLineValues, computeTotals, resolveLinePricing, assertPackQty, unitFieldsFrom } from './orderService.js';
 
 /**
  * Invoice + credit-note domain rules.
@@ -195,7 +195,7 @@ export const buildInvoiceLinesFromOrder = async (order, requested = [], settings
       orderItemId: row.orderItemId,
       name: line.name || '',
       sku: line.sku || '',
-      unit: line.unit || 'PCS',
+      ...unitFieldsFrom(line, qty),
       hsnCode: line.hsnCode || '',
       ...priceLineValues(
         {
@@ -238,11 +238,14 @@ export const buildDirectInvoiceLines = (items, { products, priceList, settings }
     }
 
     const pricing = resolveLinePricing(product, priceList, input);
+    assertPackQty(input.qty, pricing.unitFactor, product, pricing.unit, index);
     return {
       product: product._id,
       name: product.name,
       sku: product.sku || '',
-      unit: product.unit || 'PCS',
+      unit: pricing.unit,
+      unitFactor: pricing.unitFactor,
+      baseQty: Number(input.qty) * pricing.unitFactor,
       hsnCode: product.hsnCode || '',
       ...priceLineValues(
         { ...input, unitPrice: pricing.unitPrice, discountPercent: pricing.discountPercent, taxRate: pricing.taxRate },
@@ -334,7 +337,7 @@ export const buildCreditNoteLinesFromInvoice = async (
       invoiceItemId: row.invoiceItemId,
       name: line.name || '',
       sku: line.sku || '',
-      unit: line.unit || 'PCS',
+      ...unitFieldsFrom(line, qty),
       hsnCode: line.hsnCode || '',
       ...priceLineValues(
         {

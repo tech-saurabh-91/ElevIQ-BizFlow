@@ -15,7 +15,8 @@ import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, MOVEMENT_TYPES, PURCHASE_ORDER_STATUS, GRN_STATUS } from '../../config/constants.js';
 import { AppError, BadRequestError, ConflictError, ErrorCodes } from '../../utils/errors.js';
 import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
-import { computeTotals, priceLineValues, taxBreakupFor, sellerStateOf } from '../../services/orderService.js';
+import { computeTotals, priceLineValues, taxBreakupFor, sellerStateOf, assertPackQty } from '../../services/orderService.js';
+import { lineUnit } from '../../services/catalogService.js';
 import {
   recordMovement,
   reverseMovementsFor,
@@ -387,7 +388,7 @@ export const grnFormOptions = asyncHandler(async (req, res) => {
   const [warehouses, products] = await Promise.all([
     Warehouse.find({ isActive: { $ne: false } }).select('name code type isDefault').sort({ name: 1 }).lean(),
     Product.find({ isActive: { $ne: false } })
-      .select('name sku unit purchasePrice gstRate hsnCode')
+      .select('name sku customCode unit packUnits purchasePrice gstRate hsnCode')
       .sort({ name: 1 })
       .limit(1000)
       .lean(),
@@ -557,18 +558,19 @@ const postGrnDoc = async (req, doc, settings, text = '') => {
   for (const line of doc.items) {
     const accepted = Number(line.acceptedQty || 0);
     if (accepted <= 0) continue;
+    const factor = Number(line.unitFactor || 1);
 
     await recordMovement({
       product: line.product,
       warehouse: doc.warehouse,
-      qty: accepted,
+      qty: accepted * factor, // stock is counted in base units
       type: MOVEMENT_TYPES.PURCHASE_RECEIPT,
       refType: 'GOODS_RECEIPT',
       refId: doc._id,
       refNo: doc.grnNo,
       reason: 'Goods received',
       note: doc.invoiceNo ? `Bill ${doc.invoiceNo}` : '',
-      unitCost: Number(line.unitCost || 0),
+      unitCost: Number(line.unitCost || 0) / factor,
       movedBy: req.user.id,
       settings,
     });
@@ -690,7 +692,7 @@ export const poFormOptions = asyncHandler(async (req, res) => {
     Supplier.find({ isActive: { $ne: false } }).select('name code gstin paymentTerms leadDays').sort({ name: 1 }).limit(1000).lean(),
     Warehouse.find({ isActive: { $ne: false } }).select('name code type isDefault').sort({ name: 1 }).lean(),
     Product.find({ isActive: { $ne: false } })
-      .select('name sku unit purchasePrice gstRate hsnCode')
+      .select('name sku customCode unit packUnits purchasePrice gstRate hsnCode')
       .sort({ name: 1 })
       .limit(1000)
       .lean(),
@@ -801,10 +803,13 @@ const buildPoLines = async (raw = [], settings) => {
     const product = byId.get(String(input.product));
     if (!product) throw new BadRequestError(`Product not found for line ${index + 1}`, 'INVALID_REFERENCE');
 
-    // Purchase rate defaults to the product's purchase price when not given.
+    // Bought in the base unit or a pack (e.g. cartons); the purchase rate
+    // defaults to the product's purchase price per base unit x pack size.
+    const unit = lineUnit(product, input.unit);
+    assertPackQty(input.qty, unit.factor, product, unit.unit, index);
     const unitPrice =
       input.unitPrice === undefined || input.unitPrice === null || input.unitPrice === ''
-        ? Number(product.purchasePrice || 0)
+        ? Number(product.purchasePrice || 0) * unit.factor
         : Number(input.unitPrice);
     const taxRate =
       input.taxRate === undefined || input.taxRate === null || input.taxRate === ''
@@ -815,7 +820,9 @@ const buildPoLines = async (raw = [], settings) => {
       product: product._id,
       name: product.name || '',
       sku: product.sku || '',
-      unit: product.unit || 'PCS',
+      unit: unit.unit,
+      unitFactor: unit.factor,
+      baseQty: Number(input.qty) * unit.factor,
       hsnCode: product.hsnCode || '',
       receivedQty: 0,
       freeQty: Number(input.freeQty || 0),
@@ -879,7 +886,10 @@ const buildGrnLines = async (raw = [], po) => {
       product: product._id,
       name: product.name || '',
       sku: product.sku || '',
-      unit: product.unit || 'PCS',
+      // Received in the PO line's unit (spot receipts: the base unit).
+      unit: poLine?.unit || product.unit || 'PCS',
+      unitFactor: Number(poLine?.unitFactor || 1),
+      baseQty: accepted * Number(poLine?.unitFactor || 1),
       orderedQty: poLine ? Number(poLine.qty || 0) : 0,
       receivedQty: received,
       acceptedQty: accepted,

@@ -8,6 +8,7 @@ import { ErrorAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { titleCase } from '@/utils/format';
 import { taxBreakupFor, effectiveTaxRate } from '@/utils/tax';
+import { unitOf, unitPriceFor } from '@/utils/units';
 
 /**
  * Shared Phase 5 invoice / credit-note helpers: status vocabularies, action
@@ -327,12 +328,14 @@ export const findInvoicePriceEntry = (priceList, productId, qty) => {
 export const priceInvoiceLine = (row, { products, priceList, settings }) => {
   const product = products?.get(String(row.product)) || null;
   const qty = Number(row.qty) || 0;
-  const entry = product ? findInvoicePriceEntry(priceList, product.id, qty) : null;
+  const unit = product ? unitOf(product, row.unit) : { unit: row.unit || 'PCS', factor: Number(row.unitFactor || 1) };
+  const entry = product ? findInvoicePriceEntry(priceList, product.id, qty * unit.factor) : null;
 
-  const base =
+  const perBase =
     entry && Number(entry.price) > 0
       ? Number(entry.price)
       : Number(product?.sellingPrice ?? product?.mrp ?? row.unitPrice ?? 0);
+  const base = product ? unitPriceFor(product, unit.unit, perBase, Boolean(entry && Number(entry.price) > 0)) : perBase;
 
   const unitPrice =
     row.unitPrice === '' || row.unitPrice == null ? base : Number(row.unitPrice);

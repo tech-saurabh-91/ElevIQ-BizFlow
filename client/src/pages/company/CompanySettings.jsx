@@ -78,6 +78,7 @@ const SERIES_FIELDS = [
   { key: 'purchase', label: 'Purchase order' },
   { key: 'grn', label: 'Goods receipt (GRN)' },
   { key: 'customer', label: 'Customer code' },
+  { key: 'product', label: 'Product code' },
   { key: 'supplier', label: 'Supplier code' },
 ];
 

@@ -31,6 +31,7 @@ import {
 } from '@/components/company/invoice-shared';
 import { breakupRows, buyerStateOf } from '@/utils/tax';
 import { useTaxLabels } from '@/hooks/useLocations';
+import { unitOf, unitOptions, unitPriceFor } from '@/utils/units';
 
 const text = (max = 200) => z.string().trim().max(max).optional().or(z.literal(''));
 const numberText = (message) =>
@@ -338,12 +339,8 @@ export default function InvoiceEditor() {
       const product = productMap.get(String(row.product));
       if (!product) return;
       const qty = Number(row.qty) || 1;
-      const entry = findInvoicePriceEntry(options.priceList, product.id, qty);
-      const base =
-        entry && Number(entry.price) > 0
-          ? Number(entry.price)
-          : Number(product.sellingPrice ?? product.mrp ?? 0);
-      setValue(`items.${index}.unitPrice`, String(base));
+      const entry = findInvoicePriceEntry(options.priceList, product.id, qty * unitOf(product, row.unit).factor);
+      setValue(`items.${index}.unitPrice`, String(priceFor(product, row.unit, qty)));
       setValue(
         `items.${index}.discountPercent`,
         entry?.discountPercent ? String(entry.discountPercent) : ''
@@ -470,6 +467,7 @@ export default function InvoiceEditor() {
             : values.items.map((item) => ({
                 product: item.product,
                 qty: num(item.qty),
+                unit: item.unit || undefined,
                 unitPrice: item.unitPrice === '' ? undefined : num(item.unitPrice),
                 discountPercent:
                   item.discountPercent === '' ? undefined : num(item.discountPercent),
@@ -501,16 +499,28 @@ export default function InvoiceEditor() {
     }
   };
 
+  /** Default price of `qty` x `unit` of a product (price list per base unit x pack size). */
+  const priceFor = (product, unit, qty) => {
+    const factor = unitOf(product, unit).factor;
+    const entry = findInvoicePriceEntry(options?.priceList, product.id, qty * factor);
+    const perBase = entry && Number(entry.price) > 0 ? Number(entry.price) : Number(product.sellingPrice ?? product.mrp ?? 0);
+    return unitPriceFor(product, unit, perBase, Boolean(entry && Number(entry.price) > 0));
+  };
+
+  const changeUnit = (index, unit) => {
+    const product = productMap.get(String(getValues(`items.${index}.product`)));
+    if (!product) return;
+    setValue(`items.${index}.unitPrice`, String(priceFor(product, unit, Number(getValues(`items.${index}.qty`)) || 1)));
+  };
+
   const changeProduct = (index, productId) => {
     const product = productMap.get(String(productId));
     if (!product) return;
     const qty = Number(getValues(`items.${index}.qty`)) || 1;
+    // A new product starts in its base unit.
+    setValue(`items.${index}.unit`, product.unit || 'PCS');
     const entry = findInvoicePriceEntry(options?.priceList, productId, qty);
-    const base =
-      entry && Number(entry.price) > 0
-        ? Number(entry.price)
-        : Number(product.sellingPrice ?? product.mrp ?? 0);
-    setValue(`items.${index}.unitPrice`, String(base));
+    setValue(`items.${index}.unitPrice`, String(priceFor(product, product.unit, qty)));
     setValue(
       `items.${index}.discountPercent`,
       entry?.discountPercent ? String(entry.discountPercent) : ''
@@ -863,6 +873,19 @@ export default function InvoiceEditor() {
                                 error={!!errors.items?.[index]?.qty}
                                 aria-label={`Quantity for line ${index + 1}`}
                               />
+                              {direct && unitOptions(product).length > 1 && (
+                                <Select
+                                  className="mt-1 h-8 text-xs"
+                                  {...register(`items.${index}.unit`, { onChange: (e) => changeUnit(index, e.target.value) })}
+                                  aria-label={`Unit for line ${index + 1}`}
+                                >
+                                  {unitOptions(product).map((u, i, all) => (
+                                    <option key={u.unit} value={u.unit}>
+                                      {u.base ? u.unit : `${u.unit} (${u.factor} ${all[0].unit})`}
+                                    </option>
+                                  ))}
+                                </Select>
+                              )}
                               {errors.items?.[index]?.qty && (
                                 <p className="mt-1 text-xs text-destructive">
                                   {errors.items[index].qty.message}
