@@ -216,14 +216,21 @@ export const supplierListQuerySchema = paginationSchema.extend({
 });
 
 // ---------------------------------------------------------------------------
-// Warehouses
+// Warehouses (hierarchy + van tracking - Phase A)
 // ---------------------------------------------------------------------------
-const WAREHOUSE_TYPES = ['MAIN', 'BRANCH', 'TRANSIT', 'DAMAGED'];
+const WAREHOUSE_TYPES = ['MAIN', 'SUB', 'VAN', 'TRANSIT', 'DAMAGED'];
 
 export const warehouseCreateSchema = z.object({
   name: z.string().trim().min(2, 'Warehouse name is required').max(120),
   code: z.string().trim().toUpperCase().min(2, 'Warehouse code is required').max(20),
   type: z.enum(WAREHOUSE_TYPES).optional(),
+  // Parent rules (MAIN parentless, SUB/TRANSIT/DAMAGED under MAIN, VAN under
+  // MAIN|SUB) are enforced in the controller, which must load the parent doc.
+  parent: refId,
+  // Van-only fields; ignored for other types.
+  vehicleNumber: z.string().trim().toUpperCase().max(20).optional().or(z.literal('')),
+  vehicleType: softString(40),
+  image: softString(500),
   address: addressSchema.optional(),
   phone: softString(20),
   email: z.string().trim().toLowerCase().email('Enter a valid email').optional().or(z.literal('')),
@@ -240,6 +247,32 @@ export const warehouseListQuerySchema = paginationSchema.extend({
   sort: z.enum(['createdAt', 'name', 'code']).optional(),
   type: z.enum(WAREHOUSE_TYPES).optional(),
   isActive: boolQuery,
+});
+
+// --- Van assignments -------------------------------------------------------
+
+export const vanAssignmentCreateSchema = z.object({
+  executive: objectIdSchema,
+  // Defaults to "now" in the controller when omitted.
+  fromDate: z.coerce.date().optional(),
+  dayCloseMandatory: z.boolean().optional(),
+  notes: softString(500),
+});
+
+export const vanAssignmentCloseSchema = z.object({
+  // Defaults to "now" in the controller when omitted.
+  toDate: z.coerce.date().optional(),
+  closeNotes: softString(500),
+});
+
+export const vanAssignmentListQuerySchema = paginationSchema.extend({
+  active: boolQuery,
+  executive: refId,
+});
+
+export const warehouseAssignmentParamsSchema = z.object({
+  id: objectIdSchema,
+  assignmentId: objectIdSchema,
 });
 
 // ---------------------------------------------------------------------------
@@ -536,6 +569,10 @@ export default {
   warehouseCreateSchema,
   warehouseUpdateSchema,
   warehouseListQuerySchema,
+  vanAssignmentCreateSchema,
+  vanAssignmentCloseSchema,
+  vanAssignmentListQuerySchema,
+  warehouseAssignmentParamsSchema,
   routeCreateSchema,
   routeUpdateSchema,
   routeListQuerySchema,

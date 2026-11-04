@@ -8,6 +8,10 @@ import {
   warehouseCreateSchema,
   warehouseUpdateSchema,
   warehouseListQuerySchema,
+  vanAssignmentCreateSchema,
+  vanAssignmentCloseSchema,
+  vanAssignmentListQuerySchema,
+  warehouseAssignmentParamsSchema,
 } from '../../validators/companyValidators.js';
 
 const router = Router();
@@ -21,6 +25,30 @@ router.post(
   authorize('inventory.manage'),
   validate({ params: idParamsSchema }),
   asyncHandler(ctrl.setDefault)
+);
+
+// --- Van assignments (Phase A) ---------------------------------------------
+// History is readable by anyone who can see inventory; changing who drives
+// a van is a manage action.
+router.get(
+  '/:id/assignments',
+  authorize('inventory.view'),
+  validate({ params: idParamsSchema, query: vanAssignmentListQuerySchema }),
+  ctrl.listAssignments
+);
+
+router.post(
+  '/:id/assignments',
+  authorize('inventory.manage'),
+  validate({ params: idParamsSchema, body: vanAssignmentCreateSchema }),
+  ctrl.assign
+);
+
+router.post(
+  '/:id/assignments/:assignmentId/close',
+  authorize('inventory.manage'),
+  validate({ params: warehouseAssignmentParamsSchema, body: vanAssignmentCloseSchema }),
+  ctrl.closeAssignment
 );
 
 router

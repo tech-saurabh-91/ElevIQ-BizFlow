@@ -214,7 +214,8 @@ beforeAll(async () => {
     const branch = await Warehouse.create({
       name: 'Branch Store',
       code: 'BR1',
-      type: 'BRANCH',
+      type: 'SUB',
+      parent: main._id,
       isActive: true,
     });
     state.mainWarehouse = main;

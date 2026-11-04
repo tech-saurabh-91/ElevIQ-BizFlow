@@ -1,6 +1,8 @@
+import mongoose from 'mongoose';
 import { runWithContext } from '../middlewares/tenantContext.js';
 import logger from '../utils/logger.js';
 import Warehouse from '../models/Warehouse.js';
+import VanAssignment from '../models/VanAssignment.js';
 import Route from '../models/Route.js';
 import Product from '../models/Product.js';
 import Customer from '../models/Customer.js';
@@ -22,9 +24,12 @@ const inTenant = (company, fn) =>
 
 const seedWarehouses = (company, users) => {
   const storeKeeper = users.find((u) => u.role === 'WAREHOUSE') || null;
+  // Pre-generated so children can reference MAIN in the same insertMany.
+  const mainId = new mongoose.Types.ObjectId();
 
   return [
     {
+      _id: mainId,
       name: 'Main Warehouse',
       code: 'WH-MAIN',
       type: 'MAIN',
@@ -39,7 +44,8 @@ const seedWarehouses = (company, users) => {
     {
       name: 'Pune City Branch',
       code: 'WH-PUNE',
-      type: 'BRANCH',
+      type: 'SUB',
+      parent: mainId,
       phone: '+912023456789',
       email: 'pune.branch@demotraders.com',
       capacity: 4500,
@@ -50,11 +56,85 @@ const seedWarehouses = (company, users) => {
       name: 'PCMC Transit Depot',
       code: 'WH-PCMC',
       type: 'TRANSIT',
+      parent: mainId,
       capacity: 1800,
       address: { line1: 'Sector 19, Bhosari', city: 'Pimpri-Chinchwad', state: 'Maharashtra', pincode: '411039' },
       notes: 'Cross-dock for PCMC beat vans.',
     },
+    {
+      name: 'Delivery Van 01',
+      code: 'WH-VAN01',
+      type: 'VAN',
+      parent: mainId,
+      vehicleNumber: 'MH12AB1234',
+      vehicleType: 'Tata Ace',
+      phone: '+912034567890',
+      capacity: 800,
+      address: { line1: 'Plot 14, MIDC Industrial Area', city: 'Pune', state: 'Maharashtra', pincode: '411019' },
+      notes: 'Mobile stock for the daily beat runs.',
+    },
   ];
+};
+
+/**
+ * Idempotent Phase-A demo state, applied on every run (fresh insert or an
+ * existing Atlas demo):
+ *  - backfill missing parents for child warehouses,
+ *  - ensure a van exists,
+ *  - ensure the demo van carries one active assignment (amit).
+ */
+const ensureVanHierarchy = async (company, users) => {
+  await inTenant(company, async () => {
+    const main =
+      (await Warehouse.findOne({ type: 'MAIN', isDefault: true })) ||
+      (await Warehouse.findOne({ type: 'MAIN' })) ||
+      (await Warehouse.findOne({}).sort({ createdAt: 1 }));
+    if (!main) return;
+
+    // Legacy children (pre-hierarchy rows) nest under the default MAIN.
+    await Warehouse.updateMany(
+      { type: { $in: ['SUB', 'TRANSIT', 'DAMAGED', 'VAN'] }, parent: null },
+      { $set: { parent: main._id } }
+    );
+
+    let van = await Warehouse.findOne({ type: 'VAN' }).sort({ createdAt: 1 });
+    if (!van) {
+      van = await Warehouse.create({
+        name: 'Delivery Van 01',
+        code: 'WH-VAN01',
+        type: 'VAN',
+        parent: main._id,
+        vehicleNumber: 'MH12AB1234',
+        vehicleType: 'Tata Ace',
+        capacity: 800,
+        address: { line1: 'Plot 14, MIDC Industrial Area', city: 'Pune', state: 'Maharashtra', pincode: '411019' },
+        notes: 'Mobile stock for the daily beat runs.',
+      });
+      logger.info('Seeded demo van warehouse.');
+    }
+
+    // Only open a demo assignment when the company has no assignment
+    // history at all - a deliberately closed spell stays closed.
+    const anyAssignments = await VanAssignment.countDocuments({});
+    if (anyAssignments > 0) return;
+
+    const amit =
+      users.find((u) => u.email === 'amit@demotraders.com') ||
+      users.find((u) => u.role === 'SALESMAN') ||
+      null;
+    if (!amit) return;
+
+    await VanAssignment.create({
+      warehouse: van._id,
+      executive: amit._id,
+      fromDate: new Date(),
+      toDate: null,
+      active: true,
+      dayCloseMandatory: true,
+      notes: 'Demo: field van for the beat runs.',
+    });
+    logger.info('Seeded demo van assignment.');
+  });
 };
 
 const seedRoutes = (warehouses, users) => {
@@ -323,6 +403,10 @@ const run = async (company, users = []) => {
   } else {
     warehouses = await inTenant(company, () => Warehouse.find({}).sort({ createdAt: 1 }).lean());
   }
+
+  // Phase A: hierarchy backfill + demo van + active assignment (idempotent).
+  await ensureVanHierarchy(company, users);
+  warehouses = await inTenant(company, () => Warehouse.find({}).sort({ createdAt: 1 }).lean());
 
   const existingRoutes = await inTenant(company, () => Route.countDocuments({}));
   let routes;

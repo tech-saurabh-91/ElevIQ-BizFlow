@@ -453,29 +453,59 @@ describe('Phase 3 - Warehouses', () => {
     state.warehouseId = res.body.data.id;
   });
 
-  test('creates a branch and switches the default via set-default', async () => {
-    const branch = await request
+  test('creates a sub warehouse nested under the main one', async () => {
+    const sub = await request
       .post('/api/v1/warehouses')
       .set(as(state.adminToken))
-      .send({ name: 'Pune City Branch', code: 'WH-PUNE', type: 'BRANCH' });
-    expect(branch.status).toBe(201);
-    expect(branch.body.data.isDefault).toBe(false);
-    state.branchWarehouseId = branch.body.data.id;
+      .send({
+        name: 'Pune City Branch',
+        code: 'WH-PUNE',
+        type: 'SUB',
+        parent: state.warehouseId,
+      });
+    expect(sub.status).toBe(201);
+    expect(sub.body.data.type).toBe('SUB');
+    expect(sub.body.data.isDefault).toBe(false);
+    expect(sub.body.data.parent?.id || sub.body.data.parent?._id).toBe(state.warehouseId);
+    state.branchWarehouseId = sub.body.data.id;
+  });
 
+  test('enforces hierarchy rules and default restrictions', async () => {
+    // A SUB must be nested under a MAIN.
+    const orphan = await request
+      .post('/api/v1/warehouses')
+      .set(as(state.adminToken))
+      .send({ name: 'Orphan Sub', code: 'WH-ORPH', type: 'SUB' });
+    expect(orphan.status).toBe(400);
+    expect(orphan.body.code).toBe('WAREHOUSE_PARENT');
+
+    // A MAIN can never have a parent.
+    const nestedMain = await request
+      .post('/api/v1/warehouses')
+      .set(as(state.adminToken))
+      .send({ name: 'Nested Main', code: 'WH-NM', type: 'MAIN', parent: state.warehouseId });
+    expect(nestedMain.status).toBe(400);
+    expect(nestedMain.body.code).toBe('WAREHOUSE_PARENT');
+
+    // Only a MAIN may become the default.
     const setDefault = await request
       .post(`/api/v1/warehouses/${state.branchWarehouseId}/set-default`)
       .set(as(state.adminToken));
-    expect(setDefault.status).toBe(200);
+    expect(setDefault.status).toBe(400);
+    expect(setDefault.body.code).toBe('DEFAULT_WAREHOUSE');
 
-    const main = await request
-      .get(`/api/v1/warehouses/${state.warehouseId}`)
-      .set(as(state.adminToken));
-    expect(main.body.data.isDefault).toBe(false);
+    // Changing the default MAIN's type away from MAIN is refused too.
+    const retyped = await request
+      .patch(`/api/v1/warehouses/${state.warehouseId}`)
+      .set(as(state.adminToken))
+      .send({ type: 'SUB' });
+    expect(retyped.status).toBe(400);
+    expect(retyped.body.code).toBe('DEFAULT_WAREHOUSE');
   });
 
   test('blocks deleting the default warehouse', async () => {
     const res = await request
-      .delete(`/api/v1/warehouses/${state.branchWarehouseId}`)
+      .delete(`/api/v1/warehouses/${state.warehouseId}`)
       .set(as(state.adminToken));
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('DEFAULT_WAREHOUSE');

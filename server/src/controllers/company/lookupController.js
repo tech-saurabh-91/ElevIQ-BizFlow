@@ -37,7 +37,7 @@ export const options = asyncHandler(async (req, res) => {
         .limit(limit)
         .lean(),
       Warehouse.find({ ...active, ...match(q, ['name', 'code']) })
-        .select('name code type isDefault')
+        .select('name code type parent vehicleNumber vehicleType image isDefault')
         .sort({ isDefault: -1, name: 1 })
         .limit(limit)
         .lean(),
