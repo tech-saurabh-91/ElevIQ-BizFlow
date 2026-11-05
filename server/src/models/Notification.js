@@ -27,6 +27,8 @@ const notificationSchema = new mongoose.Schema(
         'ANNOUNCEMENT',
         'TARGET_ACHIEVED',
         'CREDIT_LIMIT',
+        'STOCK_REQUEST',
+        'EXPENSE_REJECTED',
       ],
       default: 'SYSTEM',
       index: true,

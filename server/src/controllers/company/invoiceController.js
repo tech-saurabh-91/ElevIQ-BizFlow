@@ -33,8 +33,8 @@ import {
   syncOrderInvoicing,
 } from '../../services/invoiceService.js';
 import { taxBreakupFor, sellerStateOf, buyerStateOf } from '../../services/orderService.js';
-import { activeVanOf, assertDayClosed, assertVanStock } from '../../services/vanService.js';
-import { recordMovement } from '../../services/inventoryService.js';
+import { activeVanOf, assertDayClosed } from '../../services/vanService.js';
+import { recordMovement, resolveDefaultWarehouse, assertWarehouseStock } from '../../services/inventoryService.js';
 import { baseQtyOf } from '../../services/catalogService.js';
 
 /** Relations returned on every invoice read so the UI never needs a second call. */
@@ -291,27 +291,31 @@ const issueInvoice = async (req, invoice, note = '') => {
   await assertDraftQuantities(invoice);
 
   recalcInvoiceBalance(invoice);
-  // A direct invoice raised on a van is a spot sale: goods leave the van now.
-  if (!invoice.order && invoice.warehouse && !invoice.stockPosted) {
-    const van = await Warehouse.findOne({ _id: invoice.warehouse, type: 'VAN' }).lean();
-    if (van) {
-      const settings = await settingsOf(req);
-      await assertVanStock(van, invoice.items, settings);
+  // A direct invoice (no order) is a spot / counter sale: the goods leave its
+  // warehouse now - the van it was billed from, else the main warehouse.
+  // Invoices raised from an order move stock when the order is dispatched.
+  if (!invoice.order && !invoice.stockPosted) {
+    const settings = await settingsOf(req);
+    const warehouseId = invoice.warehouse || (await resolveDefaultWarehouse(settings))?._id;
+    if (warehouseId) {
+      const warehouse = await Warehouse.findById(warehouseId).lean();
+      await assertWarehouseStock(warehouse, invoice.items, settings);
       for (const line of invoice.items) {
         await recordMovement({
           product: line.product,
-          warehouse: van._id,
+          warehouse: warehouse._id,
           qty: -baseQtyOf(line),
           type: MOVEMENT_TYPES.SALES_OUT,
           refType: 'INVOICE',
           refId: invoice._id,
           refNo: invoice.invoiceNo || '',
-          reason: 'Van sale',
+          reason: warehouse.type === 'VAN' ? 'Van sale' : 'Direct sale',
           unitCost: Number(line.unitPrice || 0) / Number(line.unitFactor || 1),
           movedBy: req.user.id,
           settings,
         });
       }
+      invoice.warehouse = warehouse._id;
       invoice.stockPosted = true;
     }
   }
@@ -461,6 +465,7 @@ export const create = asyncHandler(async (req, res) => {
     if (!payload.customerId) throw new BadRequestError('Customer is required', 'VALIDATION_ERROR');
     // Van sales: an executive driving a van invoices from it (once earlier
     // days are settled when day close is mandatory).
+    if (req.user.role === 'SALESMAN') payload.salesman = req.user.id;
     const seller = payload.salesman || req.user.id;
     await assertDayClosed(seller, req.company);
     const driving = await activeVanOf(seller);
@@ -473,9 +478,10 @@ export const create = asyncHandler(async (req, res) => {
   }
 
   const snapshot = snapshotFor({ customer, order, payload, settings, req });
-  if (!order && snapshot.warehouse) {
-    const van = await Warehouse.findOne({ _id: snapshot.warehouse, type: 'VAN' }).lean();
-    if (van) await assertVanStock(van, priced.lines, settings);
+  if (!order) {
+    // Fail early (at draft time) when the selling warehouse cannot cover it.
+    const warehouseId = snapshot.warehouse || (await resolveDefaultWarehouse(settings))?._id;
+    if (warehouseId) await assertWarehouseStock(warehouseId, priced.lines, settings);
   }
   priced.taxBreakup = taxBreakupFor(priced.totals.taxTotal, settings, {
     sellerState: sellerStateOf(settings, req.company),
@@ -644,7 +650,7 @@ export const cancel = asyncHandler(async (req, res) => {
     invoice.balanceDue = 0;
   }
 
-  // Goods of a cancelled van sale go back onto the van.
+  // Goods of a cancelled direct sale go back where they left from.
   if (wasIssued && invoice.stockPosted) {
     const settings = await settingsOf(req);
     for (const line of invoice.items) {
@@ -656,7 +662,7 @@ export const cancel = asyncHandler(async (req, res) => {
         refType: 'INVOICE',
         refId: invoice._id,
         refNo: invoice.invoiceNo || '',
-        reason: 'Van sale cancelled',
+        reason: 'Invoice cancelled',
         movedBy: req.user.id,
         settings,
       });

@@ -669,15 +669,16 @@ describe('Phase 6 - stats, list, export & RBAC', () => {
       expect(accountantDel.status).toBe(403);
     }
 
-    // SALESMAN lacks payments.view but has payments.create.
-    const salesmanView = await request.get('/api/v1/payments').set(as(state.salesmanToken));
-    expect(salesmanView.status).toBe(403);
-
+    // SALESMAN collects, and sees only his own collections.
     const salesmanCreate = await createPayment(
       { customerId: String(state.customer._id), amount: 55 },
       state.salesmanToken
     );
     expect(salesmanCreate.status).toBe(201);
+    const salesmanView = await request.get('/api/v1/payments').set(as(state.salesmanToken)).query({ limit: 100 });
+    expect(salesmanView.status).toBe(200);
+    expect(salesmanView.body.data.length).toBeGreaterThan(0);
+    expect(salesmanView.body.data.every((p) => String(p.collectedBy?.id || p.collectedBy) === String(salesmanCreate.body.data.collectedBy?.id || salesmanCreate.body.data.collectedBy))).toBe(true);
   });
 
   test('MANAGER can view the collection register', async () => {

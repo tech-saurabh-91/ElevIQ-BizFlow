@@ -26,7 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { StatusBadge } from '@/components/ui/badge';
+import { Badge, StatusBadge } from '@/components/ui/badge';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -45,6 +45,7 @@ import {
   WorkflowDialog,
   CheckOutDialog,
   captureGps,
+  noOrderReasonLabel,
   outcomeLabel,
   purposeLabel,
   visitActionsFor,
@@ -372,12 +373,17 @@ export default function Visits() {
     {
       key: 'outcome',
       header: 'Outcome',
-      render: (row) =>
-        row.outcome ? (
-          <StatusBadge status={row.outcome} />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      render: (row) => (
+        <div className="flex flex-col items-start gap-1">
+          {row.outcome ? <StatusBadge status={row.outcome} /> : <span className="text-xs text-muted-foreground">—</span>}
+          {row.noOrderReason && <span className="text-xs text-muted-foreground">{noOrderReasonLabel(row.noOrderReason)}</span>}
+          {row.outsideGeofence && (
+            <Badge tone="warning" title="Checked in away from the customer's pinned location">
+              {row.checkInDistanceM != null ? `${row.checkInDistanceM} m away` : 'Away from shop'}
+            </Badge>
+          )}
+        </div>
+      ),
     },
     {
       key: 'orderValue',

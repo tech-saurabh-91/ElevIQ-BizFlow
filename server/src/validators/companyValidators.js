@@ -518,6 +518,7 @@ export const settingsUpdateSchema = z.object({
     .object({
       geofenceRadiusM: z.coerce.number().int().min(10).max(5000).optional(),
       requireGps: z.boolean().optional(),
+      requireAttendance: z.boolean().optional(),
       requireSelfie: z.boolean().optional(),
       trackLiveLocation: z.boolean().optional(),
       workStart: softString(5),

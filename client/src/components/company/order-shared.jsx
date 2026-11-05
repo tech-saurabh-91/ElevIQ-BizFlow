@@ -61,10 +61,11 @@ export const orderActionsFor = (order, can) => {
 
   if (status === 'DRAFT' && can('orders.update')) out.push('submit');
   if (status === 'PENDING_APPROVAL' && can('orders.approve')) out.push('approve', 'reject');
-  if (['CONFIRMED', 'PARTIALLY_INVOICED'].includes(status) && can('orders.update')) {
+  // Dispatch / deliver move godown stock - the warehouse team's job.
+  if (['CONFIRMED', 'PARTIALLY_INVOICED', 'FULLY_INVOICED'].includes(status) && can('orders.dispatch')) {
     out.push('dispatch');
   }
-  if (status === 'DISPATCHED' && can('orders.update')) out.push('deliver');
+  if (status === 'DISPATCHED' && can('orders.dispatch')) out.push('deliver');
   if (
     ['DRAFT', 'PENDING_APPROVAL', 'CONFIRMED', 'PARTIALLY_INVOICED'].includes(status) &&
     can('orders.cancel')

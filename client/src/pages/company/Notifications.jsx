@@ -77,7 +77,7 @@ export default function Notifications() {
 
   const { data: unreadData } = useQuery({
     queryKey: ['company', 'notifications', 'unread-count'],
-    queryFn: async () => (await api.get('/v1/notifications/unread-count')).data?.data,
+    queryFn: async () => (await api.get('/v1/notifications/unread-count')).data?.data ?? { unread: 0 },
     refetchInterval: 60_000,
   });
 

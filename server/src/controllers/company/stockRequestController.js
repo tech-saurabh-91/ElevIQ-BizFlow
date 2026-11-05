@@ -11,6 +11,7 @@ import { AUDIT_ACTIONS, COMPANY_ROLES, DEFAULT_PERMISSIONS } from '../../config/
 import { nextSeries } from '../../utils/numberSeries.js';
 import { toPlain } from './_helpers.js';
 import { activeVanOf, assertDayClosed, issueToVan, loadVan, receiveOnVan } from '../../services/vanService.js';
+import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
 
 /**
  * Van stock requests: the executive asks, a manager adjusts and approves
@@ -96,6 +97,16 @@ export const create = asyncHandler(async (req, res) => {
   doc.requestNo = await nextSeries(req.companyId, 'STOCK_REQUEST', { prefix: 'SR', pad: 5 });
   await doc.save();
   audit(req, { action: AUDIT_ACTIONS.CREATE, entityType: 'StockRequest', entityId: doc._id, entityLabel: doc.requestNo, description: `Stock request ${doc.requestNo} for van ${doc.vanCode}` });
+  await notifyPermission(req.companyId, 'inventory.manage', {
+    type: 'STOCK_REQUEST',
+    title: `Stock request ${doc.requestNo} from ${doc.executiveName}`,
+    body: `Van ${doc.vanCode} · ${doc.items.length} item(s) waiting for approval`,
+    link: '/app/stock-requests',
+    entityType: 'StockRequest',
+    entityId: doc._id,
+    priority: 'HIGH',
+    exclude: req.user.id,
+  });
   return respond(res, doc, 'Request sent for approval', 201);
 });
 
@@ -128,6 +139,15 @@ export const approve = asyncHandler(async (req, res) => {
   history(doc, S.APPROVED, req, req.body.notes || `Issued on ${transfer.transferNo}`);
   await doc.save();
   audit(req, { action: AUDIT_ACTIONS.STATUS_CHANGE, entityType: 'StockRequest', entityId: doc._id, entityLabel: doc.requestNo, description: `Stock request ${doc.requestNo} approved and issued (${transfer.transferNo})` });
+  await notifyUsers([doc.executive], {
+    type: 'STOCK_REQUEST',
+    title: `Stock request ${doc.requestNo} approved`,
+    body: `Issued on ${transfer.transferNo} - confirm what you received`,
+    link: '/app/stock-requests',
+    entityType: 'StockRequest',
+    entityId: doc._id,
+    priority: 'HIGH',
+  });
   return respond(res, doc, 'Approved - stock issued to the van');
 });
 
@@ -140,6 +160,14 @@ export const reject = asyncHandler(async (req, res) => {
   doc.rejectReason = req.body.reason;
   history(doc, S.REJECTED, req, req.body.reason);
   await doc.save();
+  await notifyUsers([doc.executive], {
+    type: 'STOCK_REQUEST',
+    title: `Stock request ${doc.requestNo} rejected`,
+    body: req.body.reason,
+    link: '/app/stock-requests',
+    entityType: 'StockRequest',
+    entityId: doc._id,
+  });
   return respond(res, doc, 'Request rejected');
 });
 

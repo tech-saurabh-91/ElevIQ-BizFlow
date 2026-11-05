@@ -110,6 +110,10 @@ const creditNoteSchema = new mongoose.Schema(
     appliedAmount: money(),
     unappliedAmount: money(),
 
+    /** Goods taken back into stock on issue (returns) and where they went. */
+    stockPosted: { type: Boolean, default: false },
+    stockWarehouse: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
+
     status: { type: String, enum: CREDIT_NOTE_STATUS_LIST, default: CREDIT_NOTE_STATUS.DRAFT, index: true },
     statusHistory: { type: [creditNoteStatusEntrySchema], default: [] },
 

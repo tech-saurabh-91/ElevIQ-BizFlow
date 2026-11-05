@@ -114,6 +114,8 @@ const settingSchema = new mongoose.Schema(
       type: {
         geofenceRadiusM: { type: Number, default: 100 },
         requireGps: { type: Boolean, default: true },
+        /** Start the day (attendance check-in) before visiting customers. */
+        requireAttendance: { type: Boolean, default: true },
         requireSelfie: { type: Boolean, default: false },
         trackLiveLocation: { type: Boolean, default: true },
         workStart: { type: String, default: '09:30' },

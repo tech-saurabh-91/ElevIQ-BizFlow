@@ -27,14 +27,28 @@ const OUTCOME_TONE = { ORDER_TAKEN: 'success', INVOICED: 'success', PAYMENT_COLL
 
 function VisitChip({ visit }) {
   if (!visit) return <Badge tone="outline">Not visited</Badge>;
-  if (visit.status === 'IN_PROGRESS') return <Badge tone="info">Checked in {formatTime(visit.checkInAt)}</Badge>;
+  const away = visit.outsideGeofence ? (
+    <Badge tone="warning" title="Checked in away from the customer's pinned location">
+      {visit.checkInDistanceM != null ? `${visit.checkInDistanceM} m away` : 'Away'}
+    </Badge>
+  ) : null;
+  if (visit.status === 'IN_PROGRESS')
+    return (
+      <span className="flex flex-wrap gap-1">
+        <Badge tone="info">Checked in {formatTime(visit.checkInAt)}</Badge>
+        {away}
+      </span>
+    );
   if (visit.status !== 'COMPLETED') return <Badge tone="muted">{outcomeLabel(visit.status)}</Badge>;
   const extra = visit.invoiceNo || visit.orderNo || (visit.noOrderReason ? noOrderReasonLabel(visit.noOrderReason) : '');
   return (
-    <Badge tone={OUTCOME_TONE[visit.outcome] || 'muted'}>
-      {outcomeLabel(visit.outcome)}
-      {extra ? ` · ${extra}` : ''}
-    </Badge>
+    <span className="flex flex-wrap gap-1">
+      <Badge tone={OUTCOME_TONE[visit.outcome] || 'muted'}>
+        {outcomeLabel(visit.outcome)}
+        {extra ? ` · ${extra}` : ''}
+      </Badge>
+      {away}
+    </span>
   );
 }
 
@@ -51,6 +65,14 @@ export default function MyBeat() {
     queryKey: ['company', 'beat', 'mine'],
     queryFn: async () => (await api.get('/v1/beat-plans/mine')).data?.data,
   });
+  // Start-your-day gate (when the company requires attendance before visits).
+  const attendance = useQuery({
+    queryKey: ['company', 'attendance', 'today'],
+    queryFn: async () => (await api.get('/v1/field-force/attendance/today')).data?.data ?? null,
+    enabled: can('fieldforce.attendance.view'),
+  });
+  const dayNotStarted =
+    attendance.data && attendance.data.config?.requireAttendance !== false && !attendance.data.attendance?.isCheckedIn;
   const routes = data?.routes || [];
   const open = data?.openVisit;
 
@@ -77,7 +99,9 @@ export default function MyBeat() {
       queryClient.invalidateQueries({ queryKey: ['company', 'beat'] });
       queryClient.invalidateQueries({ queryKey: ['company', 'visits'] });
     } catch (err) {
-      toast.error(apiError(err).message);
+      const e = apiError(err);
+      toast.error(e.message);
+      if (e.code === 'ATTENDANCE_REQUIRED') queryClient.invalidateQueries({ queryKey: ['company', 'attendance'] });
     } finally {
       setBusy('');
     }
@@ -97,6 +121,15 @@ export default function MyBeat() {
         <ErrorAlert title="Could not load your beat" message={apiError(error).message} />
       ) : (
         <>
+          {dayNotStarted && (
+            <Card className="flex flex-wrap items-center justify-between gap-3 border-warning/50 bg-warning/10 p-4">
+              <p className="text-sm">Start your day in attendance before checking in at customers.</p>
+              <Button size="sm" onClick={() => navigate('/app/attendance')}>
+                Start my day
+              </Button>
+            </Card>
+          )}
+
           {open && (
             <Card className="border-brand-500/40 bg-brand-500/5 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -194,7 +227,13 @@ export default function MyBeat() {
                             {c.visit?.status === 'COMPLETED' ? (
                               <CheckCircle2 className="h-5 w-5 text-success" aria-label="Visited" />
                             ) : !here ? (
-                              <Button size="sm" variant="outline" onClick={() => checkIn(c)} loading={busy === c.id} disabled={Boolean(open) || !can('fieldforce.visits.manage')}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => checkIn(c)}
+                                loading={busy === c.id}
+                                disabled={Boolean(open) || dayNotStarted || !can('fieldforce.visits.manage')}
+                              >
                                 <LogIn className="h-4 w-4" /> Check in
                               </Button>
                             ) : null}

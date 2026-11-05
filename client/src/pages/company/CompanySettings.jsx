@@ -177,6 +177,7 @@ const schema = z.object({
   fieldForce: z.object({
     geofenceRadiusM: str(6),
     requireGps: z.boolean(),
+    requireAttendance: z.boolean(),
     requireSelfie: z.boolean(),
     trackLiveLocation: z.boolean(),
     workStart: str(5),
@@ -272,6 +273,7 @@ const toDefaults = (data) => ({
   fieldForce: {
     geofenceRadiusM: String(data?.fieldForce?.geofenceRadiusM ?? 100),
     requireGps: data?.fieldForce?.requireGps ?? true,
+    requireAttendance: data?.fieldForce?.requireAttendance ?? true,
     requireSelfie: data?.fieldForce?.requireSelfie ?? false,
     trackLiveLocation: data?.fieldForce?.trackLiveLocation ?? true,
     workStart: data?.fieldForce?.workStart || '09:30',
@@ -897,6 +899,11 @@ function SettingsForm({ data, canUpdate, tab }) {
               </Field>
               <div className="space-y-2 sm:col-span-2">
                 <Checkbox label="Require GPS at check-in" {...register('fieldForce.requireGps')} disabled={disabled} />
+                <Checkbox
+                  label="Salesmen must start their day (attendance) before visiting customers"
+                  {...register('fieldForce.requireAttendance')}
+                  disabled={disabled}
+                />
               </div>
               <ComingSoon
                 className="sm:col-span-2"
@@ -958,8 +965,9 @@ const ACTION_LABELS = {
   cancel: 'Cancel',
   manage: 'Manage',
   post: 'Post',
+  dispatch: 'Dispatch & deliver',
 };
-const ACTION_ORDER = ['view', 'create', 'update', 'delete', 'manage', 'approve', 'post', 'cancel', 'export'];
+const ACTION_ORDER = ['view', 'create', 'update', 'delete', 'manage', 'approve', 'dispatch', 'post', 'cancel', 'export'];
 const humanize = (word) => word.charAt(0).toUpperCase() + word.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase();
 const moduleLabel = (module) => MODULE_LABELS[module] || humanize(module);
 const permissionLabel = (key) => {

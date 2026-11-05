@@ -11,7 +11,7 @@ import Product from '../models/Product.js';
 import Payment from '../models/Payment.js';
 import { AppError, BadRequestError } from '../utils/errors.js';
 import { MOVEMENT_TYPES, TRANSFER_STATUS } from '../config/constants.js';
-import { recordMovement, nextTransferNumber } from './inventoryService.js';
+import { recordMovement, nextTransferNumber, assertWarehouseStock } from './inventoryService.js';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -318,25 +318,8 @@ export default { activeVanOf, loadVan, vanStock, pendingDays, assertDayClosed, d
  * A van order may only book what is on the van (base units, all packs of a
  * product added up) unless the company allows negative stock.
  */
-export const assertVanStock = async (van, lines, settings) => {
-  if (settings?.order?.allowNegativeStock) return;
-  const { baseQtyOf } = await import('./catalogService.js');
-  const wanted = new Map();
-  lines.forEach((l) => {
-    const key = String(l.product);
-    wanted.set(key, { name: l.name, unit: l.unit, qty: (wanted.get(key)?.qty || 0) + baseQtyOf(l) });
-  });
-  const balances = await StockBalance.find({ warehouse: van._id, product: { $in: [...wanted.keys()] } }).lean();
-  const onVan = new Map(balances.map((b) => [String(b.product), Number(b.qty || 0) - Number(b.reservedQty || 0)]));
-  const errors = [];
-  wanted.forEach((w, key) => {
-    const available = round3(Math.max(0, onVan.get(key) || 0));
-    if (w.qty > available + 1e-9) errors.push({ field: 'items', message: `${w.name}: ${available} on van ${van.code}, ${round3(w.qty)} requested` });
-  });
-  if (errors.length) {
-    throw new AppError(`Not enough stock on van ${van.code}`, { status: 422, code: 'INSUFFICIENT_STOCK', errors });
-  }
-};
+export const assertVanStock = async (van, lines, settings) => assertWarehouseStock(van, lines, settings);
+
 
 /**
  * Issue stock from the van's parent warehouse towards the van: a VAN_LOAD

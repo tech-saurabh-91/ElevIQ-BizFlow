@@ -314,6 +314,47 @@ export const releaseReservation = async (lines = [], { warehouseId = null, setti
 };
 
 /**
+ * Refuse a sale that a warehouse cannot cover (all packs of a product added up
+ * in base units) unless the company allows negative stock. Stock is checked in
+ * THAT warehouse - stock sitting on vans or other godowns does not count.
+ * `excludeReserved` keeps confirmed orders' reservations out of reach of
+ * counter / van sales; a dispatch consumes its own reservation so checks on-hand.
+ */
+export const assertWarehouseStock = async (warehouse, lines, settings, { excludeReserved = true } = {}) => {
+  if (settings?.order?.allowNegativeStock || !warehouse) return;
+  const wh = warehouse._id ? warehouse : await Warehouse.findById(warehouse).select('name code').lean();
+  const wanted = new Map();
+  lines.forEach((l) => {
+    const key = String(l.product);
+    const qty = baseQtyOf(l);
+    if (qty <= 0) return;
+    wanted.set(key, { name: l.name, qty: (wanted.get(key)?.qty || 0) + qty });
+  });
+  if (!wanted.size) return;
+  const balances = await StockBalance.find({ warehouse: wh._id, product: { $in: [...wanted.keys()] } }).lean();
+  const free = new Map(
+    balances.map((b) => [String(b.product), Number(b.qty || 0) - (excludeReserved ? Number(b.reservedQty || 0) : 0)])
+  );
+  const errors = [];
+  wanted.forEach((w, key) => {
+    const available = round2(Math.max(0, free.get(key) || 0));
+    if (w.qty > available + EPSILON) {
+      errors.push({ field: 'items', message: `${w.name || 'Item'}: ${available} available in ${wh.name || wh.code}, ${round2(w.qty)} needed` });
+    }
+  });
+  if (errors.length) {
+    throw new AppError(`Not enough stock in ${wh.name || wh.code || 'the warehouse'}`, {
+      status: 422,
+      code: ErrorCodes.INSUFFICIENT_STOCK,
+      errors,
+    });
+  }
+};
+
+/** The company's damaged-goods warehouse, if it keeps one. */
+export const damagedWarehouse = async () => Warehouse.findOne({ type: 'DAMAGED', isActive: { $ne: false } }).lean();
+
+/**
  * Book stock OUT for a dispatched order. Consumes the reservation (if any) and
  * writes one SALES_OUT movement per line so the ledger reflects the sale.
  *
@@ -327,22 +368,21 @@ export const dispatchOrderStock = async (order, { settings = null, movedBy = nul
   const lines = (order.items || []).filter((l) => baseQtyOf(l) > 0);
 
   // ---- pre-flight: nothing is written unless the whole dispatch can go out ----
-  if (!negativeAllowed) {
+  // Checked against the dispatching warehouse, not the company total (stock on
+  // vans or in other godowns cannot be shipped from here).
+  if (!negativeAllowed && warehouse) {
+    await assertWarehouseStock(warehouse, lines, cfg, { excludeReserved: false });
+  } else if (!negativeAllowed) {
+    // No warehouse set up at all: fall back to the company-wide total.
     for (const line of lines) {
       const product = await Product.findById(line.product).select('name unit stock');
-      if (!product) {
-        throw new BadRequestError('Product not found', 'INVALID_REFERENCE');
-      }
-      const qty = baseQtyOf(line); // stock is counted in base units
-      if (Number(product.stock || 0) + EPSILON < qty) {
-        throw new AppError(
-          `Insufficient stock for ${product.name}: only ${product.stock || 0} ${product.unit || 'unit'}(s) available, ${qty} requested`,
-          {
-            status: 422,
-            code: ErrorCodes.INSUFFICIENT_STOCK,
-            errors: [{ field: 'items', message: `Only ${product.stock || 0} ${product.unit || 'unit'}(s) in stock` }],
-          }
-        );
+      if (!product) throw new BadRequestError('Product not found', 'INVALID_REFERENCE');
+      if (Number(product.stock || 0) + EPSILON < baseQtyOf(line)) {
+        throw new AppError(`Insufficient stock for ${product.name}: only ${product.stock || 0} ${product.unit || 'unit'}(s) available`, {
+          status: 422,
+          code: ErrorCodes.INSUFFICIENT_STOCK,
+          errors: [{ field: 'items', message: `Only ${product.stock || 0} ${product.unit || 'unit'}(s) in stock` }],
+        });
       }
     }
   }

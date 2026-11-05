@@ -230,7 +230,7 @@ export const updatePermissions = asyncHandler(async (req, res) => {
     severity: 'WARN',
   });
 
-  return success(res, { message: 'Permissions updated', data: { rolePermissions: clean } });
+  return success(res, { message: 'Permissions updated', data: { rolePermissions: { ...buildDefaultPermissions(), ...clean } } });
 });
 
 /** POST /api/v1/settings/permissions/reset - restore the shipped defaults. */

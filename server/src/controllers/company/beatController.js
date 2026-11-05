@@ -13,7 +13,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../utils/error
 import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, VISIT_STATUS } from '../../config/constants.js';
 import { toPlain } from './_helpers.js';
-import { distanceMeters, nextVisitNumber } from '../../services/fieldForceService.js';
+import { distanceMeters, nextVisitNumber, assertCanStartVisit, markGeofence } from '../../services/fieldForceService.js';
 import { tzOf, todayIn, dayBounds } from '../../services/vanService.js';
 
 dayjs.extend(utc);
@@ -148,6 +148,8 @@ const visitOut = (v) =>
     orderNo: v.orderNo || '',
     invoiceNo: v.invoiceNo || '',
     noOrderReason: v.noOrderReason || '',
+    outsideGeofence: Boolean(v.outsideGeofence),
+    checkInDistanceM: v.checkInDistanceM ?? null,
   };
 
 /** GET /beat-plans/mine?date= - my routes for the day, with their customers. */
@@ -194,12 +196,8 @@ export const checkIn = asyncHandler(async (req, res) => {
   const customer = await Customer.findById(req.body.customerId).lean();
   if (!customer) throw new NotFoundError('Customer not found');
 
-  const open = await Visit.findOne({ salesman: req.user.id, status: VISIT_STATUS.IN_PROGRESS }).lean();
-  if (open) {
-    throw new ConflictError(`Check out of ${open.customerName} first`, 'VISIT_IN_PROGRESS');
-  }
-
   const settings = await Setting.forCompany(req.companyId);
+  await assertCanStartVisit(req.user.id, settings);
   const location = req.body.location || {};
   if (settings?.fieldForce?.requireGps !== false && (location.lat == null || location.lng == null)) {
     throw new BadRequestError('Location is required to check in', 'GPS_REQUIRED');
@@ -240,6 +238,7 @@ export const checkIn = asyncHandler(async (req, res) => {
   };
   const meters = distanceMeters(visit.checkIn.location, customer.address?.gps);
   if (meters != null) visit.distanceMeters = meters;
+  markGeofence(visit, customer.address?.gps, settings);
   visit.status = VISIT_STATUS.IN_PROGRESS;
   visit.statusHistory.push({ status: VISIT_STATUS.IN_PROGRESS, at, by: req.user.id, byName: req.user.name, note: 'Checked in' });
   await visit.save();

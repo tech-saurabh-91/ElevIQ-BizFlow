@@ -28,6 +28,8 @@ import {
   ensureAttendanceDay,
   assertCheckoutOrder,
   nextVisitNumber,
+  assertCanStartVisit,
+  markGeofence,
 } from '../../services/fieldForceService.js';
 
 /**
@@ -70,6 +72,7 @@ const activityScope = (req, field) => {
 const settingsFieldForce = (settings) => ({
   geofenceRadiusM: Number(settings?.fieldForce?.geofenceRadiusM || 100),
   requireGps: settings?.fieldForce?.requireGps !== false,
+  requireAttendance: settings?.fieldForce?.requireAttendance !== false,
   requireSelfie: Boolean(settings?.fieldForce?.requireSelfie),
   workStart: settings?.fieldForce?.workStart || '09:30',
   workEnd: settings?.fieldForce?.workEnd || '18:30',
@@ -563,6 +566,7 @@ export const visitCheckIn = asyncHandler(async (req, res) => {
   if (config.requireGps && (location.lat == null || location.lng == null)) {
     throw new BadRequestError('Location is required to check in', 'GPS_REQUIRED');
   }
+  await assertCanStartVisit(req.user.id, settings, { exceptVisit: doc._id });
 
   doc.checkIn = {
     at: dateOrNull(payload.at) || new Date(),
@@ -576,6 +580,7 @@ export const visitCheckIn = asyncHandler(async (req, res) => {
   const customerGps = doc.customerId?.address?.gps;
   const meters = distanceMeters(doc.checkIn.location, customerGps);
   if (meters != null) doc.distanceMeters = meters;
+  markGeofence(doc, customerGps, settings);
 
   doc.status = VISIT_STATUS.IN_PROGRESS;
   doc.statusHistory.push({

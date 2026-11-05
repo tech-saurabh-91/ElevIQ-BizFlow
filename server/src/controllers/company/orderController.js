@@ -48,6 +48,7 @@ import {
   dispatchOrderStock,
 } from '../../services/inventoryService.js';
 import { activeVanOf, assertDayClosed, assertVanStock } from '../../services/vanService.js';
+import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
 
 /** Relations returned on every order read so the UI never needs a second call. */
 const POPULATE = [
@@ -340,6 +341,16 @@ const submitDraft = async (req, order, settings, note = '') => {
     });
   } else {
     warnings = [...warnings, `Approval required: order value is at or above the ${settings?.order?.approvalThreshold || 0} threshold`];
+    await notifyPermission(req.companyId, 'orders.approve', {
+      type: 'APPROVAL_REQUIRED',
+      title: `Order ${order.orderNo} needs approval`,
+      body: `${order.customerName} · ${Number(order.total || 0).toFixed(2)} · by ${req.user.name}`,
+      link: `/app/orders/${order._id}`,
+      entityType: 'Order',
+      entityId: order._id,
+      priority: 'HIGH',
+      exclude: req.user.id,
+    });
   }
 
   return { order, warnings };
@@ -618,6 +629,16 @@ export const approve = asyncHandler(async (req, res) => {
     settings: await settingsOf(req),
   });
 
+  await notifyUsers([order.salesman, order.createdBy], {
+    type: 'ORDER_APPROVED',
+    title: `Order ${order.orderNo} approved`,
+    body: `${order.customerName} · approved by ${req.user.name}`,
+    link: `/app/orders/${order._id}`,
+    entityType: 'Order',
+    entityId: order._id,
+    exclude: req.user.id,
+  });
+
   const full = await loadDoc(Order, order._id, { populate: POPULATE, label: 'Order' });
   return success(res, { message: 'Order approved', data: serialize(full) });
 });
@@ -639,6 +660,17 @@ export const reject = asyncHandler(async (req, res) => {
       rejectionReason: req.body.reason,
     },
     action: AUDIT_ACTIONS.REJECT,
+  });
+
+  await notifyUsers([order.salesman, order.createdBy], {
+    type: 'ORDER_REJECTED',
+    title: `Order ${order.orderNo} rejected`,
+    body: `${order.customerName} · ${req.body.reason}`,
+    link: `/app/orders/${order._id}`,
+    entityType: 'Order',
+    entityId: order._id,
+    priority: 'HIGH',
+    exclude: req.user.id,
   });
 
   const full = await loadDoc(Order, order._id, { populate: POPULATE, label: 'Order' });

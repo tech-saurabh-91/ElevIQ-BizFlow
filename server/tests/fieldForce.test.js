@@ -54,7 +54,11 @@ const seedTenant = async ({ code, businessName, adminEmail, managerEmail, salesm
   let accountant;
 
   await inTenant(String(company._id), async () => {
-    await Setting.forCompany(company._id);
+    // Visits here are tested on their own; the start-your-day rule is
+    // covered in fieldSales.test.js.
+    const settings = await Setting.forCompany(company._id);
+    settings.set({ 'fieldForce.requireAttendance': false });
+    await settings.save();
 
     admin = await User.create({
       companyId: company._id,

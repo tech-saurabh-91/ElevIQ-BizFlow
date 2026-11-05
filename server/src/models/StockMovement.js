@@ -40,7 +40,7 @@ const stockMovementSchema = new mongoose.Schema(
     /** Source document that caused the movement. */
     refType: {
       type: String,
-      enum: ['ORDER', 'INVOICE', 'PURCHASE_ORDER', 'GOODS_RECEIPT', 'ADJUSTMENT', 'TRANSFER', 'MANUAL', 'IMPORT'],
+      enum: ['ORDER', 'INVOICE', 'CREDIT_NOTE', 'PURCHASE_ORDER', 'GOODS_RECEIPT', 'ADJUSTMENT', 'TRANSFER', 'MANUAL', 'IMPORT'],
       default: 'MANUAL',
       index: true,
     },

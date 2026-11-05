@@ -8,7 +8,7 @@ import Target from '../models/Target.js';
 import Order from '../models/Order.js';
 import Setting from '../models/Setting.js';
 
-import { BadRequestError } from '../utils/errors.js';
+import { BadRequestError, ConflictError } from '../utils/errors.js';
 import { round2 } from '../models/helpers.js';
 import { nextSeries, getFinancialYearTag } from '../utils/numberSeries.js';
 import { getCompanyId } from '../middlewares/tenantContext.js';
@@ -56,6 +56,29 @@ export const withinGeofence = (point, centre, radiusM = 100) => {
 
 /** Start of the current day (tenant-date boundary for attendance/visits). */
 export const startOfDay = (value = new Date()) => dayjs(value).startOf('day').toDate();
+
+/**
+ * Rules before a salesman checks in at a customer: the working day must be
+ * started (attendance) when the company asks for it, and only one shop can be
+ * open at a time.
+ */
+export const assertCanStartVisit = async (userId, settings, { exceptVisit = null } = {}) => {
+  if (settings?.fieldForce?.requireAttendance !== false) {
+    const att = await Attendance.findOne({ user: userId, day: startOfDay() }).lean();
+    if (!att?.isCheckedIn) throw new BadRequestError('Start your day (attendance check-in) before visiting customers', 'ATTENDANCE_REQUIRED');
+    if (att.isCheckedOut) throw new BadRequestError('Your day is already closed in attendance', 'DAY_ENDED');
+  }
+  const open = await Visit.findOne({ salesman: userId, status: 'IN_PROGRESS', ...(exceptVisit ? { _id: { $ne: exceptVisit } } : {}) }).lean();
+  if (open) throw new ConflictError(`Check out of ${open.customerName} first`, 'VISIT_IN_PROGRESS');
+};
+
+/** Record how far the check-in was from the customer and flag it beyond the geofence. */
+export const markGeofence = (visit, customerGps, settings) => {
+  const meters = distanceMeters(visit.checkIn?.location, customerGps);
+  if (meters == null) return;
+  visit.checkInDistanceM = Math.round(meters);
+  visit.outsideGeofence = meters > Number(settings?.fieldForce?.geofenceRadiusM || 100);
+};
 
 // ---------------------------------------------------------------------------
 // Attendance

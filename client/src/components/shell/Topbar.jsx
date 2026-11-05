@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/api/client';
 import { Bell, LogOut, Menu, Moon, Sun, UserRound, KeyRound, ChevronDown, Eye, LogIn } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,8 +22,18 @@ import { APP_NAME } from '@/utils/format';
  * While a platform admin is impersonating a tenant, a persistent amber banner
  * sits above the bar with a one-click "Exit workspace".
  */
-export default function Topbar({ onMenuClick, notificationCount = 0 }) {
+export default function Topbar({ onMenuClick }) {
   const { user, company, scope, logout, impersonation, exitImpersonation } = useAuth();
+  // Unread badge for workspace users (same key as the Notifications page, so
+  // reading there clears it here).
+  const unread = useQuery({
+    queryKey: ['company', 'notifications', 'unread-count'],
+    queryFn: async () => (await api.get('/v1/notifications/unread-count')).data?.data ?? { unread: 0 },
+    enabled: scope !== 'platform' && Boolean(user),
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+  const notificationCount = scope !== 'platform' ? Number(unread.data?.unread || 0) : 0;
   const theme = useUIStore((s) => s.theme);
   const toggleTheme = useUIStore((s) => s.toggleTheme);
   const navigate = useNavigate();

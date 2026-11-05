@@ -25,6 +25,50 @@ import {
   reverseCreditNote,
 } from '../../services/invoiceService.js';
 import { taxBreakupFor, sellerStateOf, buyerStateOf } from '../../services/orderService.js';
+import { recordMovement, resolveDefaultWarehouse, damagedWarehouse } from '../../services/inventoryService.js';
+import { baseQtyOf } from '../../services/catalogService.js';
+import { MOVEMENT_TYPES } from '../../config/constants.js';
+
+/**
+ * Where returned goods go. Only when they had actually left stock: a direct
+ * invoice that posted stock, or an order that was dispatched. A sales return
+ * goes back to the warehouse it left from; damaged goods go to the DAMAGED
+ * warehouse (if the company keeps one). Rate differences move nothing.
+ */
+const returnTarget = async (note, invoice, settings) => {
+  if (!['SALES_RETURN', 'DAMAGE'].includes(note.reason)) return null;
+  let source = null;
+  if (invoice.stockPosted) source = invoice.warehouse;
+  else if (invoice.order) {
+    const order = await mongoose.model('Order').findById(invoice.order).select('status warehouse').lean();
+    if (order && ['DISPATCHED', 'DELIVERED'].includes(order.status)) {
+      source = order.warehouse || (await resolveDefaultWarehouse(settings))?._id || null;
+    }
+  }
+  if (!source) return null;
+  if (note.reason === 'DAMAGE') return (await damagedWarehouse())?._id || null;
+  return source;
+};
+
+const moveReturnStock = async (req, note, warehouse, sign, reason) => {
+  const settings = await Setting.forCompany(req.companyId);
+  for (const line of note.items) {
+    const qty = baseQtyOf(line);
+    if (qty <= 0) continue;
+    await recordMovement({
+      product: line.product,
+      warehouse,
+      qty: sign * qty,
+      type: sign > 0 ? MOVEMENT_TYPES.SALES_RETURN : MOVEMENT_TYPES.SALES_OUT,
+      refType: 'CREDIT_NOTE',
+      refId: note._id,
+      refNo: note.creditNoteNo || '',
+      reason,
+      movedBy: req.user.id,
+      settings,
+    });
+  }
+};
 
 const POPULATE = [
   {
@@ -191,6 +235,12 @@ const issueCreditNote = async (req, note, text = '') => {
   pushHistory(note, CREDIT_NOTE_STATUS.ISSUED, req, text || 'Credit note issued');
 
   await applyCreditNote(note, invoice);
+  const target = await returnTarget(note, invoice, await Setting.forCompany(req.companyId));
+  if (target) {
+    await moveReturnStock(req, note, target, 1, note.reason === 'DAMAGE' ? 'Damaged goods returned' : 'Goods returned');
+    note.stockPosted = true;
+    note.stockWarehouse = target;
+  }
   await note.save();
 
   audit(req, {
@@ -458,6 +508,12 @@ export const cancel = asyncHandler(async (req, res) => {
   const before = note.status;
   if (before === CREDIT_NOTE_STATUS.ISSUED) {
     const invoice = await Invoice.findById(note.invoice);
+    // Take the returned goods back out first: if they were sold on meanwhile
+    // this fails before the invoice balance is touched.
+    if (note.stockPosted && note.stockWarehouse) {
+      await moveReturnStock(req, note, note.stockWarehouse, -1, 'Credit note cancelled');
+      note.stockPosted = false;
+    }
     if (invoice) await reverseCreditNote(note, invoice);
   }
 

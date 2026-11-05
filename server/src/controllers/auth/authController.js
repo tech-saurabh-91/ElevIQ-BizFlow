@@ -4,6 +4,7 @@ import { success, created } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { setRefreshCookie, clearRefreshCookie, verifyRefreshToken } from '../../utils/tokens.js';
 import { UnauthorizedError } from '../../utils/errors.js';
+import { buildDefaultPermissions } from '../../config/constants.js';
 import { audit, AUDIT_ACTIONS_LOCAL } from './_audit.js';
 
 const pickUA = (req) => (req.headers['user-agent'] || '').slice(0, 300);
@@ -88,7 +89,9 @@ export const companyMe = asyncHandler(async (req, res) => {
             plan: req.company.plan,
           }
         : null,
-      permissions: req.settings?.rolePermissions || null,
+      // Defaults merged under the company's saved matrix, so permissions added
+      // after a company customised its matrix still resolve.
+      permissions: req.settings ? { ...buildDefaultPermissions(), ...(req.settings.rolePermissions || {}) } : null,
       settings: req.settings
         ? {
             currency: req.settings.currency,

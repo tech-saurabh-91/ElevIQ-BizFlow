@@ -85,6 +85,11 @@ const visitSchema = new mongoose.Schema(
       default: () => ({}),
     },
 
+    /** How far from the customer's pinned location the check-in was (m). */
+    checkInDistanceM: { type: Number, default: null },
+    /** Checked in beyond the company's geofence radius (flag for review). */
+    outsideGeofence: { type: Boolean, default: false, index: true },
+
     /** Straight-line distance between check-in and check-out (m). */
     distanceMeters: { type: Number, default: 0, min: 0 },
     /** How long the rep stayed with the customer (minutes). */

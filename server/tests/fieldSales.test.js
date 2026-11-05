@@ -129,6 +129,54 @@ describe('Van invoice', () => {
   });
 });
 
+describe('Godown stock on direct sales, returns and dispatch', () => {
+  const mainQty = async (productId) =>
+    (await call(state.admin).get('/api/v1/inventory/stock', { warehouse: state.main, limit: 100 })).body.data.find((r) => String(r.product?.id || r.product) === productId)?.qty;
+
+  test('a direct invoice from the godown deducts stock; a sales-return credit note puts it back', async () => {
+    const admin = call(state.admin);
+    const before = await stockOf(state.admin, state.soda);
+    const inv = await admin.post('/api/v1/invoices', { customerId: state.customer, items: [{ product: state.soda, qty: 4 }], issue: true });
+    expect(inv.status).toBe(201);
+    expect(await stockOf(state.admin, state.soda)).toBe(before - 4);
+
+    const line = inv.body.data.items[0];
+    const cn = await admin.post('/api/v1/credit-notes', {
+      invoiceId: inv.body.data.id,
+      reason: 'SALES_RETURN',
+      items: [{ invoiceItemId: line.id, qty: 3 }],
+      issue: true,
+    });
+    expect(cn.status).toBe(201);
+    expect(await stockOf(state.admin, state.soda)).toBe(before - 1);
+
+    // A rate difference moves no goods.
+    const rate = await admin.post('/api/v1/credit-notes', {
+      invoiceId: inv.body.data.id,
+      reason: 'RATE_DIFFERENCE',
+      items: [{ invoiceItemId: line.id, qty: 1 }],
+      issue: true,
+    });
+    expect(rate.status).toBe(201);
+    expect(await stockOf(state.admin, state.soda)).toBe(before - 1);
+
+    // Cancelling the return takes the goods out again.
+    expect((await admin.post(`/api/v1/credit-notes/${cn.body.data.id}/cancel`, { reason: 'Entered twice' })).status).toBe(200);
+    expect(await stockOf(state.admin, state.soda)).toBe(before - 4);
+  });
+
+  test('a godown invoice cannot sell more than the godown holds, even if vans hold more', async () => {
+    const onMain = await mainQty(state.chips);
+    expect(typeof onMain).toBe('number');
+    const res = await call(state.admin).post('/api/v1/invoices', {
+      customerId: state.customer,
+      items: [{ product: state.chips, qty: onMain + 1 }],
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('INSUFFICIENT_STOCK');
+  });
+});
+
 describe('Beat plan and the salesman day', () => {
   test('the weekly plan puts the route in the salesman day; a day plan overrides it', async () => {
     const mine = await call(state.sam).get('/api/v1/beat-plans/mine');
@@ -149,6 +197,12 @@ describe('Beat plan and the salesman day', () => {
 
   test('check-out asks for a reason only when nothing was booked', async () => {
     const sam = call(state.sam);
+    // No shop visits before the day is started in attendance.
+    const early = await sam.post('/api/v1/beat-plans/check-in', { customerId: state.customer, route: state.route });
+    expect(early.status).toBe(400);
+    expect(early.body.code).toBe('ATTENDANCE_REQUIRED');
+    expect((await sam.post('/api/v1/field-force/attendance/check-in', {})).status).toBe(200);
+
     const first = await sam.post('/api/v1/beat-plans/check-in', { customerId: state.customer, route: state.route });
     expect(first.status).toBe(201);
     // One shop at a time.

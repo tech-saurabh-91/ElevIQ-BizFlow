@@ -75,13 +75,13 @@ router.post(
 router.post(
   '/:id/dispatch',
   validate({ params: idParamsSchema, body: orderDispatchSchema }),
-  authorize('orders.update'),
+  authorize('orders.dispatch'),
   ctrl.dispatch
 );
 router.post(
   '/:id/deliver',
   validate({ params: idParamsSchema, body: orderDeliverSchema }),
-  authorize('orders.update'),
+  authorize('orders.dispatch'),
   ctrl.deliver
 );
 

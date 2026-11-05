@@ -20,6 +20,7 @@ import {
 import { BadRequestError, ConflictError, ErrorCodes } from '../../utils/errors.js';
 import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
 import { nextExpenseNumber } from '../../services/fieldForceService.js';
+import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
 
 /**
  * Phase 7 - Expense claims controller.
@@ -304,6 +305,15 @@ const submitDoc = async (req, doc, text = '') => {
   doc.submittedAt = new Date();
   pushHistory(doc, EXPENSE_STATUS.SUBMITTED, req, text || 'Submitted for approval');
   await doc.save();
+  await notifyPermission(req.companyId, 'fieldforce.expenses.approve', {
+    type: 'APPROVAL_REQUIRED',
+    title: `Expense ${labelOf(doc)} needs approval`,
+    body: `${doc.claimantName} · ${doc.category} · ${Number(doc.amount || 0).toFixed(2)}`,
+    link: '/app/expenses',
+    entityType: 'Expense',
+    entityId: doc._id,
+    exclude: req.user.id,
+  });
 
   audit(req, {
     action: AUDIT_ACTIONS.STATUS_CHANGE,
@@ -347,6 +357,14 @@ export const approve = asyncHandler(async (req, res) => {
   doc.approvedAmount = amount;
   pushHistory(doc, EXPENSE_STATUS.APPROVED, req, req.body?.note || `Approved ${amount}`);
   await doc.save();
+  await notifyUsers([doc.claimant], {
+    type: 'EXPENSE_APPROVED',
+    title: `Expense ${labelOf(doc)} approved`,
+    body: `Approved ${amount}`,
+    link: '/app/expenses',
+    entityType: 'Expense',
+    entityId: doc._id,
+  });
 
   audit(req, {
     action: AUDIT_ACTIONS.APPROVE,
@@ -375,6 +393,14 @@ export const reject = asyncHandler(async (req, res) => {
   doc.rejectionReason = reason;
   pushHistory(doc, EXPENSE_STATUS.REJECTED, req, reason || 'Rejected');
   await doc.save();
+  await notifyUsers([doc.claimant], {
+    type: 'EXPENSE_REJECTED',
+    title: `Expense ${labelOf(doc)} rejected`,
+    body: reason,
+    link: '/app/expenses',
+    entityType: 'Expense',
+    entityId: doc._id,
+  });
 
   audit(req, {
     action: AUDIT_ACTIONS.REJECT,

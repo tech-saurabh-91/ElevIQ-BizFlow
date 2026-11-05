@@ -116,7 +116,7 @@ describe('Loading and selling from a van', () => {
       items: [{ product: state.product, qty: 6, unit: 'PKT' }], // 60 > 50 on van
     });
     expect(tooBig.status).toBe(422);
-    expect(tooBig.body.message).toMatch(/on van VAN1/);
+    expect(tooBig.body.message).toMatch(/Not enough stock in Van 1/);
   });
 
   test('dispatch takes stock from the van', async () => {
