@@ -131,6 +131,10 @@ api.interceptors.response.use(
 /** Normalise an API error into something UI-friendly. */
 export const apiError = (error) => {
   const res = error?.response;
+  // A check the screen made itself (e.g. location blocked) - show it as is.
+  if (!res && error?.userMessage) {
+    return { message: error.userMessage, code: error.code || 'CLIENT_ERROR', errors: [], status: 0 };
+  }
   if (!res) {
     return {
       message: error?.code === 'ECONNABORTED' ? 'Request timed out. Please try again.' : 'Network error. Check your connection.',

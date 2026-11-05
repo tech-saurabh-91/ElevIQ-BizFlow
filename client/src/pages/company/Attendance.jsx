@@ -221,6 +221,13 @@ function TodayPanel({ canManage }) {
           invalidateKeys={[['company', 'attendance'], ['company', 'dashboard'], ['company', 'beat']]}
           prepareBody={async (body) => {
             const gps = await captureGps();
+            if (!gps && config.requireGps) {
+              const err = new Error('location');
+              err.userMessage =
+                'Your location is not available. Allow location access for this site in the browser (and turn on GPS), then try again.';
+              err.code = 'GPS_UNAVAILABLE';
+              throw err;
+            }
             const payload = { ...body, source: 'WEB' };
             if (gps) {
               payload.location = { lat: gps.lat, lng: gps.lng };

@@ -227,7 +227,8 @@ function WorkflowDialog({
         if (raw === undefined || raw === null || raw === '') return;
         body[f.name] = f.type === 'number' ? Number(raw) : raw;
       });
-      const payload = prepareBody ? prepareBody(body, values) : body;
+      // prepareBody may be async (it reads GPS) - wait for it.
+      const payload = prepareBody ? await prepareBody(body, values) : body;
       const { data } = await api.post(endpoint, payload);
       return data;
     },

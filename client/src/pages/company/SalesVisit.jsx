@@ -152,7 +152,9 @@ export default function SalesVisit() {
       refresh();
     } catch (err) {
       const e = apiError(err);
-      toast.error(e.message, { duration: e.code === 'OUTSIDE_GEOFENCE' ? 6000 : 4000 });
+      const message =
+        e.code === 'GPS_REQUIRED' ? 'Your location is not available. Allow location access for this site in the browser (and turn on GPS), then try again.' : e.message;
+      toast.error(message, { duration: ['OUTSIDE_GEOFENCE', 'GPS_REQUIRED'].includes(e.code) ? 6000 : 4000 });
       if (['ATTENDANCE_REQUIRED', 'ATTENDANCE_OUT_PENDING', 'DAY_CASHOUT_PENDING', 'DAY_ENDED'].includes(e.code)) day.refetch();
     } finally {
       setBusy('');
