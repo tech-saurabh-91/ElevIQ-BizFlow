@@ -157,7 +157,11 @@ export default function InvoiceEditor() {
   const presetOrderId = searchParams.get('orderId') || '';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { company } = useAuth();
+  const { company, user } = useAuth();
+  // A van salesman invoices the shop they are checked in at (Sales visit):
+  // the customer is fixed, and only that shop's orders are offered. Stock
+  // goes out of their van (set by the server).
+  const lockedCustomer = user?.role === 'SALESMAN' ? searchParams.get('customerId') || '' : '';
   const { lookups } = useLookups();
 
   // From a customer visit there is no order to bill: start a direct (spot) invoice.
@@ -706,16 +710,23 @@ export default function InvoiceEditor() {
                         : undefined
                     }
                   >
-                    <Select {...register('customerId')} error={!!errors.customerId}>
-                      <option value="">Select a customer…</option>
-                      {customerOptions.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                          {c.code ? ` (${c.code})` : ''}
-                          {c.phone ? ` · ${c.phone}` : ''}
-                        </option>
-                      ))}
-                    </Select>
+                    {lockedCustomer ? (
+                      <>
+                        <input type="hidden" {...register('customerId')} />
+                        <Input value={options?.customer?.name || customerOptions.find((c) => c.id === lockedCustomer)?.name || ''} readOnly title="Booked for the shop you are checked in at (Sales visit)." />
+                      </>
+                    ) : (
+                      <Select {...register('customerId')} error={!!errors.customerId}>
+                        <option value="">Select a customer…</option>
+                        {customerOptions.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                            {c.code ? ` (${c.code})` : ''}
+                            {c.phone ? ` · ${c.phone}` : ''}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
                   </Field>
                 ) : (
                   <Field
@@ -733,7 +744,7 @@ export default function InvoiceEditor() {
                   >
                     <Select {...register('orderId')} error={!!errors.orderId}>
                       <option value="">Select an order…</option>
-                      {(options?.orders || []).map((o) => (
+                      {(options?.orders || []).filter((o) => !lockedCustomer || o.customerId === lockedCustomer).map((o) => (
                         <option key={o.id} value={o.id}>
                           {o.orderNo} · {o.customerName} · {formatNumber(o.remainingQty)} left
                         </option>

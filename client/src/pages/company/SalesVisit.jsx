@@ -304,7 +304,21 @@ export default function SalesVisit() {
                       <LogOut className="h-4 w-4" /> Check out
                     </Button>
                   ) : visited ? (
-                    <CheckCircle2 className="h-5 w-5 text-success" aria-label="Visited" />
+                    // Back at a shop visited today (a second order, a late
+                    // collection): a fresh check-in opens a new visit.
+                    <span className="ml-auto flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-success" aria-label="Visited" />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => checkIn(c)}
+                        loading={busy === c.id}
+                        disabled={Boolean(open) || blocked || !can('fieldforce.visits.manage')}
+                        title={open ? `Check out of ${openCustomer?.name || 'the current shop'} first` : 'Check in again for another order or collection'}
+                      >
+                        <LogIn className="h-4 w-4" /> Visit again
+                      </Button>
+                    </span>
                   ) : (
                     <Button
                       size="sm"

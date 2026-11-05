@@ -63,6 +63,7 @@ export const creditNoteListQuerySchema = paginationSchema.extend({
 
 export const creditNoteFormOptionsQuerySchema = z.object({
   invoiceId: objectIdSchema.optional().or(z.literal('')),
+  customerId: objectIdSchema.optional().or(z.literal('')),
 });
 
 export default {

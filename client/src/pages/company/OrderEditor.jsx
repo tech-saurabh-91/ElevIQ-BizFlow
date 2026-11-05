@@ -130,7 +130,12 @@ export default function OrderEditor() {
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { company } = useAuth();
+  const { company, user } = useAuth();
+  // A salesman books for the shop they are checked in at: the customer comes
+  // from Sales visit and cannot be changed; salesman and godown are set by the
+  // server (presale orders ship from the godown, not the van).
+  const isSalesman = user?.role === 'SALESMAN';
+  const lockedCustomer = isSalesman ? searchParams.get('customerId') || '' : '';
   const { lookups } = useLookups();
 
   const [initialized, setInitialized] = useState(!isEdit);
@@ -526,16 +531,23 @@ export default function OrderEditor() {
                       : undefined
                   }
                 >
-                  <Select {...register('customerId')} error={!!errors.customerId}>
-                    <option value="">Select a customer…</option>
-                    {customerOptions.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                        {c.code ? ` (${c.code})` : ''}
-                        {c.phone ? ` · ${c.phone}` : ''}
-                      </option>
-                    ))}
-                  </Select>
+                  {lockedCustomer ? (
+                    <>
+                      <input type="hidden" {...register('customerId')} />
+                      <Input value={options?.customer?.name || customerOptions.find((c) => c.id === lockedCustomer)?.name || ''} readOnly title="Booked for the shop you are checked in at (Sales visit)." />
+                    </>
+                  ) : (
+                    <Select {...register('customerId')} error={!!errors.customerId}>
+                      <option value="">Select a customer…</option>
+                      {customerOptions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                          {c.code ? ` (${c.code})` : ''}
+                          {c.phone ? ` · ${c.phone}` : ''}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
                 </Field>
 
                 <Field label="Order date" error={errors.orderDate?.message}>
@@ -545,6 +557,7 @@ export default function OrderEditor() {
                   <Input type="date" min={orderDate || todayInput()} {...register('expectedDeliveryDate')} />
                 </Field>
 
+                {!isSalesman && (
                 <Field label="Salesman" error={errors.salesman?.message}>
                   <Select {...register('salesman')}>
                     <option value="">Use customer owner</option>
@@ -555,6 +568,7 @@ export default function OrderEditor() {
                     ))}
                   </Select>
                 </Field>
+                )}
                 <Field label="Route / beat" error={errors.route?.message}>
                   <Select {...register('route')}>
                     <option value="">No route</option>
@@ -566,6 +580,7 @@ export default function OrderEditor() {
                     ))}
                   </Select>
                 </Field>
+                {!isSalesman && (
                 <Field label="Warehouse" error={errors.warehouse?.message}>
                   <Select {...register('warehouse')}>
                     <option value="">Default warehouse</option>
@@ -577,6 +592,7 @@ export default function OrderEditor() {
                     ))}
                   </Select>
                 </Field>
+                )}
                 <Field label="PO reference" error={errors.poReference?.message}>
                   <Input {...register('poReference')} placeholder="Customer PO / order reference" />
                 </Field>

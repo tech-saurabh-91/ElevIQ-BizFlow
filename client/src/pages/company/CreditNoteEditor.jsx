@@ -80,7 +80,9 @@ export default function CreditNoteEditor() {
   const presetInvoiceId = searchParams.get('invoiceId') || '';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { company } = useAuth();
+  const { company, user } = useAuth();
+  // A salesman's return is for the shop they are checked in at (Sales visit).
+  const lockedCustomer = user?.role === 'SALESMAN' ? searchParams.get('customerId') || '' : '';
 
   const [initialized, setInitialized] = useState(!isEdit);
   const [serverError, setServerError] = useState(null);
@@ -154,9 +156,10 @@ export default function CreditNoteEditor() {
 
   // ---- Form options --------------------------------------------------------
   const optionsQuery = useQuery({
-    queryKey: ['company', 'credit-note-form-options', invoiceId || 'none'],
+    queryKey: ['company', 'credit-note-form-options', invoiceId || 'none', lockedCustomer],
     queryFn: async () => {
       const params = invoiceId ? { invoiceId } : {};
+      if (lockedCustomer) params.customerId = lockedCustomer;
       const { data } = await api.get('/v1/credit-notes/form-options', { params });
       return data?.data;
     },

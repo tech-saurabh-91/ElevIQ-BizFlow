@@ -73,7 +73,9 @@ export default function PaymentEditor() {
   const presetInvoiceId = searchParams.get('invoiceId') || '';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { company } = useAuth();
+  const { company, user } = useAuth();
+  // A salesman collects from the shop they are checked in at (Sales visit).
+  const lockedCustomer = user?.role === 'SALESMAN' ? presetCustomerId : '';
   const { lookups } = useLookups();
 
   const [initialized, setInitialized] = useState(!isEdit);
@@ -440,6 +442,12 @@ export default function PaymentEditor() {
                       value={payment?.customerName || ''}
                       readOnly
                       disabled
+                    />
+                  ) : lockedCustomer ? (
+                    <Input
+                      value={(lookups.customers || []).find((c) => c.id === lockedCustomer)?.name || ''}
+                      readOnly
+                      title="Booked for the shop you are checked in at (Sales visit)."
                     />
                   ) : (
                     <Select

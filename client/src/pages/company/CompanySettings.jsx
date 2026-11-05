@@ -24,6 +24,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useCountries, useStates, findCountry } from '@/hooks/useLocations';
 import { formatDate } from '@/utils/format';
 import { cn } from '@/utils/cn';
+import { SALES_CHANNEL_PERMISSIONS } from '@/utils/salesType';
 
 const REGIME_LABELS = { GST: 'GST', VAT: 'VAT', SALES_TAX: 'Sales tax', NONE: 'No tax' };
 const regimeLabel = (r) => REGIME_LABELS[r] || r || '—';
@@ -1102,6 +1103,12 @@ function PermissionsEditor({ data, canUpdate }) {
       <CardContent className="space-y-5">
         {error && <ErrorAlert title="Could not update permissions" message={error} onClose={() => setError('')} />}
         {dirty && <p className="text-xs font-medium text-warning">You have unsaved permission changes.</p>}
+        <p className="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <strong className="text-foreground">Salesman and sales type:</strong> ticks in the Salesman column apply to every
+          salesman, then each one&apos;s sales type (Users &amp; Teams) narrows them. Rows marked <em>Presale</em> work only for
+          Presale / Both salesmen; rows marked <em>Van sale</em> only for Van sale / Both. Van stock requests, My van and day
+          cashout are for van salesmen only.
+        </p>
 
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
@@ -1130,6 +1137,11 @@ function PermissionsEditor({ data, canUpdate }) {
                   <tr key={permission} className="border-b last:border-0 hover:bg-accent/40">
                     <td className="sticky left-0 bg-card px-2 py-1.5 text-sm" title={permission}>
                       {permissionLabel(permission)}
+                      {SALES_CHANNEL_PERMISSIONS[permission] && (
+                        <Badge tone="info" className="ml-1.5 px-1.5 py-0 text-[10px]">
+                          {SALES_CHANNEL_PERMISSIONS[permission] === 'PRESALE' ? 'Presale' : 'Van sale'} salesman
+                        </Badge>
+                      )}
                     </td>
                     {roles.map((role) => {
                       const checked = role === 'COMPANY_ADMIN' || (matrix[permission] || []).includes(role);

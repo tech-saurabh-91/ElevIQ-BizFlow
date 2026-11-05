@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CalendarCheck, Truck } from 'lucide-react';
@@ -10,8 +11,8 @@ import { Button } from '@/components/ui/button';
 /**
  * A field salesman's working day on the client (mirror of
  * server/src/services/fieldDayService.js): mark in -> work -> (van) day
- * cashout approved -> mark out. While the day is blocked only the screens
- * that unblock it stay open.
+ * cashout approved -> mark out. While the day is blocked everything stays
+ * visible; only booking is held back (with a banner saying why).
  */
 
 const CASHOUT_LABEL = {
@@ -21,8 +22,8 @@ const CASHOUT_LABEL = {
   APPROVED: 'approved',
 };
 
-/** Pages a blocked salesman can still open to sort the day out. */
-const OPEN_WHEN_BLOCKED = ['/app/attendance', '/app/my-van', '/app/profile', '/app/change-password', '/app/sessions', '/app/notifications'];
+/** Pages that already show the day status themselves. */
+const OWN_BANNER = ['/app/sales', '/app/attendance'];
 
 export const useFieldDay = () => {
   const user = useAuthStore((s) => s.user);
@@ -82,27 +83,29 @@ export function FieldDayBanner({ day }) {
   return null;
 }
 
-/** Layout gate: a blocked salesman sees why (and the way out) instead of the page. */
+/**
+ * Layout gate: a salesman whose day is not open still sees every page; a
+ * banner on top says why nothing can be booked (and the way out), and the
+ * booking buttons are hidden (authStore.can). Sales visit shows its own banner.
+ */
 export function FieldDayGate({ pathname, children }) {
   const day = useFieldDay();
-  const navigate = useNavigate();
-  if (!day.blocked || OPEN_WHEN_BLOCKED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return children;
-  const action = actionFor(day.blocked.code);
+  const setBlocked = useAuthStore((s) => s.setFieldDayBlocked);
+  const blocked = Boolean(day.blocked);
+  useEffect(() => {
+    setBlocked(blocked);
+  }, [blocked, setBlocked]);
+  useEffect(() => () => setBlocked(false), [setBlocked]);
+  const ownBanner = OWN_BANNER.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   return (
-    <div className="mx-auto flex max-w-lg flex-col items-center gap-4 py-16 text-center">
-      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-warning/15">
-        <AlertTriangle className="h-7 w-7 text-warning" />
-      </span>
-      <div className="space-y-1">
-        <h1 className="text-xl font-semibold">{day.blocked.code === 'DAY_ENDED' ? 'Your day is closed' : 'Start your day first'}</h1>
-        <p className="text-sm text-muted-foreground">{day.blocked.message}</p>
-      </div>
-      {action && (
-        <Button onClick={() => navigate(action.to)}>
-          <action.icon className="h-4 w-4" /> {action.label}
-        </Button>
+    <>
+      {blocked && !ownBanner && (
+        <div className="mb-4">
+          <FieldDayBanner day={day} />
+        </div>
       )}
-    </div>
+      {children}
+    </>
   );
 }
 

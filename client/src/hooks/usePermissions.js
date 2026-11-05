@@ -8,6 +8,8 @@ export const usePermissions = () => {
   const can = useAuthStore((s) => s.can);
   const user = useAuthStore((s) => s.user);
   const permissions = useAuthStore((s) => s.permissions);
+  // Re-render when the working day opens or closes (it changes what `can` says).
+  useAuthStore((s) => s.fieldDayBlocked);
 
   /** Any-of permission check: `canAny(['orders.create', 'orders.approve'])`. */
   const canAny = (list = []) => list.some((p) => can(p));

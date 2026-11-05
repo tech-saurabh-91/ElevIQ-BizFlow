@@ -35,6 +35,7 @@ import StatCard from '@/components/company/stat-card';
 import {
   ATTENDANCE_STATUSES,
   WorkflowDialog,
+  CheckOutDialog,
   captureGps,
 } from '@/components/company/fieldforce-shared';
 import { todayInput } from '@/components/company/form-utils';
@@ -51,6 +52,9 @@ function TodayPanel({ canManage }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [dialog, setDialog] = useState(null); // 'in' | 'out'
+  const [closingVisit, setClosingVisit] = useState(false);
+  const { isRole } = usePermissions();
+  const isSalesman = isRole('SALESMAN');
 
   const { data, isLoading } = useQuery({
     queryKey: ['company', 'attendance', 'today'],
@@ -71,6 +75,14 @@ function TodayPanel({ canManage }) {
   const cashout = fieldDay.cashout;
   const cashoutApproved = !cashout || cashout.status === 'APPROVED';
   const markInBlocked = ['ATTENDANCE_OUT_PENDING', 'DAY_CASHOUT_PENDING'].includes(fieldDay.blocked?.code);
+  // A shop still checked in (often left open on an earlier day) has to be
+  // checked out before the day can be marked out - do it right here.
+  const beat = useQuery({
+    queryKey: ['company', 'beat', 'mine'],
+    queryFn: async () => (await api.get('/v1/beat-plans/mine')).data?.data ?? null,
+    enabled: isSalesman,
+  });
+  const openVisit = beat.data?.openVisit || null;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['company', 'attendance'] });
@@ -171,6 +183,18 @@ function TodayPanel({ canManage }) {
             )}
           </div>
 
+          {!isLoading && openVisit && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2 text-sm">
+              <span>
+                Still checked in at <strong>{openVisit.customerName}</strong>
+                {openVisit.earlierDay ? ` since ${formatDate(`${openVisit.day}T12:00:00`)}` : ''} ({formatTime(openVisit.checkInAt)}). Check out
+                of the shop before marking out.
+              </span>
+              <Button size="sm" onClick={() => setClosingVisit(true)}>
+                <LogOut className="h-4 w-4" /> Check out of shop
+              </Button>
+            </div>
+          )}
           {!isLoading && fieldDay.blocked && fieldDay.blocked.code !== 'ATTENDANCE_REQUIRED' && (
             <p className="mt-3 rounded-lg bg-warning/10 px-3 py-2 text-sm">{fieldDay.blocked.message}</p>
           )}
@@ -203,6 +227,17 @@ function TodayPanel({ canManage }) {
           )}
         </CardContent>
       </Card>
+
+      {closingVisit && openVisit && (
+        <CheckOutDialog
+          visit={openVisit}
+          onClose={() => setClosingVisit(false)}
+          onDone={() => {
+            queryClient.invalidateQueries({ queryKey: ['company', 'beat'] });
+            invalidate();
+          }}
+        />
+      )}
 
       {dialog && (
         <WorkflowDialog

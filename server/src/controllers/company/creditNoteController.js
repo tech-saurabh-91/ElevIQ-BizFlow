@@ -546,8 +546,10 @@ export const formOptions = asyncHandler(async (req, res) => {
   const settings = await settingsOf(req);
   const invoiceId = refOrNull(req.query.invoiceId);
 
-  const invoices = await Invoice.find({ status: { $in: CREDITABLE_INVOICE_STATUSES } })
-    .select('invoiceNo invoiceDate dueDate status total amountPaid balanceDue creditNoteTotal customerName')
+  // ?customerId= narrows the list to one shop (a salesman's return at a visit).
+  const customerId = refOrNull(req.query.customerId);
+  const invoices = await Invoice.find({ status: { $in: CREDITABLE_INVOICE_STATUSES }, ...(customerId ? { customerId } : {}) })
+    .select('invoiceNo invoiceDate dueDate status total amountPaid balanceDue creditNoteTotal customerName customerId')
     .sort({ invoiceDate: -1 })
     .limit(100)
     .lean();

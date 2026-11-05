@@ -9,6 +9,18 @@ import { blockedBySalesType } from '@/utils/salesType';
  * only non-sensitive profile data is. On a full page reload the app calls
  * `/auth/refresh` to obtain a fresh access token from the httpOnly cookie.
  */
+/** Booking permissions that need an open working day (mirror of requireFieldDay). */
+const FIELD_DAY_WRITES = new Set([
+  'orders.create',
+  'orders.update',
+  'invoices.create',
+  'invoices.update',
+  'creditnotes.create',
+  'creditnotes.update',
+  'payments.create',
+  'payments.update',
+]);
+
 export const useAuthStore = create(
   persist(
     (set, get) => ({
@@ -25,8 +37,15 @@ export const useAuthStore = create(
        * `platform` keeps the platform admin's session so we can restore it on exit.
        */
       impersonation: null,
+      /**
+       * A salesman's working day is not open (not marked in, an earlier day
+       * still open, a cashout pending). They still see everything; only the
+       * buttons that book something are hidden (server: requireFieldDay).
+       */
+      fieldDayBlocked: false,
 
       setHydrated: () => set({ hydrated: true }),
+      setFieldDayBlocked: (value) => set({ fieldDayBlocked: Boolean(value) }),
 
       setSession: ({ accessToken, scope, user, company, permissions, settings }) =>
         set({
@@ -133,6 +152,7 @@ export const useAuthStore = create(
         if (user.scope === 'platform') return true; // platform route guards separately
         if (user.role === 'COMPANY_ADMIN') return true;
         if (blockedBySalesType(user, permission)) return false;
+        if (user.role === 'SALESMAN' && get().fieldDayBlocked && FIELD_DAY_WRITES.has(permission)) return false;
         const list = permissions?.[permission];
         if (!Array.isArray(list)) return false;
         return list.includes(user.role);
