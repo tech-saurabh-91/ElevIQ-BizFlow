@@ -84,7 +84,9 @@ export default function Invoices() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
-  const { company } = useAuth();
+  const { company, user } = useAuth();
+  // A salesman books these inside a shop visit (Sales visit), not from here.
+  const canNew = can('invoices.create') && user?.role !== 'SALESMAN';
   const { lookups } = useLookups();
 
   const searchParam = params.get('search') || '';
@@ -302,7 +304,7 @@ export default function Invoices() {
                 Export
               </Button>
             )}
-            {can('invoices.create') && (
+            {canNew && (
               <Button onClick={() => navigate('/app/invoices/new')}>
                 <Plus className="h-4 w-4" />
                 New invoice
@@ -456,7 +458,7 @@ export default function Invoices() {
                 <Button variant="outline" size="sm" onClick={resetAll}>
                   Clear filters
                 </Button>
-              ) : can('invoices.create') ? (
+              ) : canNew ? (
                 <Button size="sm" onClick={() => navigate('/app/invoices/new')}>
                   <Plus className="h-4 w-4" />
                   New invoice

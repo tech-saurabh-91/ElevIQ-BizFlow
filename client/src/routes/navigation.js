@@ -81,24 +81,37 @@ export const companyNav = [
     ],
   },
   {
-    section: 'Sales',
+    // A salesman books all of these inside a shop visit (Sales Visit); here
+    // they only look back at what they booked.
+    section: 'My Records',
     items: [
-      { to: '/app/orders', label: 'Orders', icon: ShoppingCart, permission: 'orders.view' },
-      { to: '/app/invoices', label: 'Invoices', icon: FileText, permission: 'invoices.view', channel: 'VAN_SALE' },
-      { to: '/app/payments', label: 'Payments & Collections', icon: Wallet, permission: 'payments.view' },
-      { to: '/app/credit-notes', label: 'Credit Notes', icon: ClipboardList, permission: 'creditnotes.view', channel: 'VAN_SALE' },
+      { to: '/app/orders', label: 'My Orders', icon: ShoppingCart, permission: 'orders.view', roles: ['SALESMAN'], channel: 'PRESALE' },
+      { to: '/app/invoices', label: 'My Invoices', icon: FileText, permission: 'invoices.view', roles: ['SALESMAN'], channel: 'VAN_SALE' },
+      { to: '/app/payments', label: 'My Collections', icon: Wallet, permission: 'payments.view', roles: ['SALESMAN'] },
+      { to: '/app/credit-notes', label: 'My Returns', icon: ClipboardList, permission: 'creditnotes.view', roles: ['SALESMAN'], channel: 'VAN_SALE' },
     ],
   },
   {
+    section: 'Sales',
+    items: [
+      { to: '/app/orders', label: 'Orders', icon: ShoppingCart, permission: 'orders.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/invoices', label: 'Invoices', icon: FileText, permission: 'invoices.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/payments', label: 'Payments & Collections', icon: Wallet, permission: 'payments.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/credit-notes', label: 'Credit Notes', icon: ClipboardList, permission: 'creditnotes.view', excludeRoles: ['SALESMAN'] },
+    ],
+  },
+  {
+    // Back-office masters. A salesman sees customers only when allowed to add
+    // new shops; products, prices and routes reach them inside the visit.
     section: 'Masters',
     items: [
-      { to: '/app/customers', label: 'Customers', icon: Users, permission: 'customers.view' },
-      { to: '/app/products', label: 'Products', icon: Package, permission: 'products.view' },
-      { to: '/app/catalog', label: 'Categories & Units', icon: Layers, permission: 'products.view' },
-      { to: '/app/suppliers', label: 'Suppliers', icon: Truck, permission: 'products.view' },
-      { to: '/app/price-lists', label: 'Price Lists', icon: Tags, permission: 'products.view' },
-      { to: '/app/warehouses', label: 'Warehouses', icon: Warehouse, permission: 'inventory.view' },
-      { to: '/app/routes', label: 'Routes & Beats', icon: RouteIcon, permission: 'customers.view' },
+      { to: '/app/customers', label: 'Customers', icon: Users, permission: 'customers.view', salesmanPermission: 'customers.create' },
+      { to: '/app/products', label: 'Products', icon: Package, permission: 'products.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/catalog', label: 'Categories & Units', icon: Layers, permission: 'products.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/suppliers', label: 'Suppliers', icon: Truck, permission: 'products.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/price-lists', label: 'Price Lists', icon: Tags, permission: 'products.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/warehouses', label: 'Warehouses', icon: Warehouse, permission: 'inventory.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/routes', label: 'Routes & Beats', icon: RouteIcon, permission: 'customers.view', excludeRoles: ['SALESMAN'] },
     ],
   },
   {
@@ -145,6 +158,7 @@ export const filterNav = (sections, { can, scope, role, user }) =>
         // Channel items (van stock, day cashout...) only for salesmen who sell that way.
         if (item.channel && !sellsVia(user || { role }, item.channel)) return false;
         if (role === 'COMPANY_ADMIN') return true;
+        if (role === 'SALESMAN' && item.salesmanPermission && typeof can === 'function' && !can(item.salesmanPermission)) return false;
         if (!item.permission) return true;
         return typeof can === 'function' ? can(item.permission) : true;
       }),

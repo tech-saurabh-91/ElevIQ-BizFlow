@@ -74,6 +74,7 @@ const settingsFieldForce = (settings) => ({
   geofenceRadiusM: Number(settings?.fieldForce?.geofenceRadiusM || 50),
   requireGps: settings?.fieldForce?.requireGps !== false,
   requireAttendance: settings?.fieldForce?.requireAttendance !== false,
+  saleOnlyInVisit: settings?.fieldForce?.saleOnlyInVisit !== false,
   enforceGeofence: settings?.fieldForce?.enforceGeofence !== false,
   requireSelfie: Boolean(settings?.fieldForce?.requireSelfie),
   workStart: settings?.fieldForce?.workStart || '09:30',

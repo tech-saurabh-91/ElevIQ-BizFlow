@@ -29,7 +29,7 @@ import { ErrorAlert } from '@/components/ui/alert';
 import { usePermissions } from '@/hooks/usePermissions';
 import { CheckOutDialog, captureGps, noOrderReasonLabel, outcomeLabel } from '@/components/company/fieldforce-shared';
 import { FieldDayBanner, useFieldDay } from '@/components/company/FieldDay';
-import { formatMoney, formatTime } from '@/utils/format';
+import { formatDate, formatMoney, formatTime } from '@/utils/format';
 import { cn } from '@/utils/cn';
 
 /**
@@ -156,6 +156,8 @@ export default function SalesVisit() {
         e.code === 'GPS_REQUIRED' ? 'Your location is not available. Allow location access for this site in the browser (and turn on GPS), then try again.' : e.message;
       toast.error(message, { duration: ['OUTSIDE_GEOFENCE', 'GPS_REQUIRED'].includes(e.code) ? 6000 : 4000 });
       if (['ATTENDANCE_REQUIRED', 'ATTENDANCE_OUT_PENDING', 'DAY_CASHOUT_PENDING', 'DAY_ENDED'].includes(e.code)) day.refetch();
+      // Someone else's view of the open shop is stale: reload it.
+      if (e.code === 'VISIT_IN_PROGRESS') refresh();
     } finally {
       setBusy('');
     }
@@ -180,29 +182,36 @@ export default function SalesVisit() {
         <Card className="border-brand-500/40 bg-brand-500/5 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" /> At the shop {durationLabel(minutesSince(open.checkInAt))} · since {formatTime(open.checkInAt)}
-              </p>
+              {open.earlierDay ? (
+                <p className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-warning">
+                  <Clock className="h-3.5 w-3.5" /> Left checked in on {formatDate(`${open.day}T12:00:00`)} at {formatTime(open.checkInAt)}
+                </p>
+              ) : (
+                <p className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" /> At the shop {durationLabel(minutesSince(open.checkInAt))} · since {formatTime(open.checkInAt)}
+                </p>
+              )}
               <p className="truncate text-lg font-semibold">{openCustomer?.name}</p>
+              {open.earlierDay && <p className="text-xs text-muted-foreground">Check out of this shop to continue - no other shop can be checked in until then.</p>}
             </div>
             <div className="flex flex-wrap gap-2">
-              {can('orders.create') && (
+              {!open.earlierDay && can('orders.create') && (
                 <Button variant="outline" size="sm" onClick={() => go(`/app/orders/new?customerId=${open.customerId}`)}>
                   <ShoppingCart className="h-4 w-4" /> Order
                 </Button>
               )}
-              {can('invoices.create') && (
+              {!open.earlierDay && can('invoices.create') && (
                 <Button variant="outline" size="sm" onClick={() => go(`/app/invoices/new?customerId=${open.customerId}`)}>
                   <FileText className="h-4 w-4" /> Invoice
                 </Button>
               )}
-              {can('payments.create') && (
+              {!open.earlierDay && can('payments.create') && (
                 <Button variant="outline" size="sm" onClick={() => go(`/app/payments/new?customerId=${open.customerId}`)}>
                   <IndianRupee className="h-4 w-4" /> Collect
                 </Button>
               )}
-              {can('creditnotes.create') && (
-                <Button variant="outline" size="sm" onClick={() => go('/app/credit-notes/new')}>
+              {!open.earlierDay && can('creditnotes.create') && (
+                <Button variant="outline" size="sm" onClick={() => go(`/app/credit-notes/new?customerId=${open.customerId}`)}>
                   <RotateCcw className="h-4 w-4" /> Return
                 </Button>
               )}
@@ -289,10 +298,14 @@ export default function SalesVisit() {
                   {c.outstanding > 0 && <p className="font-medium text-foreground">Due {formatMoney(c.outstanding)}</p>}
                 </div>
                 <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
-                  <VisitChip visit={c.visit} />
-                  {visited ? (
+                  <VisitChip visit={here ? { ...open, status: 'IN_PROGRESS' } : c.visit} />
+                  {here ? (
+                    <Button size="sm" className="ml-auto" onClick={() => setCheckingOut(open)}>
+                      <LogOut className="h-4 w-4" /> Check out
+                    </Button>
+                  ) : visited ? (
                     <CheckCircle2 className="h-5 w-5 text-success" aria-label="Visited" />
-                  ) : here ? null : (
+                  ) : (
                     <Button
                       size="sm"
                       variant="outline"
@@ -300,7 +313,7 @@ export default function SalesVisit() {
                       onClick={() => checkIn(c)}
                       loading={busy === c.id}
                       disabled={Boolean(open) || blocked || !can('fieldforce.visits.manage')}
-                      title={open ? 'Check out of the current shop first' : undefined}
+                      title={open ? `Check out of ${openCustomer?.name || 'the current shop'} first` : undefined}
                     >
                       <LogIn className="h-4 w-4" /> Check in
                     </Button>

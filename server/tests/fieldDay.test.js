@@ -85,18 +85,36 @@ describe('Sales type decides the channel', () => {
     expect(today1.fieldDay.blocked.code).toBe('ATTENDANCE_REQUIRED');
 
     expect((await markIn(state.pia)).status).toBe(200);
+    // Orders are booked inside a shop visit only.
+    const noVisit = await pia.post('/api/v1/orders', { customerId: state.customer, items: [{ product: state.soap, qty: 2 }] });
+    expect(noVisit.status).toBe(409);
+    expect(noVisit.body.code).toBe('VISIT_REQUIRED');
+    const visit = await pia.post('/api/v1/beat-plans/check-in', { customerId: state.customer, location: NEAR });
+    expect(visit.status).toBe(201);
+    const other = await pia.post('/api/v1/orders', { customerId: '0123456789abcdef01234567', items: [{ product: state.soap, qty: 2 }] });
+    expect(other.body.code).toBe('VISIT_CUSTOMER_MISMATCH');
     expect((await pia.post('/api/v1/orders', { customerId: state.customer, items: [{ product: state.soap, qty: 2 }] })).status).toBe(201);
     // Not a van seller: no invoices, no stock requests.
     expect((await pia.post('/api/v1/invoices', { customerId: state.customer, items: [{ product: state.soap, qty: 1 }] })).status).toBe(403);
     expect((await pia.post('/api/v1/stock-requests', { items: [{ product: state.soap, qty: 1 }] })).status).toBe(403);
+    // A shop still checked in blocks the mark out.
+    const stillIn = await markOut(state.pia);
+    expect(stillIn.status).toBe(409);
+    expect(stillIn.body.code).toBe('VISIT_IN_PROGRESS');
+    expect((await pia.post(`/api/v1/field-force/visits/${visit.body.data.id}/check-out`, { location: NEAR })).status).toBe(200);
   });
 
   test('van sale: invoices from the van, no orders', async () => {
     const vik = call(state.vik);
     expect((await markIn(state.vik)).status).toBe(200);
     expect((await vik.post('/api/v1/orders', { customerId: state.customer, items: [{ product: state.soap, qty: 1 }] })).status).toBe(403);
+    const visit = await vik.post('/api/v1/beat-plans/check-in', { customerId: state.customer, location: NEAR });
+    expect(visit.status).toBe(201);
     const inv = await vik.post('/api/v1/invoices', { customerId: state.customer, items: [{ product: state.soap, qty: 5 }], issue: true });
     expect(inv.status).toBe(201);
+    const out = await vik.post(`/api/v1/field-force/visits/${visit.body.data.id}/check-out`, { location: NEAR });
+    expect(out.status).toBe(200);
+    expect(out.body.data.outcome).toBe('INVOICED');
     const onVan = (await vik.get(`/api/v1/vans/${state.van}/stock`)).body.data.find((r) => r.product === state.soap).qty;
     expect(onVan).toBe(25);
   });
@@ -163,11 +181,33 @@ describe('A day left open blocks the next one', () => {
       })
     );
 
+    // ...and a shop left checked in yesterday.
+    const Visit = (await import('../src/models/Visit.js')).default;
+    const stale = await runWithContext({ scope: 'company', companyId: state.companyId }, () =>
+      Visit.create({
+        visitNo: 'VIS-OLD-1',
+        customerId: state.customer,
+        customerName: 'Corner Shop',
+        salesman: state.raviId,
+        visitDay: yesterday,
+        status: 'IN_PROGRESS',
+        checkIn: { at: new Date(yesterday.getTime() + 10 * 3600000) },
+      })
+    );
+
     const blocked = await markIn(state.ravi);
     expect(blocked.status).toBe(409);
     expect(blocked.body.code).toBe('ATTENDANCE_OUT_PENDING');
     const order = await call(state.ravi).post('/api/v1/orders', { customerId: state.customer, items: [{ product: state.soap, qty: 1 }] });
     expect(order.body.code).toBe('ATTENDANCE_OUT_PENDING');
+
+    // Sales visit shows yesterday's open shop, and it must be checked out first.
+    const mine = (await call(state.ravi).get('/api/v1/beat-plans/mine')).body.data;
+    expect(mine.openVisit.id).toBe(String(stale._id));
+    expect(mine.openVisit.earlierDay).toBe(true);
+    expect((await markOut(state.ravi)).body.code).toBe('VISIT_IN_PROGRESS');
+    const closed = await call(state.ravi).post(`/api/v1/field-force/visits/${stale._id}/check-out`, { noOrderReason: 'SHOP_CLOSED' });
+    expect(closed.status).toBe(200);
 
     // Mark out closes yesterday's open day; then today can start.
     const out = await markOut(state.ravi);

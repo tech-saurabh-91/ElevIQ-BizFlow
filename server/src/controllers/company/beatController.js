@@ -183,9 +183,21 @@ export const mine = asyncHandler(async (req, res) => {
     .sort((a, b) => Number(b.today) - Number(a.today) || a.name.localeCompare(b.name));
 
   const visits = await visitsOn(req.user.id, day, tz);
-  const open = [...visits.values()].find((v) => v.status === VISIT_STATUS.IN_PROGRESS);
+  // The shop still open - from any day, so a visit left open yesterday shows
+  // up here to be checked out (check-in elsewhere is refused until then).
+  const open = await Visit.findOne({ salesman: req.user.id, status: VISIT_STATUS.IN_PROGRESS }).sort({ 'checkIn.at': -1 }).lean();
   let openVisit = visitOut(open) || null;
-  if (open) openVisit = { ...openVisit, customerId: String(open.customerId), customerName: open.customerName, routeId: open.route ? String(open.route) : null };
+  if (open) {
+    const openDay = open.visitDay ? dayjs(open.visitDay).tz(tz).format('YYYY-MM-DD') : day;
+    openVisit = {
+      ...openVisit,
+      customerId: String(open.customerId),
+      customerName: open.customerName,
+      routeId: open.route ? String(open.route) : null,
+      day: openDay,
+      earlierDay: openDay < day,
+    };
+  }
   const done = [...visits.values()].filter((v) => v.status === VISIT_STATUS.COMPLETED).length;
   return success(res, { data: { day, routes: mineRoutes, openVisit, visitsDone: done } });
 });

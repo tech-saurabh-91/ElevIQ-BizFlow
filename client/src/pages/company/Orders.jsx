@@ -83,7 +83,9 @@ export default function Orders() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
-  const { company } = useAuth();
+  const { company, user } = useAuth();
+  // A salesman books these inside a shop visit (Sales visit), not from here.
+  const canNew = can('orders.create') && user?.role !== 'SALESMAN';
 
   const searchParam = params.get('search') || '';
   const status = params.get('status') || '';
@@ -265,7 +267,7 @@ export default function Orders() {
                 Export
               </Button>
             )}
-            {can('orders.create') && (
+            {canNew && (
               <Button onClick={() => navigate('/app/orders/new')}>
                 <Plus className="h-4 w-4" />
                 New order
@@ -404,7 +406,7 @@ export default function Orders() {
                 <Button variant="outline" size="sm" onClick={resetAll}>
                   Clear filters
                 </Button>
-              ) : can('orders.create') ? (
+              ) : canNew ? (
                 <Button size="sm" onClick={() => navigate('/app/orders/new')}>
                   <Plus className="h-4 w-4" />
                   New order

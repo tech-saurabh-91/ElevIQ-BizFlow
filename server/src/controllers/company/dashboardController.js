@@ -19,6 +19,11 @@ export const summary = asyncHandler(async (req, res) => {
 
   const startOfDay = dayjs().startOf('day').toDate();
   const startOfMonth = dayjs().startOf('month').toDate();
+  // A salesman's home shows their own numbers, not the whole company's.
+  const own = user.role === 'SALESMAN';
+  const me = own ? new mongoose.Types.ObjectId(String(user.id)) : null;
+  const bySalesman = own ? { salesman: me } : {};
+  const byCollector = own ? { collectedBy: me } : {};
 
   const base = {
     salesToday: 0,
@@ -85,29 +90,43 @@ export const summary = asyncHandler(async (req, res) => {
     const moneyStatuses = { $nin: ['CANCELLED', 'REJECTED'] };
     const tenantId = new mongoose.Types.ObjectId(companyId);
 
-    const [ordersToday, pendingSales, pending, recent] = await Promise.all([
-      Order.countDocuments({ createdAt: { $gte: startOfDay } }),
+    const [ordersToday, pendingSales, pending, recent, today] = await Promise.all([
+      Order.countDocuments({ ...bySalesman, status: moneyStatuses, createdAt: { $gte: startOfDay } }),
       Order.aggregate([
         {
           $match: {
             companyId: tenantId,
             isDeleted: { $ne: true },
+            ...bySalesman,
             status: moneyStatuses,
             createdAt: { $gte: startOfMonth },
           },
         },
         { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$total' } } },
       ]),
-      Order.countDocuments({ status: 'PENDING_APPROVAL' }),
-      Order.find({})
+      Order.countDocuments({ ...bySalesman, status: 'PENDING_APPROVAL' }),
+      Order.find({ ...bySalesman })
         .sort({ createdAt: -1 })
         .limit(5)
         .populate('customerId', 'name businessName')
         .lean(),
+      Order.aggregate([
+        {
+          $match: {
+            companyId: tenantId,
+            isDeleted: { $ne: true },
+            ...bySalesman,
+            status: moneyStatuses,
+            createdAt: { $gte: startOfDay },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$total' } } },
+      ]),
     ]);
 
     transactions = {
       ordersToday,
+      salesToday: Math.round((today?.[0]?.total || 0) * 100) / 100,
       ordersMtd: pendingSales?.[0]?.count || 0,
       salesMtd: Math.round((pendingSales?.[0]?.total || 0) * 100) / 100,
       pendingApprovals: pending,
@@ -136,6 +155,7 @@ export const summary = asyncHandler(async (req, res) => {
           $match: {
             companyId: tenantId,
             isDeleted: { $ne: true },
+            ...bySalesman,
             invoiceDate: { $gte: startOfMonth },
             status: { $nin: ['DRAFT', 'CANCELLED'] },
           },
@@ -147,12 +167,14 @@ export const summary = asyncHandler(async (req, res) => {
           $match: {
             companyId: tenantId,
             isDeleted: { $ne: true },
+            ...bySalesman,
             status: { $nin: ['DRAFT', 'CANCELLED'] },
           },
         },
         { $group: { _id: null, total: { $sum: '$balanceDue' } } },
       ]),
       Invoice.countDocuments({
+        ...bySalesman,
         status: { $in: ['OVERDUE', 'PARTIALLY_PAID'] },
         balanceDue: { $gt: 0 },
       }),
@@ -179,6 +201,7 @@ export const summary = asyncHandler(async (req, res) => {
         $match: {
           companyId: tenantId,
           isDeleted: { $ne: true },
+          ...byCollector,
           status: 'RECEIVED',
           paymentDate: { $gte: startOfMonth },
         },
@@ -202,8 +225,10 @@ export const summary = asyncHandler(async (req, res) => {
   const data = {
     ...base,
     ...transactions,
-    lowStockCount,
-    outstanding,
+    lowStockCount: own ? 0 : lowStockCount,
+    // A salesman's dues are on the invoices they sold; others see the ledger total.
+    outstanding: own ? transactions.invoiceOutstanding ?? 0 : outstanding,
+    scope: own ? 'MINE' : 'COMPANY',
     masters,
     setup,
     company: req.company

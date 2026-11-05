@@ -87,7 +87,9 @@ export default function Payments() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
-  const { company } = useAuth();
+  const { company, user } = useAuth();
+  // A salesman books these inside a shop visit (Sales visit), not from here.
+  const canNew = can('payments.create') && user?.role !== 'SALESMAN';
   const { lookups } = useLookups();
 
   const searchParam = params.get('search') || '';
@@ -278,7 +280,7 @@ export default function Payments() {
                 Export
               </Button>
             )}
-            {can('payments.create') && (
+            {canNew && (
               <Button onClick={() => navigate('/app/payments/new')}>
                 <Plus className="h-4 w-4" />
                 New payment
@@ -443,7 +445,7 @@ export default function Payments() {
                 <Button variant="outline" size="sm" onClick={resetAll}>
                   Clear filters
                 </Button>
-              ) : can('payments.create') ? (
+              ) : canNew ? (
                 <Button size="sm" onClick={() => navigate('/app/payments/new')}>
                   <Plus className="h-4 w-4" />
                   New payment

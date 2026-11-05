@@ -178,6 +178,7 @@ const schema = z.object({
     geofenceRadiusM: str(6),
     requireGps: z.boolean(),
     requireAttendance: z.boolean(),
+    saleOnlyInVisit: z.boolean(),
     enforceGeofence: z.boolean(),
     requireSelfie: z.boolean(),
     trackLiveLocation: z.boolean(),
@@ -275,6 +276,7 @@ const toDefaults = (data) => ({
     geofenceRadiusM: String(data?.fieldForce?.geofenceRadiusM ?? 50),
     requireGps: data?.fieldForce?.requireGps ?? true,
     requireAttendance: data?.fieldForce?.requireAttendance ?? true,
+    saleOnlyInVisit: data?.fieldForce?.saleOnlyInVisit ?? true,
     enforceGeofence: data?.fieldForce?.enforceGeofence ?? true,
     requireSelfie: data?.fieldForce?.requireSelfie ?? false,
     trackLiveLocation: data?.fieldForce?.trackLiveLocation ?? true,
@@ -909,6 +911,11 @@ function SettingsForm({ data, canUpdate, tab }) {
                 <Checkbox
                   label="Salesmen must mark attendance in before any work; van salesmen need an approved day cashout to mark out"
                   {...register('fieldForce.requireAttendance')}
+                  disabled={disabled}
+                />
+                <Checkbox
+                  label="Salesmen book orders, invoices, collections and returns only while checked in at that shop (Sales visit)"
+                  {...register('fieldForce.saleOnlyInVisit')}
                   disabled={disabled}
                 />
               </div>

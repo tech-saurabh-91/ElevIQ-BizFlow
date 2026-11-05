@@ -27,7 +27,7 @@ import * as dashboardController from '../../controllers/company/dashboardControl
 import { authenticate } from '../../middlewares/auth.js';
 import { requireCompanyScope } from '../../middlewares/rbac.js';
 import { tenant } from '../../middlewares/tenant.js';
-import { requireFieldDay } from '../../services/fieldDayService.js';
+import { requireFieldDay, requireVisitForSale } from '../../services/fieldDayService.js';
 
 /**
  * Company workspace API root: /api/v1/*
@@ -60,6 +60,8 @@ router.use(
   ['/orders', '/invoices', '/credit-notes', '/payments', '/stock-requests', '/beat-plans', '/field-force/visits'],
   requireFieldDay
 );
+// ...and books a sale only while checked in at that shop.
+router.post(['/orders', '/invoices', '/credit-notes', '/payments'], requireVisitForSale);
 
 router.use('/customers', customerRoutes);
 router.use('/products', productRoutes);

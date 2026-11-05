@@ -1,10 +1,13 @@
 import dayjs from 'dayjs';
 import Attendance from '../models/Attendance.js';
 import VanDayClose from '../models/VanDayClose.js';
+import Visit from '../models/Visit.js';
+import Invoice from '../models/Invoice.js';
+import Order from '../models/Order.js';
 import Setting from '../models/Setting.js';
 import { AppError } from '../utils/errors.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { salesTypeAllows } from '../config/constants.js';
+import { blockedBySalesType, salesTypeAllows } from '../config/constants.js';
 import { startOfDay } from './fieldForceService.js';
 import { activeVanOf, pendingDays, todayIn, tzOf } from './vanService.js';
 
@@ -93,8 +96,40 @@ export const fieldDayState = async (req) => {
  */
 export const requireFieldDay = asyncHandler(async (req, _res, next) => {
   if (req.user?.role !== 'SALESMAN' || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  // Closing a shop visit is never blocked: a visit left open has to be
+  // checked out before the day can be marked out.
+  if (req.baseUrl.endsWith('/field-force/visits') && /^\/[^/]+\/check-out\/?$/.test(req.path)) return next();
   const state = await fieldDayState(req);
   if (state.blocked) throw fail(state.blocked.message, state.blocked.code, { day: state.blocked.day });
+  return next();
+});
+
+/**
+ * A salesman sells only inside a shop visit: creating an order, invoice,
+ * collection or return needs an open check-in, at that same customer.
+ * (Applies with the field day flow on; companies can switch it off.)
+ */
+export const requireVisitForSale = asyncHandler(async (req, _res, next) => {
+  if (req.user?.role !== 'SALESMAN') return next();
+  // Not their channel at all (e.g. a van seller booking an order): the
+  // permission check answers that, not "check in first".
+  const perm = { '/orders': 'orders.create', '/invoices': 'invoices.create', '/credit-notes': 'creditnotes.create' }[req.path.replace(/\/$/, '')];
+  if (perm && blockedBySalesType(req.user, perm)) return next();
+  const settings = req.settings || (await Setting.forCompany(req.companyId));
+  if (settings?.fieldForce?.requireAttendance === false || settings?.fieldForce?.saleOnlyInVisit === false) return next();
+  const visit = await Visit.findOne({ salesman: req.user.id, status: 'IN_PROGRESS' }).select('customerId customerName').lean();
+  if (!visit) {
+    throw fail('Check in at the shop from Sales visit first - orders, invoices, collections and returns are booked during the visit.', 'VISIT_REQUIRED');
+  }
+  // The shop being sold to: given directly, or through the invoice / order.
+  let customerId = req.body?.customerId || req.body?.customer;
+  if (!customerId && req.body?.invoiceId) customerId = (await Invoice.findById(req.body.invoiceId).select('customerId').lean().catch(() => null))?.customerId;
+  if (!customerId && req.body?.orderId) customerId = (await Order.findById(req.body.orderId).select('customerId').lean().catch(() => null))?.customerId;
+  if (customerId && String(customerId) !== String(visit.customerId)) {
+    throw fail(`You are checked in at ${visit.customerName} - book for that shop, or check out first.`, 'VISIT_CUSTOMER_MISMATCH', {
+      customerName: visit.customerName,
+    });
+  }
   return next();
 });
 
@@ -107,8 +142,15 @@ export const assertCanMarkIn = async (req) => {
   if (state.blocked?.code === 'DAY_CASHOUT_PENDING') throw fail(state.blocked.message, state.blocked.code, { day: state.blocked.day });
 };
 
-/** Before marking out a day: a van salesman's cashout for it must be approved. */
+/**
+ * Before marking out a day: no shop left checked in, and a van salesman's
+ * cashout for the day must be approved.
+ */
 export const assertCanMarkOut = async (req, attendanceDay) => {
+  const openVisit = await Visit.findOne({ salesman: req.user.id, status: 'IN_PROGRESS' }).select('customerName').lean();
+  if (openVisit) {
+    throw fail(`Check out of ${openVisit.customerName} (Sales visit) before marking out.`, 'VISIT_IN_PROGRESS', { customerName: openVisit.customerName });
+  }
   const duty = await vanDutyOf(req.user);
   if (!duty) return;
   const day = fmt(attendanceDay);
@@ -118,4 +160,4 @@ export const assertCanMarkOut = async (req, attendanceDay) => {
   if (doc.status === 'REJECTED') throw fail(`Your day cashout for ${day} was rejected - submit it again.`, 'DAY_CASHOUT_PENDING', { day });
 };
 
-export default { fieldDayState, requireFieldDay, assertCanMarkIn, assertCanMarkOut, vanDutyOf };
+export default { fieldDayState, requireFieldDay, requireVisitForSale, assertCanMarkIn, assertCanMarkOut, vanDutyOf };

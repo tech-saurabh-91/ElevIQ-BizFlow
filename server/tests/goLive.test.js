@@ -90,6 +90,9 @@ describe('Go-live business day', () => {
   });
 
   test('2. order above the approval limit waits for approval, then reserves stock', async () => {
+    // The salesman books at the shop: check in first.
+    const visit = await call(state.sam).post('/api/v1/beat-plans/check-in', { customerId: state.customer, location: { lat: 18.52, lng: 73.85 } });
+    expect(visit.status).toBe(201);
     const order = await call(state.sam).post('/api/v1/orders', {
       customerId: state.customer,
       items: [{ product: state.oil, qty: 30 }],
@@ -195,5 +198,15 @@ describe('Go-live business day', () => {
     expect(cancelled.status).toBe(200);
     const row = (await admin().get('/api/v1/inventory/stock', { warehouse: state.main })).body.data.find((r) => String(r.product?.id || r.product) === state.oil);
     expect(row.reservedQty || 0).toBe(0);
+  });
+
+  test('9. a salesman dashboard shows only their own orders', async () => {
+    const mine = (await call(state.sam).get('/api/v1/dashboard/summary')).body.data;
+    expect(mine.scope).toBe('MINE');
+    expect(mine.recentOrders.map((o) => o.id)).toEqual([state.order]);
+    expect(mine.salesToday).toBeGreaterThan(0);
+    const all = (await admin().get('/api/v1/dashboard/summary')).body.data;
+    expect(all.scope).toBe('COMPANY');
+    expect(all.recentOrders.length).toBeGreaterThan(1);
   });
 });

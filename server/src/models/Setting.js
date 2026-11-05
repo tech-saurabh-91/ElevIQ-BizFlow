@@ -118,6 +118,8 @@ const settingSchema = new mongoose.Schema(
         requireGps: { type: Boolean, default: true },
         /** Start the day (attendance check-in) before visiting customers. */
         requireAttendance: { type: Boolean, default: true },
+        /** A salesman books orders, invoices, collections and returns only while checked in at that shop. */
+        saleOnlyInVisit: { type: Boolean, default: true },
         requireSelfie: { type: Boolean, default: false },
         trackLiveLocation: { type: Boolean, default: true },
         workStart: { type: String, default: '09:30' },
