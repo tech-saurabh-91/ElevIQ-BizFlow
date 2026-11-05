@@ -5,6 +5,7 @@ import {
   PAYMENT_TERMS,
   COMPANY_ROLE_LIST,
   AUDIT_ACTIONS,
+  SALES_TYPES,
 } from '../config/constants.js';
 
 /**
@@ -351,6 +352,7 @@ export const userCreateSchema = z
       .or(z.literal('')),
     password: PASSWORD_RULES.optional(),
     role: z.enum(COMPANY_ROLE_LIST),
+    salesType: z.enum(SALES_TYPES).optional(),
     title: softString(80),
     employeeCode: softString(30),
     designation: softString(80),
@@ -377,6 +379,7 @@ export const userUpdateSchema = z.object({
     .optional()
     .or(z.literal('')),
   role: z.enum(COMPANY_ROLE_LIST).optional(),
+  salesType: z.enum(SALES_TYPES).optional(),
   title: softString(80),
   employeeCode: softString(30),
   designation: softString(80),
@@ -519,6 +522,7 @@ export const settingsUpdateSchema = z.object({
       geofenceRadiusM: z.coerce.number().int().min(10).max(5000).optional(),
       requireGps: z.boolean().optional(),
       requireAttendance: z.boolean().optional(),
+      enforceGeofence: z.boolean().optional(),
       requireSelfie: z.boolean().optional(),
       trackLiveLocation: z.boolean().optional(),
       workStart: softString(5),

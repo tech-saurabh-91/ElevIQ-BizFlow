@@ -8,6 +8,7 @@ import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, COMPANY_ROLES, DEFAULT_PERMISSIONS, MOVEMENT_TYPES } from '../../config/constants.js';
 import { toPlain } from './_helpers.js';
 import { recordMovement } from '../../services/inventoryService.js';
+import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
 import {
   activeVanOf,
   assertDayClosed,
@@ -115,12 +116,54 @@ export const dayClosePreview = asyncHandler(async (req, res) => {
   ]);
   const spell = await VanAssignment.findOne({ warehouse: van._id, active: true }).lean();
   const pending = await pendingDays(van, spell, tz);
-  if (closed) return success(res, { data: { day, closed: toPlain(closed), pendingDays: pending } });
+  // A rejected cashout is counted again, so it shows the form with the reason.
+  if (closed && closed.status !== 'REJECTED') return success(res, { data: { day, closed: toPlain(closed), pendingDays: pending } });
   const summary = await daySummary(van, day, { tz, executiveId: executive });
-  return success(res, { data: { day, closed: null, executive: executive ? String(executive) : null, pendingDays: pending, ...summary } });
+  return success(res, {
+    data: {
+      day,
+      closed: null,
+      rejected: closed ? { reason: closed.rejectReason || '', at: closed.updatedAt } : null,
+      executive: executive ? String(executive) : null,
+      pendingDays: pending,
+      ...summary,
+    },
+  });
 });
 
-/** POST /vans/:id/day-close - settle a day: book stock variances, record cash. */
+/** Book the counted stock differences into the van (on approval). */
+const bookVariances = async (req, van, doc) => {
+  const settings = await Setting.forCompany(req.companyId);
+  for (const l of doc.lines.filter((x) => x.variance)) {
+    await recordMovement({
+      product: l.product,
+      warehouse: van._id,
+      qty: l.variance,
+      type: MOVEMENT_TYPES.COUNT,
+      refType: 'MANUAL',
+      refNo: `DAYCLOSE-${van.code}-${doc.day}`,
+      reason: 'Van day close count',
+      note: doc.notes || '',
+      movedBy: req.user.id,
+      settings: { ...settings.toObject(), order: { ...settings.order, allowNegativeStock: true } },
+    });
+  }
+};
+
+const approveCashout = async (req, van, doc) => {
+  await bookVariances(req, van, doc);
+  doc.status = 'APPROVED';
+  doc.approvedBy = req.user.id;
+  doc.approvedAt = new Date();
+  doc.rejectReason = '';
+  await doc.save();
+};
+
+/**
+ * POST /vans/:id/day-close - the day cashout: counted stock and cash for a
+ * day. The executive submits it for approval; a user who may approve day
+ * cashouts settles it at once. A rejected cashout is submitted again.
+ */
 export const closeDay = asyncHandler(async (req, res) => {
   const van = await loadVan(req.params.id);
   await assertAccess(req, van, 'inventory.manage');
@@ -128,8 +171,12 @@ export const closeDay = asyncHandler(async (req, res) => {
   const day = req.body.date;
   if (!DAY.test(day || '')) throw new BadRequestError('Choose the day to close', 'VALIDATION_ERROR');
   if (day > todayIn(tz)) throw new BadRequestError('A future day cannot be closed', 'INVALID_DATE');
-  if (await VanDayClose.exists({ warehouse: van._id, day })) {
-    throw new ConflictError(`${van.code} is already closed for ${day}`, 'DAY_ALREADY_CLOSED');
+  const existing = await VanDayClose.findOne({ warehouse: van._id, day });
+  if (existing && existing.status !== 'REJECTED') {
+    throw new ConflictError(
+      existing.status === 'SUBMITTED' ? `${van.code} cashout for ${day} is waiting for approval` : `${van.code} is already closed for ${day}`,
+      'DAY_ALREADY_CLOSED'
+    );
   }
   const spell = await VanAssignment.findOne({ warehouse: van._id, active: true }).lean();
   const earlier = (await pendingDays(van, spell, tz)).filter((d) => d < day);
@@ -156,24 +203,7 @@ export const closeDay = asyncHandler(async (req, res) => {
     throw new AppError(errors[0].message, { status: 422, code: 'VALIDATION_ERROR', errors: errors.map((e) => ({ ...e, field: `body.${e.field}` })) });
   }
 
-  // Shortages / excess found on the count are booked into the van.
-  const settings = await Setting.forCompany(req.companyId);
-  for (const l of withVariance) {
-    await recordMovement({
-      product: l.product,
-      warehouse: van._id,
-      qty: l.variance,
-      type: MOVEMENT_TYPES.COUNT,
-      refType: 'MANUAL',
-      refNo: `DAYCLOSE-${van.code}-${day}`,
-      reason: 'Van day close count',
-      note: req.body.notes || '',
-      movedBy: req.user.id,
-      settings: { ...settings.toObject(), order: { ...settings.order, allowNegativeStock: true } },
-    });
-  }
-
-  const doc = await VanDayClose.create({
+  const values = {
     warehouse: van._id,
     executive,
     day,
@@ -186,16 +216,104 @@ export const closeDay = asyncHandler(async (req, res) => {
     notes: req.body.notes || '',
     closedBy: req.user.id,
     closedAt: new Date(),
-  });
+    status: 'SUBMITTED',
+    rejectReason: '',
+  };
+  let doc;
+  if (existing) {
+    existing.set(values);
+    doc = await existing.save();
+  } else {
+    doc = await VanDayClose.create(values);
+  }
+
+  const selfApprove = can(req, 'vans.daycash.approve');
+  if (selfApprove) await approveCashout(req, van, doc);
+  else {
+    await notifyPermission(req.companyId, 'vans.daycash.approve', {
+      type: 'APPROVAL_REQUIRED',
+      title: `Day cashout ${van.code} ${day} needs approval`,
+      body: `${req.user.name} · cash ${cashDeposited} (expected ${summary.cashExpected})${withVariance.length ? ` · ${withVariance.length} stock difference(s)` : ''}`,
+      link: '/app/day-cashouts',
+      entityType: 'VanDayClose',
+      entityId: doc._id,
+      priority: 'HIGH',
+      exclude: req.user.id,
+    });
+  }
 
   audit(req, {
     action: AUDIT_ACTIONS.CREATE,
     entityType: 'VanDayClose',
     entityId: doc._id,
     entityLabel: `${van.code} ${day}`,
-    description: `Van ${van.code} closed for ${day}: cash ${doc.cashVariance >= 0 ? '+' : ''}${doc.cashVariance}, ${withVariance.length} stock difference(s)`,
+    description: `Van ${van.code} day cashout for ${day} ${selfApprove ? 'settled' : 'submitted'}: cash ${doc.cashVariance >= 0 ? '+' : ''}${doc.cashVariance}, ${withVariance.length} stock difference(s)`,
   });
-  return created(res, { message: `${van.code} closed for ${day}`, data: toPlain(doc) });
+  return created(res, {
+    message: selfApprove ? `${van.code} closed for ${day}` : 'Day cashout sent for approval',
+    data: toPlain(doc),
+  });
+});
+
+const loadCashout = async (req) => {
+  const doc = await VanDayClose.findById(req.params.closeId);
+  if (!doc) throw new BadRequestError('Day cashout not found', 'NOT_FOUND');
+  if (doc.status !== 'SUBMITTED') throw new ConflictError('Only a cashout waiting for approval can be acted on', 'CASHOUT_LOCKED');
+  return { doc, van: await loadVan(String(doc.warehouse)) };
+};
+
+/** GET /vans/day-closes?status= - day cashouts across vans (approvals queue). */
+export const allDayCloses = asyncHandler(async (req, res) => {
+  const filter = {};
+  if (['SUBMITTED', 'APPROVED', 'REJECTED'].includes(req.query.status)) filter.status = req.query.status;
+  const canApprove = can(req, 'vans.daycash.approve');
+  if (!canApprove && !can(req, 'inventory.view')) filter.executive = req.user.id;
+  const rows = await VanDayClose.find(filter)
+    .sort({ day: -1, createdAt: -1 })
+    .limit(100)
+    .populate('warehouse', 'name code')
+    .populate('executive', 'name')
+    .populate('closedBy', 'name')
+    .populate('approvedBy', 'name')
+    .lean();
+  return res.json({ success: true, message: 'OK', data: rows.map(toPlain), meta: { canApprove } });
+});
+
+/** POST /vans/day-closes/:closeId/approve */
+export const approveDayClose = asyncHandler(async (req, res) => {
+  if (!can(req, 'vans.daycash.approve')) throw new ForbiddenError('You cannot approve day cashouts', 'FORBIDDEN');
+  const { doc, van } = await loadCashout(req);
+  await approveCashout(req, van, doc);
+  await notifyUsers([doc.executive], {
+    type: 'SYSTEM',
+    title: `Day cashout ${van.code} ${doc.day} approved`,
+    body: 'You can mark out your attendance now.',
+    link: '/app/attendance',
+    entityType: 'VanDayClose',
+    entityId: doc._id,
+  });
+  audit(req, { action: AUDIT_ACTIONS.APPROVE, entityType: 'VanDayClose', entityId: doc._id, entityLabel: `${van.code} ${doc.day}`, description: `Day cashout ${van.code} ${doc.day} approved` });
+  return success(res, { message: 'Day cashout approved', data: toPlain(doc) });
+});
+
+/** POST /vans/day-closes/:closeId/reject { reason } */
+export const rejectDayClose = asyncHandler(async (req, res) => {
+  if (!can(req, 'vans.daycash.approve')) throw new ForbiddenError('You cannot reject day cashouts', 'FORBIDDEN');
+  const { doc, van } = await loadCashout(req);
+  doc.status = 'REJECTED';
+  doc.rejectReason = req.body.reason;
+  await doc.save();
+  await notifyUsers([doc.executive], {
+    type: 'SYSTEM',
+    title: `Day cashout ${van.code} ${doc.day} rejected`,
+    body: req.body.reason,
+    link: '/app/my-van',
+    entityType: 'VanDayClose',
+    entityId: doc._id,
+    priority: 'HIGH',
+  });
+  audit(req, { action: AUDIT_ACTIONS.REJECT, entityType: 'VanDayClose', entityId: doc._id, entityLabel: `${van.code} ${doc.day}`, description: `Day cashout ${van.code} ${doc.day} rejected: ${req.body.reason}` });
+  return success(res, { message: 'Day cashout rejected', data: toPlain(doc) });
 });
 
 /** GET /vans/:id/day-closes - settlement history, newest first. */
@@ -207,8 +325,9 @@ export const dayCloses = asyncHandler(async (req, res) => {
     .limit(60)
     .populate('executive', 'name')
     .populate('closedBy', 'name')
+    .populate('approvedBy', 'name')
     .lean();
   return success(res, { data: rows.map(toPlain) });
 });
 
-export default { mine, stock, load, unload, dayClosePreview, closeDay, dayCloses };
+export default { mine, stock, load, unload, dayClosePreview, closeDay, dayCloses, allDayCloses, approveDayClose, rejectDayClose };

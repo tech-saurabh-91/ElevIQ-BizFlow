@@ -54,7 +54,8 @@ const Products = lazy(() => import('@/pages/company/Products'));
 const CatalogMasters = lazy(() => import('@/pages/company/CatalogMasters'));
 const MyVan = lazy(() => import('@/pages/company/MyVan'));
 const StockRequests = lazy(() => import('@/pages/company/StockRequests'));
-const MyBeat = lazy(() => import('@/pages/company/MyBeat'));
+const SalesVisit = lazy(() => import('@/pages/company/SalesVisit'));
+const DayCashouts = lazy(() => import('@/pages/company/DayCashouts'));
 const BeatPlan = lazy(() => import('@/pages/company/BeatPlan'));
 const Suppliers = lazy(() => import('@/pages/company/Suppliers'));
 const PriceLists = lazy(() => import('@/pages/company/PriceLists'));
@@ -243,7 +244,9 @@ export default function App() {
           <Route path="catalog" element={guard('products.view', <CatalogMasters />)} />
           <Route path="my-van" element={<MyVan />} />
           <Route path="stock-requests" element={<StockRequests />} />
-          <Route path="my-beat" element={<MyBeat />} />
+          <Route path="sales" element={<SalesVisit />} />
+          <Route path="my-beat" element={<Navigate to="/app/sales" replace />} />
+          <Route path="day-cashouts" element={guard('vans.daycash.approve', <DayCashouts />)} />
           <Route path="beat-plan" element={guard('fieldforce.targets.manage', <BeatPlan />)} />
           <Route path="suppliers" element={guard('products.view', <Suppliers />)} />
           <Route path="price-lists" element={guard('products.view', <PriceLists />)} />

@@ -35,6 +35,7 @@ import {
   LineChart,
   Globe2,
 } from 'lucide-react';
+import { sellsVia } from '@/utils/salesType';
 
 // ---- Platform (Service Provider) ------------------------------------------
 export const platformNav = [
@@ -70,12 +71,22 @@ export const companyNav = [
     items: [{ to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true }],
   },
   {
+    // A field salesman's day, in order: mark in, sell, (van) cash out, mark out.
+    section: 'My Day',
+    items: [
+      { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, roles: ['SALESMAN'] },
+      { to: '/app/sales', label: 'Sales Visit', icon: Navigation, roles: ['SALESMAN', 'MANAGER'] },
+      { to: '/app/my-van', label: 'My Van & Cashout', icon: Truck, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'], channel: 'VAN_SALE' },
+      { to: '/app/stock-requests', label: 'Van Stock Requests', icon: ClipboardList, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE', 'COMPANY_ADMIN'], channel: 'VAN_SALE' },
+    ],
+  },
+  {
     section: 'Sales',
     items: [
       { to: '/app/orders', label: 'Orders', icon: ShoppingCart, permission: 'orders.view' },
-      { to: '/app/invoices', label: 'Invoices', icon: FileText, permission: 'invoices.view' },
+      { to: '/app/invoices', label: 'Invoices', icon: FileText, permission: 'invoices.view', channel: 'VAN_SALE' },
       { to: '/app/payments', label: 'Payments & Collections', icon: Wallet, permission: 'payments.view' },
-      { to: '/app/credit-notes', label: 'Credit Notes', icon: ClipboardList, permission: 'creditnotes.view' },
+      { to: '/app/credit-notes', label: 'Credit Notes', icon: ClipboardList, permission: 'creditnotes.view', channel: 'VAN_SALE' },
     ],
   },
   {
@@ -93,13 +104,11 @@ export const companyNav = [
   {
     section: 'Field Force',
     items: [
-      // Only for people who can drive a van.
-      { to: '/app/my-beat', label: 'My Beat', icon: Navigation, roles: ['SALESMAN', 'MANAGER'] },
-      { to: '/app/my-van', label: 'My Van', icon: Truck, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'] },
-      { to: '/app/stock-requests', label: 'Van Stock Requests', icon: ClipboardList, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE', 'COMPANY_ADMIN'] },
       { to: '/app/beat-plan', label: 'Beat Plan', icon: CalendarRange, permission: 'fieldforce.targets.manage' },
-      { to: '/app/visits', label: 'Visits & Check-ins', icon: MapPin, permission: 'fieldforce.visits.view' },
-      { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, permission: 'fieldforce.attendance.view' },
+      { to: '/app/day-cashouts', label: 'Day Cashouts', icon: Wallet, permission: 'vans.daycash.approve' },
+      // Team views; a salesman works from "My Day".
+      { to: '/app/visits', label: 'Visits Report', icon: MapPin, permission: 'fieldforce.visits.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, permission: 'fieldforce.attendance.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/targets', label: 'Targets', icon: Target, permission: 'fieldforce.targets.view' },
       { to: '/app/expenses', label: 'Expenses', icon: Wallet, permission: 'fieldforce.expenses.view' },
     ],
@@ -125,13 +134,16 @@ export const companyNav = [
  * Filter a nav tree by the current user's permissions.
  * Platform users see everything (platform guards are separate).
  */
-export const filterNav = (sections, { can, scope, role }) =>
+export const filterNav = (sections, { can, scope, role, user }) =>
   sections
     .map((section) => ({
       ...section,
       items: section.items.filter((item) => {
         if (scope === 'platform') return true;
         if (item.roles && !item.roles.includes(role)) return false;
+        if (item.excludeRoles && item.excludeRoles.includes(role)) return false;
+        // Channel items (van stock, day cashout...) only for salesmen who sell that way.
+        if (item.channel && !sellsVia(user || { role }, item.channel)) return false;
         if (role === 'COMPANY_ADMIN') return true;
         if (!item.permission) return true;
         return typeof can === 'function' ? can(item.permission) : true;

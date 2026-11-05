@@ -175,6 +175,7 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
     email: user.email,
     phone: user.phone,
     role: user.role,
+    salesType: user.salesType || 'BOTH',
     scope: 'company',
     companyId,
     companyName: company.businessName,

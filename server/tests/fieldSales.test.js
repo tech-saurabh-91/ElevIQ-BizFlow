@@ -35,7 +35,7 @@ beforeAll(async () => {
   });
   await runWithContext({ scope: 'company', companyId: String(company._id) }, async () => {
     const settings = await Setting.forCompany(company._id);
-    settings.set({ 'order.approvalThreshold': 0, 'invoice.rounding': 'NONE', 'fieldForce.requireGps': false });
+    settings.set({ 'fieldForce.requireAttendance': false, 'order.approvalThreshold': 0, 'invoice.rounding': 'NONE', 'fieldForce.requireGps': false });
     await settings.save();
     await User.create({ companyId: company._id, name: 'Admin', email: 'admin@fs.test', password: PASSWORD, role: 'COMPANY_ADMIN' });
     await User.create({ companyId: company._id, name: 'Mona Manager', email: 'mona@fs.test', password: PASSWORD, role: 'MANAGER' });
@@ -181,28 +181,26 @@ describe('Beat plan and the salesman day', () => {
   test('the weekly plan puts the route in the salesman day; a day plan overrides it', async () => {
     const mine = await call(state.sam).get('/api/v1/beat-plans/mine');
     expect(mine.body.data.routes.map((r) => r.code)).toEqual(['CAMP']);
-    expect(mine.body.data.routes[0].customers[0]).toMatchObject({ name: 'Camp Store', visit: null });
+    expect(mine.body.data.routes[0].today).toBe(true);
+    const onRoute = await call(state.sam).get('/api/v1/beat-plans/customers', { route: state.route });
+    expect(onRoute.body.data[0]).toMatchObject({ name: 'Camp Store', visit: null });
+    // "No route": every active customer.
+    expect((await call(state.sam).get('/api/v1/beat-plans/customers', { route: 'none' })).body.data.length).toBeGreaterThan(0);
 
     const grid = await call(state.mona).get('/api/v1/beat-plans');
     expect(grid.body.data.cells.find((c) => c.day === today())).toMatchObject({ salesman: state.samId, source: 'WEEKLY' });
 
-    // Ravi covers the beat today.
+    // Ravi covers the beat today; Sam still owns the route, just not today.
     await call(state.mona).put('/api/v1/beat-plans', { route: state.route, salesman: state.raviId, days: [today()] });
-    expect((await call(state.sam).get('/api/v1/beat-plans/mine')).body.data.routes).toHaveLength(0);
+    expect((await call(state.sam).get('/api/v1/beat-plans/mine')).body.data.routes[0].today).toBe(false);
     expect((await call(state.ravi).get('/api/v1/beat-plans/mine')).body.data.routes).toHaveLength(1);
     // Back to the weekly plan.
     await call(state.mona).put('/api/v1/beat-plans', { route: state.route, salesman: null, days: [today()] });
-    expect((await call(state.sam).get('/api/v1/beat-plans/mine')).body.data.routes).toHaveLength(1);
+    expect((await call(state.sam).get('/api/v1/beat-plans/mine')).body.data.routes[0].today).toBe(true);
   });
 
   test('check-out asks for a reason only when nothing was booked', async () => {
     const sam = call(state.sam);
-    // No shop visits before the day is started in attendance.
-    const early = await sam.post('/api/v1/beat-plans/check-in', { customerId: state.customer, route: state.route });
-    expect(early.status).toBe(400);
-    expect(early.body.code).toBe('ATTENDANCE_REQUIRED');
-    expect((await sam.post('/api/v1/field-force/attendance/check-in', {})).status).toBe(200);
-
     const first = await sam.post('/api/v1/beat-plans/check-in', { customerId: state.customer, route: state.route });
     expect(first.status).toBe(201);
     // One shop at a time.
@@ -222,7 +220,7 @@ describe('Beat plan and the salesman day', () => {
     expect(done.status).toBe(200);
     expect(done.body.data).toMatchObject({ outcome: 'ORDER_TAKEN', orderNo: order.body.data.orderNo });
 
-    const day = await sam.get('/api/v1/beat-plans/mine');
-    expect(day.body.data.routes[0].customers[0].visit.outcome).toBe('ORDER_TAKEN');
+    const day = await sam.get('/api/v1/beat-plans/customers', { route: state.route });
+    expect(day.body.data[0].visit.outcome).toBe('ORDER_TAKEN');
   });
 });

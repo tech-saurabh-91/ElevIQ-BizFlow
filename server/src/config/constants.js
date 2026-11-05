@@ -241,6 +241,27 @@ export const TRANSFER_TRANSITIONS = Object.freeze({
 // ---------------------------------------------------------------------------
 export const VISIT_OUTCOMES = Object.freeze(['ORDER_TAKEN', 'INVOICED', 'NO_ORDER', 'PAYMENT_COLLECTED', 'CLOSED', 'CUSTOMER_UNAVAILABLE']);
 
+/**
+ * How a field salesman sells. PRESALE books orders (delivered later from the
+ * godown); VAN_SALE sells from a van on the spot (invoice, van stock, returns,
+ * day cashout); BOTH does both. Applies to the SALESMAN role on top of the
+ * permission matrix: a permission tied to a channel is only open to a
+ * salesman whose type includes it.
+ */
+export const SALES_TYPES = Object.freeze(['PRESALE', 'VAN_SALE', 'BOTH']);
+export const SALES_CHANNEL_PERMISSIONS = Object.freeze({
+  'orders.create': 'PRESALE',
+  'orders.update': 'PRESALE',
+  'invoices.create': 'VAN_SALE',
+  'invoices.update': 'VAN_SALE',
+  'creditnotes.create': 'VAN_SALE',
+  'creditnotes.update': 'VAN_SALE',
+});
+export const salesTypeAllows = (salesType, channel) => !channel || !salesType || salesType === 'BOTH' || salesType === channel;
+/** True when a SALESMAN's sales type keeps them out of `permission`. */
+export const blockedBySalesType = (user, permission) =>
+  user?.role === 'SALESMAN' && !salesTypeAllows(user.salesType || 'BOTH', SALES_CHANNEL_PERMISSIONS[permission]);
+
 /** Why a checked-in customer gave no order (asked at check-out). */
 export const NO_ORDER_REASONS = Object.freeze([
   'STOCK_AVAILABLE', // still has enough stock
@@ -379,6 +400,8 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
   'orders.approve': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER],
   'orders.cancel': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER],
   // Dispatch / deliver move godown stock: the warehouse team, not the salesman.
+  // Manager signs off a van's day cashout before the executive can end the day.
+  'vans.daycash.approve': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER],
   'orders.dispatch': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.WAREHOUSE],
   'orders.export': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
 
@@ -401,7 +424,7 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
     COMPANY_ROLES.SALESMAN,
     COMPANY_ROLES.ACCOUNTANT,
   ],
-  'creditnotes.create': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
+  'creditnotes.create': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT, COMPANY_ROLES.SALESMAN],
   'creditnotes.update': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
   'creditnotes.delete': [COMPANY_ROLES.COMPANY_ADMIN],
   'creditnotes.cancel': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],

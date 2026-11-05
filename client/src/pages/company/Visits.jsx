@@ -9,7 +9,6 @@ import {
   MapPin,
   MoreHorizontal,
   Navigation,
-  Plus,
   Search,
   SkipForward,
   Trash2,
@@ -43,8 +42,6 @@ import {
   VISIT_OUTCOMES,
   VISIT_PURPOSES,
   WorkflowDialog,
-  CheckOutDialog,
-  captureGps,
   noOrderReasonLabel,
   outcomeLabel,
   purposeLabel,
@@ -54,145 +51,6 @@ import {
 const STATUS_OPTIONS = ['', ...VISIT_STATUSES];
 const OUTCOME_OPTIONS = ['', ...VISIT_OUTCOMES];
 const PURPOSE_OPTIONS = ['', ...VISIT_PURPOSES];
-
-/** Create-visit modal: pick a customer, day, purpose and optional notes. */
-function VisitForm({ open, onClose, onSaved }) {
-  const queryClient = useQueryClient();
-  const { lookups } = useLookups();
-
-  const [form, setForm] = useState({
-    customerId: '',
-    visitDay: '',
-    plannedAt: '',
-    purpose: 'ORDER',
-    notes: '',
-  });
-
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-
-  const mutation = useMutation({
-    mutationFn: async (payload) => {
-      const { data } = await api.post('/v1/field-force/visits', payload);
-      return data;
-    },
-    onSuccess: (payload) => {
-      toast.success(payload?.message || 'Visit planned');
-      queryClient.invalidateQueries({ queryKey: ['company', 'visits'] });
-      onSaved?.();
-      onClose();
-    },
-    onError: (err) => toast.error(apiError(err).message),
-  });
-
-  const submit = () => {
-    const payload = {
-      customerId: form.customerId,
-      purpose: form.purpose,
-    };
-    if (form.visitDay) payload.visitDay = form.visitDay;
-    if (form.plannedAt) payload.plannedAt = form.plannedAt;
-    if (form.notes.trim()) payload.notes = form.notes.trim();
-    mutation.mutate(payload);
-  };
-
-  const customers = lookups.customers || [];
-  const routes = lookups.routes || [];
-  const salesmen = (lookups.users || []).filter((u) => u.role === 'SALESMAN' || u.role === 'MANAGER');
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="Plan a visit"
-      description="Add a stop to the beat. Check in when you arrive at the customer's premises."
-      size="md"
-      dismissible={!mutation.isPending}
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={!form.customerId} loading={mutation.isPending}>
-            Plan visit
-          </Button>
-        </>
-      }
-    >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <label className="mb-1.5 block text-sm font-medium" htmlFor="visit-customer">
-            Customer <span className="text-destructive">*</span>
-          </label>
-          <Select
-            id="visit-customer"
-            value={form.customerId}
-            onChange={(e) => set('customerId', e.target.value)}
-          >
-            <option value="">Select a customer…</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.code ? ` (${c.code})` : ''}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-sm font-medium" htmlFor="visit-day">
-            Visit day
-          </label>
-          <Input
-            id="visit-day"
-            type="date"
-            value={form.visitDay}
-            onChange={(e) => set('visitDay', e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-sm font-medium" htmlFor="visit-purpose">
-            Purpose
-          </label>
-          <Select
-            id="visit-purpose"
-            value={form.purpose}
-            onChange={(e) => set('purpose', e.target.value)}
-          >
-            {VISIT_PURPOSES.map((p) => (
-              <option key={p} value={p}>
-                {purposeLabel(p)}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="mb-1.5 block text-sm font-medium" htmlFor="visit-notes">
-            Notes
-          </label>
-          <Input
-            id="visit-notes"
-            value={form.notes}
-            onChange={(e) => set('notes', e.target.value)}
-            placeholder="What do you want to achieve on this stop?"
-          />
-        </div>
-
-        {salesmen.length > 0 && (
-          <p className="text-xs text-muted-foreground sm:col-span-2">
-            Managers and admins can assign the visit to a rep; a rep always books for themselves.
-          </p>
-        )}
-        {routes.length > 0 && (
-          <p className="text-xs text-muted-foreground sm:col-span-2">
-            The route is picked up automatically from the customer's beat.
-          </p>
-        )}
-      </div>
-    </Dialog>
-  );
-}
 
 export default function Visits() {
   const [params, setParams] = useSearchParams();
@@ -215,7 +73,6 @@ export default function Visits() {
   const order = params.get('order') === 'asc' ? 'asc' : 'desc';
 
   const [searchDraft, setSearchDraft] = useState(searchParam);
-  const [formOpen, setFormOpen] = useState(false);
   const [action, setAction] = useState(null); // { kind, visit }
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -406,17 +263,9 @@ export default function Visits() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Visits & Check-ins"
-        description="Plan the beat, check in at each stop with GPS and record the outcome."
-        breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Visits & Check-ins' }]}
-        actions={
-          can('fieldforce.visits.manage') && (
-            <Button onClick={() => setFormOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Plan visit
-            </Button>
-          )
-        }
+        title="Visits report"
+        description="Every shop visit from the Sales visit screen: time at the shop, distance from the pinned location, outcome and no-order reason."
+        breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Visits report' }]}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -587,11 +436,6 @@ export default function Visits() {
                 <Button variant="outline" size="sm" onClick={resetAll}>
                   Clear filters
                 </Button>
-              ) : can('fieldforce.visits.manage') ? (
-                <Button size="sm" onClick={() => setFormOpen(true)}>
-                  <Plus className="h-4 w-4" />
-                  Plan visit
-                </Button>
               ) : null
             }
           />
@@ -625,7 +469,7 @@ export default function Visits() {
             </TableHeader>
             <TableBody>
               {rows.map((row) => {
-                const available = visitActionsFor(row, can);
+                const available = visitActionsFor(row, can).filter((k) => k === 'cancel');
                 return (
                   <TableRow key={row.id}>
                     {columns.map((col) => (
@@ -646,36 +490,6 @@ export default function Visits() {
                       >
                         {({ close }) => (
                           <>
-                            {available.includes('checkIn') && (
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  close();
-                                  setAction({ kind: 'checkIn', visit: row });
-                                }}
-                              >
-                                <MapPin className="h-4 w-4" /> Check in (GPS)
-                              </DropdownMenuItem>
-                            )}
-                            {available.includes('checkOut') && (
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  close();
-                                  setAction({ kind: 'checkOut', visit: row });
-                                }}
-                              >
-                                <CheckCircle2 className="h-4 w-4" /> Check out with outcome
-                              </DropdownMenuItem>
-                            )}
-                            {available.includes('skip') && (
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  close();
-                                  setAction({ kind: 'skip', visit: row });
-                                }}
-                              >
-                                <SkipForward className="h-4 w-4" /> Mark as skipped
-                              </DropdownMenuItem>
-                            )}
                             {available.includes('cancel') && (
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
@@ -717,62 +531,6 @@ export default function Visits() {
             onLimitChange={(l) => setParam({ limit: l, page: 1 })}
           />
         </Card>
-      )}
-
-      <VisitForm open={formOpen} onClose={() => setFormOpen(false)} onSaved={invalidate} />
-
-      {/* Check-in captures GPS (falls back to no coordinates if the browser denies it). */}
-      {action?.kind === 'checkIn' && (
-        <WorkflowDialog
-          open
-          onClose={() => setAction(null)}
-          onDone={invalidate}
-          endpoint={`/v1/field-force/visits/${action.visit?.id}/check-in`}
-          title="Check in to this stop?"
-          description="We will capture your current GPS position (if the browser allows it) to prove the visit."
-          subject={`${action.visit?.visitNo || 'Visit'} · ${action.visit?.customerName || ''}`}
-          confirmLabel="Check in"
-          fields={[{ name: 'note', label: 'Note (optional)', type: 'text' }]}
-          errorTitle="Could not check in"
-          invalidateKeys={[['company', 'visits'], ['company', 'targets']]}
-          prepareBody={async (body) => {
-            const gps = await captureGps();
-            const payload = { ...body, source: 'WEB' };
-            if (gps) {
-              payload.location = { lat: gps.lat, lng: gps.lng };
-              if (gps.accuracy != null) payload.accuracy = gps.accuracy;
-            }
-            return payload;
-          }}
-        />
-      )}
-
-      {action?.kind === 'checkOut' && <CheckOutDialog visit={action.visit} onClose={() => setAction(null)} onDone={invalidate} />}
-
-      {action?.kind === 'skip' && (
-        <WorkflowDialog
-          open
-          onClose={() => setAction(null)}
-          onDone={invalidate}
-          endpoint={`/v1/field-force/visits/${action.visit?.id}/skip`}
-          title="Skip this stop?"
-          description="Record why the customer could not be covered so the beat can be re-planned."
-          subject={`${action.visit?.visitNo || 'Visit'} · ${action.visit?.customerName || ''}`}
-          confirmLabel="Skip visit"
-          tone="destructive"
-          fields={[
-            {
-              name: 'reason',
-              label: 'Reason for skipping',
-              type: 'text',
-              required: true,
-              minLength: 3,
-              autoFocus: true,
-            },
-          ]}
-          errorTitle="Could not skip the visit"
-          invalidateKeys={[['company', 'visits'], ['company', 'targets']]}
-        />
       )}
 
       {action?.kind === 'cancel' && (

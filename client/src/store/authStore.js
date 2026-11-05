@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { blockedBySalesType } from '@/utils/salesType';
 
 /**
  * Auth store.
@@ -131,6 +132,7 @@ export const useAuthStore = create(
         if (!user) return false;
         if (user.scope === 'platform') return true; // platform route guards separately
         if (user.role === 'COMPANY_ADMIN') return true;
+        if (blockedBySalesType(user, permission)) return false;
         const list = permissions?.[permission];
         if (!Array.isArray(list)) return false;
         return list.includes(user.role);

@@ -35,7 +35,7 @@ export default function MyVan() {
                 <ClipboardList className="h-4 w-4" /> Request stock
               </Button>
               <Button onClick={() => setClosing(true)}>
-                <Truck className="h-4 w-4" /> Day close
+                <Truck className="h-4 w-4" /> Day cashout
               </Button>
             </div>
           ) : null
@@ -53,8 +53,8 @@ export default function MyVan() {
         <>
           {data.pendingDays.length > 0 && (
             <ErrorAlert
-              title="Day close pending"
-              message={`Close ${data.pendingDays.join(', ')}${data.dayCloseMandatory ? ' before booking new orders' : ''}.`}
+              title="Day cashout pending"
+              message={`Submit the day cashout for ${data.pendingDays.join(', ')} - you cannot mark in or sell until it is approved.`}
             />
           )}
           <Card>
@@ -63,8 +63,7 @@ export default function MyVan() {
                 {data.van.name} <Badge tone="info">{data.van.vehicleNumber || data.van.code}</Badge>
               </CardTitle>
               <CardDescription>
-                Orders you book are taken from this van.
-                {data.dayCloseMandatory ? ' Day close is mandatory.' : ''}
+                Invoices you raise are taken from this van. Submit the day cashout before you mark out.
               </CardDescription>
             </CardHeader>
             <CardContent>

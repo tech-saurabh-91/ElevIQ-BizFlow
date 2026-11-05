@@ -80,6 +80,8 @@ export default function CreditNoteEditor() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const [searchParams] = useSearchParams();
+  // Opened from a shop visit: go back there after saving (check-out follows).
+  const returnTo = (searchParams.get('returnTo') || '').startsWith('/app/') ? searchParams.get('returnTo') : '';
   const presetInvoiceId = searchParams.get('invoiceId') || '';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -250,7 +252,8 @@ export default function CreditNoteEditor() {
       queryClient.invalidateQueries({ queryKey: ['company', 'dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['company', 'customers'] });
       queryClient.invalidateQueries({ queryKey: ['company', 'orders'] });
-      if (saved?.id) navigate(`/app/credit-notes/${saved.id}`, { replace: true });
+      if (returnTo) navigate(returnTo, { replace: true });
+      else if (saved?.id) navigate(`/app/credit-notes/${saved.id}`, { replace: true });
       else navigate('/app/credit-notes', { replace: true });
     },
     onError: (err) => {
@@ -385,7 +388,7 @@ export default function CreditNoteEditor() {
         actions={
           <Button
             variant="outline"
-            onClick={() => navigate(isEdit ? `/app/credit-notes/${id}` : '/app/credit-notes')}
+            onClick={() => navigate(returnTo || (isEdit ? `/app/credit-notes/${id}` : '/app/credit-notes'))}
           >
             <ArrowLeft className="h-4 w-4" />
             Cancel

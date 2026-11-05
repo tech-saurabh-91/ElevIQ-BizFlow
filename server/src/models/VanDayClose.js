@@ -44,6 +44,17 @@ const vanDayCloseSchema = new mongoose.Schema(
     payments: { type: Number, default: 0 }, // number of cash receipts counted
 
     notes: { type: String, default: '', maxlength: 1000 },
+
+    /**
+     * Day cashout approval: the executive SUBMITS, a manager APPROVES (stock
+     * differences are booked then) or REJECTS (the executive submits again).
+     * Older rows predate approval and count as approved.
+     */
+    status: { type: String, enum: ['SUBMITTED', 'APPROVED', 'REJECTED'], default: 'APPROVED', index: true },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    approvedAt: { type: Date, default: null },
+    rejectReason: { type: String, default: '', maxlength: 500 },
+
     closedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     closedAt: { type: Date, default: Date.now },
   },

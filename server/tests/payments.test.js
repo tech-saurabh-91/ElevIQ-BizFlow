@@ -46,7 +46,10 @@ const seedTenant = async ({ code, businessName, adminEmail, managerEmail, salesm
   let accountant;
 
   await inTenant(String(company._id), async () => {
-    await Setting.forCompany(company._id);
+    // Working-day (attendance) gate is covered in fieldDay.test.js.
+    const daySettings = await Setting.forCompany(company._id);
+    daySettings.set({ 'fieldForce.requireAttendance': false });
+    await daySettings.save();
 
     admin = await User.create({
       companyId: company._id,

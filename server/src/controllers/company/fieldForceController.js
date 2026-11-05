@@ -31,6 +31,7 @@ import {
   assertCanStartVisit,
   markGeofence,
 } from '../../services/fieldForceService.js';
+import { assertCanMarkIn, assertCanMarkOut, fieldDayState } from '../../services/fieldDayService.js';
 
 /**
  * Phase 7 - Field Force controller: attendance + visits.
@@ -70,9 +71,10 @@ const activityScope = (req, field) => {
 };
 
 const settingsFieldForce = (settings) => ({
-  geofenceRadiusM: Number(settings?.fieldForce?.geofenceRadiusM || 100),
+  geofenceRadiusM: Number(settings?.fieldForce?.geofenceRadiusM || 50),
   requireGps: settings?.fieldForce?.requireGps !== false,
   requireAttendance: settings?.fieldForce?.requireAttendance !== false,
+  enforceGeofence: settings?.fieldForce?.enforceGeofence !== false,
   requireSelfie: Boolean(settings?.fieldForce?.requireSelfie),
   workStart: settings?.fieldForce?.workStart || '09:30',
   workEnd: settings?.fieldForce?.workEnd || '18:30',
@@ -126,6 +128,15 @@ export const myToday = asyncHandler(async (req, res) => {
       day,
       attendance: doc ? toPlain(doc) : null,
       config: settingsFieldForce(settings),
+      // The working-day gate: what blocks work now, a day left open, van cashout.
+      fieldDay: await (async () => {
+        const st = await fieldDayState(req);
+        return {
+          blocked: st.blocked,
+          previousOpen: st.previousOpen ? { id: String(st.previousOpen._id), day: dayjs(st.previousOpen.day).format('YYYY-MM-DD') } : null,
+          cashout: st.cashout,
+        };
+      })(),
     },
   });
 });
@@ -143,6 +154,7 @@ export const checkIn = asyncHandler(async (req, res) => {
   if (config.requireGps && (location.lat == null || location.lng == null)) {
     throw new BadRequestError('Location is required to check in', 'GPS_REQUIRED');
   }
+  if (req.user.role === 'SALESMAN' && config.requireAttendance) await assertCanMarkIn(req);
 
   const doc = await ensureAttendanceDay(req.user.id, day, {
     userName: req.user.name,
@@ -202,10 +214,16 @@ export const checkOut = asyncHandler(async (req, res) => {
     throw new BadRequestError('Location is required to check out', 'GPS_REQUIRED');
   }
 
-  const doc = await Attendance.findOne({ user: req.user.id, day });
+  // Without an explicit day, mark out the day that is open - yesterday's if
+  // it was left open, else today's.
+  const doc = payload.day
+    ? await Attendance.findOne({ user: req.user.id, day })
+    : (await Attendance.findOne({ user: req.user.id, isCheckedIn: true, isCheckedOut: false, day: { $lt: day } }).sort({ day: -1 })) ||
+      (await Attendance.findOne({ user: req.user.id, day }));
   if (!doc) throw new NotFoundError('No check-in found for that day');
   if (!doc.isCheckedIn) throw new ConflictError('You have not checked in for this day', 'NOT_CHECKED_IN');
   if (doc.isCheckedOut) throw new ConflictError('You are already checked out', 'ALREADY_CHECKED_OUT');
+  if (req.user.role === 'SALESMAN') await assertCanMarkOut(req, doc.day);
 
   doc.checkOut = {
     at,

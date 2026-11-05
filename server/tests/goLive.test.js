@@ -49,6 +49,8 @@ beforeAll(async () => {
   const login = async (id) => (await request.post('/api/auth/login').send({ identifier: id, password: PASSWORD })).body.data.accessToken;
   state.admin = await login('admin@gl.test');
   state.sam = await login('sam@gl.test');
+  // The salesman starts the day before booking anything.
+  await request.post('/api/v1/field-force/attendance/check-in').set(as(state.sam)).send({ location: { lat: 18.52, lng: 73.85 } });
 
   state.main = (await admin().post('/api/v1/warehouses', { name: 'Main Godown', code: 'MAIN', type: 'MAIN' })).body.data.id;
   state.oil = (await admin().post('/api/v1/products', { name: 'Sunflower Oil 1L', category: 'Grocery', unit: 'PCS', sellingPrice: 100, gstRate: 5 })).body.data.id;

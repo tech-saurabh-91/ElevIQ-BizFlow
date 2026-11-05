@@ -20,6 +20,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLookups } from '@/hooks/useLookups';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatDate, timeAgo } from '@/utils/format';
+import { SALES_TYPES, salesTypeLabel } from '@/utils/salesType';
 
 const ROLES = ['COMPANY_ADMIN', 'MANAGER', 'SALESMAN', 'ACCOUNTANT', 'WAREHOUSE'];
 const ROLE_LABEL = {
@@ -63,6 +64,7 @@ const schema = z
     email: optionalEmail,
     phone: optionalPhone,
     role: z.enum(ROLES),
+    salesType: z.enum(['PRESALE', 'VAN_SALE', 'BOTH']),
     password: z.string().optional().or(z.literal('')),
     title: text(80),
     employeeCode: text(30),
@@ -88,6 +90,7 @@ const toDefaults = (initial) => ({
   email: initial?.email || '',
   phone: initial?.phone || '',
   role: initial?.role || 'SALESMAN',
+  salesType: initial?.salesType || 'PRESALE',
   password: '',
   title: initial?.title || '',
   employeeCode: initial?.employeeCode || '',
@@ -109,6 +112,7 @@ function UserForm({ mode, initial, onClose, onSaved }) {
     register,
     handleSubmit,
     setError,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm({ resolver: zodResolver(schema), defaultValues: toDefaults(initial) });
 
@@ -121,6 +125,7 @@ function UserForm({ mode, initial, onClose, onSaved }) {
       email: values.email || '',
       phone: values.phone || '',
       role: values.role,
+      salesType: values.salesType,
       title: values.title,
       employeeCode: values.employeeCode,
       designation: values.designation,
@@ -152,6 +157,8 @@ function UserForm({ mode, initial, onClose, onSaved }) {
   };
 
   const colleagueOptions = lookups.users.filter((u) => u.id !== initial?.id);
+  const role = watch('role');
+  const salesType = watch('salesType');
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
@@ -180,6 +187,22 @@ function UserForm({ mode, initial, onClose, onSaved }) {
             ))}
           </Select>
         </Field>
+        {role === 'SALESMAN' && (
+          <Field
+            label="Sales type"
+            required
+            error={errors.salesType?.message}
+            hint={SALES_TYPES.find((t) => t.value === salesType)?.hint}
+          >
+            <Select {...register('salesType')} aria-label="Sales type">
+              {SALES_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="Email" error={errors.email?.message} hint="Email or phone is required">
           <Input type="email" {...register('email')} error={!!errors.email} placeholder="anita@company.test" />
         </Field>
@@ -472,7 +495,10 @@ export default function Users() {
       render: (row) => (
         <div className="space-y-1">
           <Badge tone={ROLE_TONE[row.role] || 'secondary'}>{ROLE_LABEL[row.role] || row.role}</Badge>
-          <p className="text-xs text-muted-foreground">{row.designation || row.title || '—'}</p>
+          <p className="text-xs text-muted-foreground">
+            {row.role === 'SALESMAN' ? `${salesTypeLabel(row.salesType || 'BOTH')} · ` : ''}
+            {row.designation || row.title || '—'}
+          </p>
         </div>
       ),
     },

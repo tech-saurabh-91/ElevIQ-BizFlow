@@ -126,6 +126,8 @@ export default function OrderEditor() {
   const { id } = useParams();
   // Opened from a customer visit (My Beat): start with that customer.
   const [searchParams] = useSearchParams();
+  // Opened from a shop visit: go back there after saving (check-out follows).
+  const returnTo = (searchParams.get('returnTo') || '').startsWith('/app/') ? searchParams.get('returnTo') : '';
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -332,7 +334,8 @@ export default function OrderEditor() {
       queryClient.invalidateQueries({ queryKey: ['company', 'order', id] });
       queryClient.invalidateQueries({ queryKey: ['company', 'dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['company', 'customers'] });
-      if (saved?.id) navigate(`/app/orders/${saved.id}`, { replace: true });
+      if (returnTo) navigate(returnTo, { replace: true });
+      else if (saved?.id) navigate(`/app/orders/${saved.id}`, { replace: true });
       else navigate('/app/orders', { replace: true });
     },
     onError: (err) => {
@@ -477,7 +480,7 @@ export default function OrderEditor() {
           { label: isEdit ? order?.orderNo || 'Edit draft' : 'New order' },
         ]}
         actions={
-          <Button variant="outline" onClick={() => navigate(isEdit ? `/app/orders/${id}` : '/app/orders')}>
+          <Button variant="outline" onClick={() => navigate(returnTo || (isEdit ? `/app/orders/${id}` : '/app/orders'))}>
             <ArrowLeft className="h-4 w-4" />
             Cancel
           </Button>

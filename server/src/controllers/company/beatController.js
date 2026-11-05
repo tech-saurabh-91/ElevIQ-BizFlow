@@ -152,36 +152,62 @@ const visitOut = (v) =>
     checkInDistanceM: v.checkInDistanceM ?? null,
   };
 
-/** GET /beat-plans/mine?date= - my routes for the day, with their customers. */
+const customerOut = (c, visits) => ({
+  id: String(c._id),
+  name: c.name,
+  code: c.code,
+  phone: c.phone || '',
+  address: [c.address?.line1, c.address?.city].filter(Boolean).join(', '),
+  hasLocation: c.address?.gps?.lat != null && c.address?.gps?.lng != null,
+  outstanding: Number(c.outstanding || 0),
+  route: c.route ? String(c.route) : null,
+  visit: visitOut(visits.get(String(c._id))) || null,
+});
+
+/**
+ * GET /beat-plans/mine?date= - the routes a salesman works: routes given to
+ * them (user master or route owner) and today's beat plan, today's first.
+ * Customers come from /beat-plans/customers.
+ */
 export const mine = asyncHandler(async (req, res) => {
   const tz = tzOf(req.company);
   const day = DAY.test(req.query.date || '') ? req.query.date : todayIn(tz);
-  const { routes, cells } = await resolvePlans(day, day);
-  const myRouteIds = new Set(cells.filter((c) => c.salesman === String(req.user.id)).map((c) => c.route));
-  const mineRoutes = routes.filter((r) => myRouteIds.has(String(r._id)));
-  const visits = await visitsOn(req.user.id, day, tz);
+  const me = String(req.user.id);
+  const [{ routes, cells }, user] = await Promise.all([resolvePlans(day, day), User.findById(me).select('routes').lean()]);
+  const todayIds = new Set(cells.filter((c) => c.salesman === me).map((c) => c.route));
+  const given = new Set((user?.routes || []).map(String));
+  const counts = await customerCounts();
+  const mineRoutes = routes
+    .filter((r) => todayIds.has(String(r._id)) || given.has(String(r._id)) || String(r.assignedTo?._id || r.assignedTo || '') === me)
+    .map((r) => ({ ...routeOut(r, counts[String(r._id)] || 0), today: todayIds.has(String(r._id)) }))
+    .sort((a, b) => Number(b.today) - Number(a.today) || a.name.localeCompare(b.name));
 
-  const data = [];
-  for (const r of mineRoutes) {
-    const customers = await Customer.find({ route: r._id, isActive: true })
-      .select('name code phone address.line1 address.city address.gps outstanding')
-      .sort({ name: 1 })
-      .lean();
-    data.push({
-      ...routeOut(r, customers.length),
-      customers: customers.map((c) => ({
-        id: String(c._id),
-        name: c.name,
-        code: c.code,
-        phone: c.phone || '',
-        address: [c.address?.line1, c.address?.city].filter(Boolean).join(', '),
-        outstanding: Number(c.outstanding || 0),
-        visit: visitOut(visits.get(String(c._id))) || null,
-      })),
-    });
-  }
+  const visits = await visitsOn(req.user.id, day, tz);
   const open = [...visits.values()].find((v) => v.status === VISIT_STATUS.IN_PROGRESS);
-  return success(res, { data: { day, routes: data, openVisit: visitOut(open) || null } });
+  let openVisit = visitOut(open) || null;
+  if (open) openVisit = { ...openVisit, customerId: String(open.customerId), customerName: open.customerName, routeId: open.route ? String(open.route) : null };
+  const done = [...visits.values()].filter((v) => v.status === VISIT_STATUS.COMPLETED).length;
+  return success(res, { data: { day, routes: mineRoutes, openVisit, visitsDone: done } });
+});
+
+/**
+ * GET /beat-plans/customers?route=<id>|none&q= - customers to visit: one
+ * route's customers, or every active customer ("No route"), with today's visit.
+ */
+export const customers = asyncHandler(async (req, res) => {
+  const tz = tzOf(req.company);
+  const day = todayIn(tz);
+  const filter = { isActive: true };
+  if (req.query.route && req.query.route !== 'none') filter.route = req.query.route;
+  if (req.query.q) {
+    const rx = new RegExp(String(req.query.q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [{ name: rx }, { code: rx }, { phone: rx }];
+  }
+  const [rows, visits] = await Promise.all([
+    Customer.find(filter).select('name code phone address.line1 address.city address.gps outstanding route').sort({ name: 1 }).limit(300).lean(),
+    visitsOn(req.user.id, day, tz),
+  ]);
+  return success(res, { data: rows.map((c) => customerOut(c, visits)) });
 });
 
 /**
@@ -245,4 +271,4 @@ export const checkIn = asyncHandler(async (req, res) => {
   return created(res, { message: `Checked in at ${customer.name}`, data: toPlain(visit) });
 });
 
-export default { grid, setPlan, mine, checkIn };
+export default { grid, setPlan, mine, customers, checkIn };

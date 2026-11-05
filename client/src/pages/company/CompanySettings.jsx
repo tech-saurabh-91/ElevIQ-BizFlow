@@ -178,6 +178,7 @@ const schema = z.object({
     geofenceRadiusM: str(6),
     requireGps: z.boolean(),
     requireAttendance: z.boolean(),
+    enforceGeofence: z.boolean(),
     requireSelfie: z.boolean(),
     trackLiveLocation: z.boolean(),
     workStart: str(5),
@@ -271,9 +272,10 @@ const toDefaults = (data) => ({
   },
 
   fieldForce: {
-    geofenceRadiusM: String(data?.fieldForce?.geofenceRadiusM ?? 100),
+    geofenceRadiusM: String(data?.fieldForce?.geofenceRadiusM ?? 50),
     requireGps: data?.fieldForce?.requireGps ?? true,
     requireAttendance: data?.fieldForce?.requireAttendance ?? true,
+    enforceGeofence: data?.fieldForce?.enforceGeofence ?? true,
     requireSelfie: data?.fieldForce?.requireSelfie ?? false,
     trackLiveLocation: data?.fieldForce?.trackLiveLocation ?? true,
     workStart: data?.fieldForce?.workStart || '09:30',
@@ -900,7 +902,12 @@ function SettingsForm({ data, canUpdate, tab }) {
               <div className="space-y-2 sm:col-span-2">
                 <Checkbox label="Require GPS at check-in" {...register('fieldForce.requireGps')} disabled={disabled} />
                 <Checkbox
-                  label="Salesmen must start their day (attendance) before visiting customers"
+                  label="Block shop check-in outside the geofence radius (customers with a pinned location)"
+                  {...register('fieldForce.enforceGeofence')}
+                  disabled={disabled}
+                />
+                <Checkbox
+                  label="Salesmen must mark attendance in before any work; van salesmen need an approved day cashout to mark out"
                   {...register('fieldForce.requireAttendance')}
                   disabled={disabled}
                 />

@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Upload, Users } from 'lucide-react';
+import { LocateFixed, Upload, Users } from 'lucide-react';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
@@ -20,6 +20,7 @@ import { useLookups } from '@/hooks/useLookups';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatMoney, formatNumber } from '@/utils/format';
 import { useTaxLabels } from '@/hooks/useLocations';
+import { captureGps } from '@/components/company/fieldforce-shared';
 
 const CUSTOMER_TYPES = ['RETAIL', 'WHOLESALE', 'DISTRIBUTOR', 'DEALER'];
 const PAYMENT_TERMS = ['IMMEDIATE', 'NET_7', 'NET_15', 'NET_30', 'NET_45', 'NET_60', 'CUSTOM'];
@@ -58,6 +59,9 @@ const buildSchema = (isIndia) =>
       alternatePhone: z.string().trim().regex(PHONE, 'Enter a valid phone number').optional().or(z.literal('')),
       email: z.string().trim().email('Enter a valid email').optional().or(z.literal('')),
       gstin: text(30),
+      // Shop location: the geofence for salesman check-in.
+      shopLat: z.string().trim().regex(/^-?\d{1,3}(\.\d+)?$/, 'Enter a decimal coordinate').optional().or(z.literal('')),
+      shopLng: z.string().trim().regex(/^-?\d{1,3}(\.\d+)?$/, 'Enter a decimal coordinate').optional().or(z.literal('')),
       pan: text(20),
       taxId: text(40),
       address,
@@ -123,6 +127,8 @@ const toDefaults = (initial) => ({
   taxId: initial?.taxId || '',
 
   address: { ...emptyAddress(), ...(initial?.address || {}) },
+  shopLat: initial?.address?.gps?.lat != null ? String(initial.address.gps.lat) : '',
+  shopLng: initial?.address?.gps?.lng != null ? String(initial.address.gps.lng) : '',
   shippingSameAsBilling: initial ? initial.shippingSameAsBilling !== false : true,
   shippingAddress: { ...emptyAddress(), ...(initial?.shippingAddress || {}) },
 
@@ -176,6 +182,7 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
   });
 
   const sameAsBilling = watch('shippingSameAsBilling');
+  const [locating, setLocating] = useState(false);
   const terms = watch('paymentTerms');
   const termsField = register('paymentTerms');
 
@@ -193,7 +200,13 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
       gstin: values.gstin.toUpperCase(),
       pan: values.pan.toUpperCase(),
       taxId: values.taxId,
-      address: values.address,
+      address: {
+        ...values.address,
+        gps: {
+          lat: values.shopLat === '' ? null : Number(values.shopLat),
+          lng: values.shopLng === '' ? null : Number(values.shopLng),
+        },
+      },
       shippingSameAsBilling: values.shippingSameAsBilling,
       shippingAddress: values.shippingSameAsBilling ? values.address : values.shippingAddress,
       creditLimit: num(values.creditLimit),
@@ -345,6 +358,51 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
 
         <FormSection title="Billing address">
           <AddressFields register={register} watch={watch} setValue={setValue} errors={errors} prefix="address" disabled={viewOnly} />
+        </FormSection>
+
+        <FormSection
+          title="Shop location"
+          description="Salesmen can check in only within the geofence radius of this point. Stand at the shop and use your current location."
+        >
+          <Field label="Latitude" error={errors.shopLat?.message}>
+            <Input inputMode="decimal" {...register('shopLat')} placeholder="18.520430" disabled={viewOnly} />
+          </Field>
+          <Field label="Longitude" error={errors.shopLng?.message}>
+            <Input inputMode="decimal" {...register('shopLng')} placeholder="73.856743" disabled={viewOnly} />
+          </Field>
+          {!viewOnly && (
+            <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                loading={locating}
+                onClick={async () => {
+                  setLocating(true);
+                  const gps = await captureGps();
+                  setLocating(false);
+                  if (!gps) {
+                    toast.error('Location is not available - allow location access in the browser');
+                    return;
+                  }
+                  setValue('shopLat', gps.lat.toFixed(6), { shouldDirty: true });
+                  setValue('shopLng', gps.lng.toFixed(6), { shouldDirty: true });
+                }}
+              >
+                <LocateFixed className="h-4 w-4" /> Use my current location
+              </Button>
+              {watch('shopLat') && watch('shopLng') && (
+                <a
+                  href={`https://www.google.com/maps?q=${watch('shopLat')},${watch('shopLng')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-primary hover:underline"
+                >
+                  Open in map
+                </a>
+              )}
+            </div>
+          )}
         </FormSection>
 
         <section className="space-y-3">

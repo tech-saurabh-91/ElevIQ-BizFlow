@@ -7,7 +7,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors.js';
 import { listDocuments } from '../../utils/query.js';
 import { audit } from '../../middlewares/audit.js';
-import { AUDIT_ACTIONS, COMPANY_ROLES, DEFAULT_PERMISSIONS } from '../../config/constants.js';
+import { AUDIT_ACTIONS, COMPANY_ROLES, DEFAULT_PERMISSIONS, salesTypeAllows } from '../../config/constants.js';
 import { nextSeries } from '../../utils/numberSeries.js';
 import { toPlain } from './_helpers.js';
 import { activeVanOf, assertDayClosed, issueToVan, loadVan, receiveOnVan } from '../../services/vanService.js';
@@ -76,6 +76,9 @@ export const get = asyncHandler(async (req, res) => respond(res, await loadReque
 
 /** POST /stock-requests - the executive asks for stock for their van. */
 export const create = asyncHandler(async (req, res) => {
+  if (req.user.role === 'SALESMAN' && !salesTypeAllows(req.user.salesType || 'BOTH', 'VAN_SALE')) {
+    throw new ForbiddenError('Stock requests are for van sales users', 'FORBIDDEN');
+  }
   const driving = await activeVanOf(req.user.id);
   if (!driving) throw new BadRequestError('No van is assigned to you', 'NO_VAN');
   await assertDayClosed(req.user.id, req.company);

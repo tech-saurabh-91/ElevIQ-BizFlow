@@ -27,6 +27,13 @@ const closeSchema = z.object({
 
 const router = Router();
 router.get('/mine', ctrl.mine);
+router.get('/day-closes', ctrl.allDayCloses);
+router.post('/day-closes/:closeId/approve', validate({ params: z.object({ closeId: objectIdSchema }) }), ctrl.approveDayClose);
+router.post(
+  '/day-closes/:closeId/reject',
+  validate({ params: z.object({ closeId: objectIdSchema }), body: z.object({ reason: z.string().trim().min(3, 'Give a reason').max(500) }) }),
+  ctrl.rejectDayClose
+);
 router.get('/:id/stock', validate({ params: idParamsSchema }), ctrl.stock);
 router.post('/:id/load', validate({ params: idParamsSchema, body: moveSchema }), ctrl.load);
 router.post('/:id/unload', validate({ params: idParamsSchema, body: moveSchema }), ctrl.unload);

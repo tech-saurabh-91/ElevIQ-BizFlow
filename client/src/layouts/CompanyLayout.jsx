@@ -10,6 +10,7 @@ import { companyNav, filterNav } from '@/routes/navigation';
 import { useUIStore } from '@/store/uiStore';
 import { useCountries, findCountry } from '@/hooks/useLocations';
 import { setFormatDefaults } from '@/utils/format';
+import { FieldDayGate } from '@/components/company/FieldDay';
 
 /**
  * Company workspace shell: /app/*
@@ -43,7 +44,7 @@ export default function CompanyLayout() {
     );
   }
 
-  const sections = filterNav(companyNav, { can, scope: user?.scope, role: user?.role });
+  const sections = filterNav(companyNav, { can, scope: user?.scope, role: user?.role, user });
 
   const limits = user?.limits || {};
   const usage = null; // surfaced once /dashboard/usage exists (Phase 8)
@@ -88,7 +89,9 @@ export default function CompanyLayout() {
         <Topbar onMenuClick={() => setMobileNav(!mobileNavOpen)} />
         <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <Suspense fallback={<LoadingState />}>
-            <Outlet key={location.pathname} />
+            <FieldDayGate pathname={location.pathname}>
+              <Outlet key={location.pathname} />
+            </FieldDayGate>
           </Suspense>
         </main>
         <footer className="border-t px-4 py-3 text-center text-[11px] text-muted-foreground sm:px-6">

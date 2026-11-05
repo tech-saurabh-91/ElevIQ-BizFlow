@@ -33,6 +33,8 @@ const toRad = (deg) => (deg * Math.PI) / 180;
  * coordinates as "unknown" rather than zero metres.
  */
 export const distanceMeters = (a, b) => {
+  // A missing coordinate (null / '') is not 0 - Number(null) would be.
+  if ([a?.lat, a?.lng, b?.lat, b?.lng].some((v) => v == null || v === '')) return null;
   const lat1 = Number(a?.lat);
   const lng1 = Number(a?.lng);
   const lat2 = Number(b?.lat);
@@ -63,21 +65,27 @@ export const startOfDay = (value = new Date()) => dayjs(value).startOf('day').to
  * open at a time.
  */
 export const assertCanStartVisit = async (userId, settings, { exceptVisit = null } = {}) => {
-  if (settings?.fieldForce?.requireAttendance !== false) {
-    const att = await Attendance.findOne({ user: userId, day: startOfDay() }).lean();
-    if (!att?.isCheckedIn) throw new BadRequestError('Start your day (attendance check-in) before visiting customers', 'ATTENDANCE_REQUIRED');
-    if (att.isCheckedOut) throw new BadRequestError('Your day is already closed in attendance', 'DAY_ENDED');
-  }
   const open = await Visit.findOne({ salesman: userId, status: 'IN_PROGRESS', ...(exceptVisit ? { _id: { $ne: exceptVisit } } : {}) }).lean();
   if (open) throw new ConflictError(`Check out of ${open.customerName} first`, 'VISIT_IN_PROGRESS');
 };
 
-/** Record how far the check-in was from the customer and flag it beyond the geofence. */
+/**
+ * How far the check-in is from the customer's pinned location. Beyond the
+ * radius the check-in is refused (when the company enforces it), else flagged.
+ * Customers without a pinned location can always be checked in.
+ */
 export const markGeofence = (visit, customerGps, settings) => {
   const meters = distanceMeters(visit.checkIn?.location, customerGps);
   if (meters == null) return;
+  const radius = Number(settings?.fieldForce?.geofenceRadiusM || 50);
   visit.checkInDistanceM = Math.round(meters);
-  visit.outsideGeofence = meters > Number(settings?.fieldForce?.geofenceRadiusM || 100);
+  visit.outsideGeofence = meters > radius;
+  if (visit.outsideGeofence && settings?.fieldForce?.enforceGeofence !== false) {
+    throw new BadRequestError(
+      `You are ${Math.round(meters)} m from this customer. Check in within ${radius} m of the shop.`,
+      'OUTSIDE_GEOFENCE'
+    );
+  }
 };
 
 // ---------------------------------------------------------------------------

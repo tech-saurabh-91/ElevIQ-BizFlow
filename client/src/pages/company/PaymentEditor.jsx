@@ -67,6 +67,8 @@ export default function PaymentEditor() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const [searchParams] = useSearchParams();
+  // Opened from a shop visit: go back there after saving (check-out follows).
+  const returnTo = (searchParams.get('returnTo') || '').startsWith('/app/') ? searchParams.get('returnTo') : '';
   const presetCustomerId = searchParams.get('customerId') || '';
   const presetInvoiceId = searchParams.get('invoiceId') || '';
   const navigate = useNavigate();
@@ -269,7 +271,8 @@ export default function PaymentEditor() {
       queryClient.invalidateQueries({ queryKey: ['company', 'invoices'] });
       queryClient.invalidateQueries({ queryKey: ['company', 'dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['company', 'customers'] });
-      if (saved?.id) navigate(`/app/payments/${saved.id}`, { replace: true });
+      if (returnTo) navigate(returnTo, { replace: true });
+      else if (saved?.id) navigate(`/app/payments/${saved.id}`, { replace: true });
       else navigate('/app/payments', { replace: true });
     },
     onError: (err) => {
@@ -388,7 +391,7 @@ export default function PaymentEditor() {
         actions={
           <Button
             variant="outline"
-            onClick={() => navigate(isEdit ? `/app/payments/${id}` : '/app/payments')}
+            onClick={() => navigate(returnTo || (isEdit ? `/app/payments/${id}` : '/app/payments'))}
           >
             <ArrowLeft className="h-4 w-4" />
             Cancel

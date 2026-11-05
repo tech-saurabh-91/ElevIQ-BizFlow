@@ -112,7 +112,9 @@ const settingSchema = new mongoose.Schema(
     // Field force
     fieldForce: {
       type: {
-        geofenceRadiusM: { type: Number, default: 100 },
+        geofenceRadiusM: { type: Number, default: 50 },
+        /** Refuse a shop check-in beyond the radius (customer has a pinned location). */
+        enforceGeofence: { type: Boolean, default: true },
         requireGps: { type: Boolean, default: true },
         /** Start the day (attendance check-in) before visiting customers. */
         requireAttendance: { type: Boolean, default: true },

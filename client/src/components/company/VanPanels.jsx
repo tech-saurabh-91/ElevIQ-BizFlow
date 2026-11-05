@@ -247,14 +247,15 @@ export function DayCloseDialog({ van, onClose }) {
     setBusy(true);
     setError(null);
     try {
-      await api.post(`/v1/vans/${van.id}/day-close`, {
+      const res = await api.post(`/v1/vans/${van.id}/day-close`, {
         date,
         counts: lines.map((l) => ({ product: l.product, counted: l.counted ?? 0 })),
         cashDeposited: Number(cash || 0),
         notes,
       });
-      toast.success(`${van.code} closed for ${date}`);
+      toast.success(res.data?.message || `${van.code} closed for ${date}`);
       queryClient.invalidateQueries({ queryKey: ['company', 'vans'] });
+      queryClient.invalidateQueries({ queryKey: ['company', 'attendance'] });
       setNotes('');
     } catch (err) {
       setError(apiError(err));
@@ -268,8 +269,8 @@ export function DayCloseDialog({ van, onClose }) {
     <Dialog
       open={Boolean(van)}
       onClose={onClose}
-      title={van ? `Day close · ${van.name}` : ''}
-      description="Count the van, deposit the cash collected, and explain any difference."
+      title={van ? `Day cashout · ${van.name}` : ''}
+      description="Count the van, hand over the cash collected, and explain any difference. A manager approves it before you mark out."
       size="xl"
       footer={
         <>
@@ -278,14 +279,14 @@ export function DayCloseDialog({ van, onClose }) {
           </Button>
           {tab === 'close' && data && !closed && (
             <Button type="button" onClick={submit} loading={busy}>
-              Close {date}
+              Submit cashout for {date}
             </Button>
           )}
         </>
       }
     >
       <div className="space-y-4">
-        <Tabs size="sm" value={tab} onChange={setTab} items={[{ value: 'close', label: 'Close a day' }, { value: 'history', label: 'History' }]} />
+        <Tabs size="sm" value={tab} onChange={setTab} items={[{ value: 'close', label: 'Day cashout' }, { value: 'history', label: 'History' }]} />
         {tab === 'history' ? (
           history.isLoading ? (
             <LoadingState label="Loading history…" />
@@ -298,7 +299,7 @@ export function DayCloseDialog({ van, onClose }) {
                     <th className="px-3 py-2 font-medium">Executive</th>
                     <th className="px-3 py-2 text-right font-medium">Stock diff</th>
                     <th className="px-3 py-2 text-right font-medium">Cash diff</th>
-                    <th className="px-3 py-2 font-medium">Closed by</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -308,7 +309,12 @@ export function DayCloseDialog({ van, onClose }) {
                       <td className="px-3 py-2">{h.executive?.name || '—'}</td>
                       <td className={cn('px-3 py-2 text-right tabular-nums', h.stockVarianceQty && 'text-warning')}>{formatNumber(h.stockVarianceQty)}</td>
                       <td className={cn('px-3 py-2 text-right tabular-nums', h.cashVariance && 'text-warning')}>{formatMoney(h.cashVariance, company?.currency)}</td>
-                      <td className="px-3 py-2">{h.closedBy?.name || '—'}</td>
+                      <td className="px-3 py-2">
+                        <Badge tone={{ APPROVED: 'success', SUBMITTED: 'warning', REJECTED: 'destructive' }[h.status || 'APPROVED']}>
+                          {{ APPROVED: 'Approved', SUBMITTED: 'Waiting approval', REJECTED: 'Rejected' }[h.status || 'APPROVED']}
+                        </Badge>
+                        {h.approvedBy?.name ? <span className="ml-1 text-xs text-muted-foreground">{h.approvedBy.name}</span> : null}
+                      </td>
                     </tr>
                   ))}
                   {!history.data?.length && (
@@ -332,13 +338,25 @@ export function DayCloseDialog({ van, onClose }) {
                 <Badge tone="warning">Open days: {data.pendingDays.join(', ')}</Badge>
               )}
             </div>
-            {error && <ErrorAlert title="Could not close the day" message={error.message} errors={error.errors} onClose={() => setError(null)} />}
+            {error && <ErrorAlert title="Could not submit the cashout" message={error.message} errors={error.errors} onClose={() => setError(null)} />}
+            {data?.rejected && (
+              <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm">
+                The cashout for {date} was rejected{data.rejected.reason ? `: ${data.rejected.reason}` : ''}. Count again and resubmit.
+              </p>
+            )}
             {preview.isLoading || !data ? (
               <LoadingState label="Working out the day…" />
             ) : closed ? (
-              <div className="rounded-lg border border-success/40 bg-success/10 p-4 text-sm">
+              <div
+                className={cn(
+                  'rounded-lg border p-4 text-sm',
+                  closed.status === 'SUBMITTED' ? 'border-warning/40 bg-warning/10' : 'border-success/40 bg-success/10'
+                )}
+              >
                 <p className="font-medium">
-                  {date} is closed by {closed.closedBy?.name || '—'}.
+                  {closed.status === 'SUBMITTED'
+                    ? `${date} cashout submitted by ${closed.closedBy?.name || '—'} - waiting for manager approval.`
+                    : `${date} is closed by ${closed.closedBy?.name || '—'}.`}
                 </p>
                 <p className="mt-1 text-muted-foreground">
                   Stock difference {formatNumber(closed.stockVarianceQty)} · cash expected {formatMoney(closed.cashExpected, company?.currency)}, deposited{' '}

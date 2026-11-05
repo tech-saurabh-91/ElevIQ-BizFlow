@@ -27,6 +27,7 @@ import * as dashboardController from '../../controllers/company/dashboardControl
 import { authenticate } from '../../middlewares/auth.js';
 import { requireCompanyScope } from '../../middlewares/rbac.js';
 import { tenant } from '../../middlewares/tenant.js';
+import { requireFieldDay } from '../../services/fieldDayService.js';
 
 /**
  * Company workspace API root: /api/v1/*
@@ -53,6 +54,13 @@ router.get('/ping', (req, res) => {
 router.get('/dashboard/summary', dashboardController.summary);
 
 // ---- Phase 3: workspace masters -------------------------------------------
+// A salesman books nothing outside an open working day (attendance marked
+// in, earlier days marked out and van cashouts approved).
+router.use(
+  ['/orders', '/invoices', '/credit-notes', '/payments', '/stock-requests', '/beat-plans', '/field-force/visits'],
+  requireFieldDay
+);
+
 router.use('/customers', customerRoutes);
 router.use('/products', productRoutes);
 router.use('/units', unitRoutes);

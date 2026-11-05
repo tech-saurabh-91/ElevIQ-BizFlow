@@ -22,6 +22,11 @@ router.put(
   ctrl.setPlan
 );
 router.get('/mine', validate({ query: z.object({ date: day.optional() }) }), ctrl.mine);
+router.get(
+  '/customers',
+  validate({ query: z.object({ route: z.union([objectIdSchema, z.literal('none')]).optional(), q: z.string().trim().max(80).optional() }) }),
+  ctrl.customers
+);
 router.post(
   '/check-in',
   authorize('fieldforce.visits.manage'),

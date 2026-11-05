@@ -1,5 +1,5 @@
 import { ForbiddenError, AppError } from '../utils/errors.js';
-import { PLATFORM_ROLES, COMPANY_ROLES, DEFAULT_PERMISSIONS } from '../config/constants.js';
+import { PLATFORM_ROLES, COMPANY_ROLES, DEFAULT_PERMISSIONS, blockedBySalesType } from '../config/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 /**
@@ -44,6 +44,8 @@ export const authorize =
     // Build the effective permission set for this user's role.
     const override = req.settings?.rolePermissions;
     const effective = (permission) => {
+      // 0. a salesman's sales type closes the other channel
+      if (blockedBySalesType(user, permission)) return false;
       // 1. per-user explicit override
       if (user.permissionsOverride && Array.isArray(user.permissionsOverride[permission])) {
         return user.permissionsOverride[permission].includes(role);

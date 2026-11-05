@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CASHOUT_LABEL } from '@/components/company/FieldDay';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -47,6 +48,7 @@ const minutesToHm = (mins) => {
 /** Today's live panel: check-in / check-out for the signed-in rep. */
 function TodayPanel({ canManage }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [dialog, setDialog] = useState(null); // 'in' | 'out'
 
   const { data, isLoading } = useQuery({
@@ -62,6 +64,12 @@ function TodayPanel({ canManage }) {
   const checkedIn = Boolean(attendance?.isCheckedIn);
   const checkedOut = Boolean(attendance?.isCheckedOut);
   const day = data?.day;
+  // Working-day rules: a day left open, van cashout approval before mark out.
+  const fieldDay = data?.fieldDay || {};
+  const previousOpen = fieldDay.previousOpen;
+  const cashout = fieldDay.cashout;
+  const cashoutApproved = !cashout || cashout.status === 'APPROVED';
+  const markInBlocked = ['ATTENDANCE_OUT_PENDING', 'DAY_CASHOUT_PENDING'].includes(fieldDay.blocked?.code);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['company', 'attendance'] });
@@ -129,15 +137,26 @@ function TodayPanel({ canManage }) {
             </div>
 
             {canManage && !isLoading && (
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {previousOpen && (
+                  <Button variant="outline" onClick={() => setDialog('out')}>
+                    <LogOut className="h-4 w-4" />
+                    Mark out {formatDate(previousOpen.day)}
+                  </Button>
+                )}
                 {!checkedIn && (
-                  <Button onClick={() => setDialog('in')} loading={quickMutation.isPending}>
+                  <Button onClick={() => setDialog('in')} loading={quickMutation.isPending} disabled={markInBlocked}>
                     <LogIn className="h-4 w-4" />
                     Check in
                   </Button>
                 )}
-                {checkedIn && !checkedOut && (
-                  <Button variant="outline" onClick={() => setDialog('out')}>
+                {checkedIn && !checkedOut && !previousOpen && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setDialog('out')}
+                    disabled={!cashoutApproved}
+                    title={cashoutApproved ? undefined : 'Your day cashout must be approved first'}
+                  >
                     <LogOut className="h-4 w-4" />
                     Check out
                   </Button>
@@ -150,6 +169,23 @@ function TodayPanel({ canManage }) {
               </div>
             )}
           </div>
+
+          {!isLoading && fieldDay.blocked && fieldDay.blocked.code !== 'ATTENDANCE_REQUIRED' && (
+            <p className="mt-3 rounded-lg bg-warning/10 px-3 py-2 text-sm">{fieldDay.blocked.message}</p>
+          )}
+          {!isLoading && cashout && checkedIn && !checkedOut && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm">
+              <span>
+                Van {cashout.van?.code} day cashout: <strong>{CASHOUT_LABEL[cashout.status] || cashout.status}</strong>
+                {cashout.rejectReason ? ` (${cashout.rejectReason})` : ''}
+              </span>
+              {['NONE', 'REJECTED'].includes(cashout.status) && (
+                <Button size="sm" variant="outline" onClick={() => navigate('/app/my-van')}>
+                  Submit day cashout
+                </Button>
+              )}
+            </div>
+          )}
 
           {!isLoading && config.workStart && (
             <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t pt-3 text-xs text-muted-foreground">
@@ -173,7 +209,7 @@ function TodayPanel({ canManage }) {
           onClose={() => setDialog(null)}
           onDone={invalidate}
           endpoint={`/v1/field-force/attendance/check-${dialog}`}
-          title={dialog === 'in' ? 'Check in for today' : 'Check out for today'}
+          title={dialog === 'in' ? 'Mark in for today' : previousOpen ? `Mark out ${formatDate(previousOpen.day)}` : 'Mark out for today'}
           description={
             dialog === 'in'
               ? 'Your current GPS location will be captured to record the start of the day.'
@@ -182,7 +218,7 @@ function TodayPanel({ canManage }) {
           confirmLabel={dialog === 'in' ? 'Check in' : 'Check out'}
           fields={[{ name: 'note', label: 'Note (optional)', type: 'text' }]}
           errorTitle={dialog === 'in' ? 'Could not check in' : 'Could not check out'}
-          invalidateKeys={[['company', 'attendance'], ['company', 'dashboard']]}
+          invalidateKeys={[['company', 'attendance'], ['company', 'dashboard'], ['company', 'beat']]}
           prepareBody={async (body) => {
             const gps = await captureGps();
             const payload = { ...body, source: 'WEB' };

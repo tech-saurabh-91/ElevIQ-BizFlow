@@ -34,7 +34,7 @@ beforeAll(async () => {
   });
   await runWithContext({ scope: 'company', companyId: String(company._id) }, async () => {
     const settings = await Setting.forCompany(company._id);
-    settings.set({ 'order.approvalThreshold': 0, 'invoice.rounding': 'NONE' });
+    settings.set({ 'fieldForce.requireAttendance': false, 'order.approvalThreshold': 0, 'invoice.rounding': 'NONE' });
     await settings.save();
     await User.create({ companyId: company._id, name: 'Admin', email: 'admin@van.test', password: PASSWORD, role: 'COMPANY_ADMIN' });
     const s = await User.create({ companyId: company._id, name: 'Sam Sales', email: 'sam@van.test', password: PASSWORD, role: 'SALESMAN' });
@@ -162,7 +162,15 @@ describe('Day close', () => {
       notes: '2 packets damaged',
     });
     expect(closed.status).toBe(201);
-    expect(closed.body.data).toMatchObject({ stockVarianceQty: -2, cashVariance: 0 });
+    expect(closed.body.data).toMatchObject({ stockVarianceQty: -2, cashVariance: 0, status: 'SUBMITTED' });
+    // The executive's cashout waits for a manager; the difference is booked on approval.
+    expect((await call(state.sam).get(`/api/v1/vans/${state.van}/stock`)).body.data[0].qty).toBe(30);
+    expect((await call(state.sam).post(`/api/v1/vans/day-closes/${closed.body.data.id}/approve`)).status).toBe(403);
+    const queue = await call(state.admin).get('/api/v1/vans/day-closes', { status: 'SUBMITTED' });
+    expect(queue.body.data.map((r) => r.id)).toContain(closed.body.data.id);
+    const approved = await call(state.admin).post(`/api/v1/vans/day-closes/${closed.body.data.id}/approve`);
+    expect(approved.status).toBe(200);
+    expect(approved.body.data.status).toBe('APPROVED');
     expect((await call(state.sam).get(`/api/v1/vans/${state.van}/stock`)).body.data[0].qty).toBe(28);
 
     const again = await call(state.sam).post(`/api/v1/vans/${state.van}/day-close`, { date: day, notes: 'x' });

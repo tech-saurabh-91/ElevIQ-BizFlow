@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import env from '../config/env.js';
 import tenantPlugin from './plugins/tenantPlugin.js';
-import { COMPANY_ROLES, COMPANY_ROLE_LIST } from '../config/constants.js';
+import { COMPANY_ROLES, COMPANY_ROLE_LIST, SALES_TYPES } from '../config/constants.js';
 
 /**
  * User - a member of a company (tenant). Scoped by companyId via tenantPlugin.
@@ -30,6 +30,8 @@ const userSchema = new mongoose.Schema(
 
     role: { type: String, enum: COMPANY_ROLE_LIST, default: COMPANY_ROLES.SALESMAN, index: true },
     title: { type: String, default: '' },
+    /** Field salesmen: PRESALE (orders), VAN_SALE (spot invoices + van) or BOTH. */
+    salesType: { type: String, enum: SALES_TYPES, default: 'BOTH' },
 
     // Custom per-role permission overrides (COMPANY_ADMIN may edit).
     permissionsOverride: { type: Object, default: null },
