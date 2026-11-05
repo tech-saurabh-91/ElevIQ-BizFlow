@@ -31,21 +31,32 @@ export function Dialog({
 }) {
   const panelRef = React.useRef(null);
   const previouslyFocused = React.useRef(null);
+  // Parents usually pass a new inline onClose on every render (each keystroke
+  // in a form). Keep the latest in refs so the open/focus effect below runs
+  // only when the dialog opens or closes - re-running it moved the cursor out
+  // of the field being typed in.
+  const onCloseRef = React.useRef(onClose);
+  const dismissibleRef = React.useRef(dismissible);
+  onCloseRef.current = onClose;
+  dismissibleRef.current = dismissible;
 
   React.useEffect(() => {
     if (!open) return undefined;
     previouslyFocused.current = document.activeElement;
     document.body.style.overflow = 'hidden';
-    // Focus the panel (or first focusable) after paint.
+    // After paint, focus the first form field (an autoFocus field wins), else
+    // the first control, else the panel - never steal focus already inside.
     const t = setTimeout(() => {
-      const focusable = panelRef.current?.querySelector(
-        'input, select, textarea, button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
-      );
-      (focusable || panelRef.current)?.focus();
+      const panel = panelRef.current;
+      if (!panel || panel.contains(document.activeElement)) return;
+      const focusable =
+        panel.querySelector('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])') ||
+        panel.querySelector('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])');
+      (focusable || panel).focus();
     }, 30);
 
     const onKey = (e) => {
-      if (e.key === 'Escape' && dismissible) onClose?.();
+      if (e.key === 'Escape' && dismissibleRef.current) onCloseRef.current?.();
       if (e.key === 'Tab' && panelRef.current) {
         const nodes = panelRef.current.querySelectorAll(
           'input, select, textarea, button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
@@ -70,7 +81,7 @@ export function Dialog({
       document.body.style.overflow = '';
       previouslyFocused.current?.focus?.();
     };
-  }, [open, onClose, dismissible]);
+  }, [open]);
 
   if (!open) return null;
 

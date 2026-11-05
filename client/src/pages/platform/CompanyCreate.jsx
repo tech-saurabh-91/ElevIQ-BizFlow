@@ -11,7 +11,7 @@ import api, { apiError, toFieldErrors } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AddressFields, LocaleFields, countryLocaleDefaults } from '@/components/company/form-utils';
+import { AddressFields, LocaleFields, countryLocaleDefaults, checkContact, isIndiaCountry } from '@/components/company/form-utils';
 import { useCountries, findCountry } from '@/hooks/useLocations';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -90,6 +90,7 @@ const schema = z
     message: 'Custom plans need both a start and end date',
     path: ['endDate'],
   })
+  .superRefine((v, ctx) => checkContact(v, ctx, { phone: 'phone', gstin: 'gstin', pan: 'pan' }, isIndiaCountry(v.country)))
   .refine((v) => !v.startDate || !v.endDate || new Date(v.endDate) > new Date(v.startDate), {
     message: 'End date must be after the start date',
     path: ['endDate'],
@@ -391,7 +392,7 @@ export default function CompanyCreate() {
                 <Input type="date" {...register('startDate')} error={!!errors.startDate} />
               </Field>
               <Field label="End date" required error={errors.endDate?.message}>
-                <Input type="date" {...register('endDate')} error={!!errors.endDate} />
+                <Input type="date" min={watch('startDate') || undefined} {...register('endDate')} error={!!errors.endDate} />
               </Field>
             </>
           )}

@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { ErrorAlert } from '@/components/ui/alert';
 import { LoadingState } from '@/components/ui/misc';
-import { AddressFields, FormSection, num, opt } from '@/components/company/form-utils';
+import { AddressFields, FormSection, num, opt, checkContact, isIndiaCountry } from '@/components/company/form-utils';
 import { useLookups } from '@/hooks/useLookups';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuthStore } from '@/store/authStore';
@@ -185,7 +185,14 @@ const schema = z.object({
     workStart: str(5),
     workEnd: str(5),
   }),
-});
+}).superRefine((v, ctx) =>
+  checkContact(
+    v,
+    ctx,
+    { phone: [['profile', 'phone']], gstin: ['profile', 'gstin'], pan: ['profile', 'pan'] },
+    isIndiaCountry(v.address?.country)
+  )
+);
 
 const toDefaults = (data) => ({
   displayName: data?.displayName || '',

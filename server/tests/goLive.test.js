@@ -209,4 +209,22 @@ describe('Go-live business day', () => {
     expect(all.scope).toBe('COMPANY');
     expect(all.recentOrders.length).toBeGreaterThan(1);
   });
+
+  test('10. business dates: nothing booked in the future, due/delivery not before the document', async () => {
+    const later = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+    const earlier = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const line = [{ product: state.oil, qty: 1 }];
+    const futureOrder = await admin().post('/api/v1/orders', { customerId: state.customer, items: line, orderDate: later });
+    expect(futureOrder.status).toBe(422);
+    const lateDelivery = await admin().post('/api/v1/orders', { customerId: state.customer, items: line, orderDate: today, expectedDeliveryDate: earlier });
+    expect(lateDelivery.status).toBe(422);
+    const futureInvoice = await admin().post('/api/v1/invoices', { customerId: state.customer, items: line, invoiceDate: later });
+    expect(futureInvoice.status).toBe(422);
+    const dueBefore = await admin().post('/api/v1/invoices', { customerId: state.customer, items: line, invoiceDate: today, dueDate: earlier });
+    expect(dueBefore.status).toBe(422);
+    const futurePay = await admin().post('/api/v1/payments', { customerId: state.customer, amount: 10, mode: 'CASH', paymentDate: later });
+    expect(futurePay.status).toBe(422);
+  });
 });
+

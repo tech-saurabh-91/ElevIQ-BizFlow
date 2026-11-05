@@ -15,6 +15,21 @@ export const objectIdSchema = z
   .string()
   .regex(/^[0-9a-fA-F]{24}$/, { message: 'Invalid id' });
 
+/**
+ * Business-date rules shared by the validators. A 'YYYY-MM-DD' parses as UTC
+ * midnight, so "not in the future" allows 14 h of slack for the company's
+ * time zone (the browser enforces the exact calendar day).
+ */
+export const notFutureDate = (v) => !v || Number.isNaN(Date.parse(v)) || Date.parse(v) <= Date.now() + 14 * 3600000;
+
+/** superRefine: `later` must not be before `earlier` (both optional). */
+export const dateNotBefore = (later, earlier, message) => (v, ctx) => {
+  if (!v?.[later] || !v?.[earlier]) return;
+  const a = Date.parse(v[later]);
+  const b = Date.parse(v[earlier]);
+  if (!Number.isNaN(a) && !Number.isNaN(b) && a < b) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [later], message });
+};
+
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(20),

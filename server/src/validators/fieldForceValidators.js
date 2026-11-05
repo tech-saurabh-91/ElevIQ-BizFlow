@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema, objectIdSchema } from '../middlewares/validate.js';
+import { paginationSchema, objectIdSchema, notFutureDate } from '../middlewares/validate.js';
 import {
   ATTENDANCE_STATUS_LIST,
   EXPENSE_CATEGORIES,
@@ -174,7 +174,7 @@ export const visitListQuerySchema = paginationSchema.extend({
 
 export const expenseCreateSchema = z.object({
   claimant: refId,
-  expenseDate: optionalDate,
+  expenseDate: optionalDate.refine(notFutureDate, { message: 'Expense date cannot be in the future' }),
   category: z.enum(EXPENSE_CATEGORIES),
   amount: z.coerce.number().positive('Amount must be greater than zero').max(1e8),
   description: softString(500),
@@ -191,7 +191,7 @@ export const expenseCreateSchema = z.object({
 
 export const expenseUpdateSchema = z
   .object({
-    expenseDate: optionalDate,
+    expenseDate: optionalDate.refine(notFutureDate, { message: 'Expense date cannot be in the future' }),
     category: z.enum(EXPENSE_CATEGORIES).optional(),
     amount: z.coerce.number().positive('Amount must be greater than zero').max(1e8).optional(),
     description: softString(500),

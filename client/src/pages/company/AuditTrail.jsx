@@ -16,6 +16,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Dialog } from '@/components/ui/dialog';
 import { ErrorAlert } from '@/components/ui/alert';
 import { formatDateTime, timeAgo } from '@/utils/format';
+import { todayInput } from '@/components/company/form-utils';
 
 const ACTION_TONE = {
   CREATE: 'success',
@@ -200,6 +201,7 @@ export default function AuditTrail() {
             <Input
               type="date"
               value={dateFrom}
+              max={dateTo || todayInput()}
               onChange={(e) => setParam({ dateFrom: e.target.value || undefined, page: 1 })}
               aria-label="Filter from date"
             />
@@ -208,6 +210,8 @@ export default function AuditTrail() {
             <Input
               type="date"
               value={dateTo}
+              min={dateFrom || undefined}
+              max={todayInput()}
               onChange={(e) => setParam({ dateTo: e.target.value || undefined, page: 1 })}
               aria-label="Filter to date"
             />

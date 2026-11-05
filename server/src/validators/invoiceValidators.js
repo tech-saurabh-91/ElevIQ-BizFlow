@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema, objectIdSchema } from '../middlewares/validate.js';
+import { paginationSchema, objectIdSchema, notFutureDate, dateNotBefore } from '../middlewares/validate.js';
 import { INVOICE_STATUS_LIST, PAYMENT_TERMS } from '../config/constants.js';
 import { ORDER_PAYMENT_MODES } from '../models/Order.js';
 
@@ -37,7 +37,7 @@ const invoiceBaseSchema = z.object({
   orderId: refId,
   customerId: refId,
 
-  invoiceDate: optionalDate,
+  invoiceDate: optionalDate.refine(notFutureDate, { message: 'Invoice date cannot be in the future' }),
   dueDate: optionalDate,
 
   salesman: refId,
@@ -94,7 +94,9 @@ const requireLineReference = (value, ctx) => {
   }
 };
 
-export const invoiceCreateSchema = invoiceBaseSchema.superRefine(requireLineReference);
+const dueAfterInvoice = dateNotBefore('dueDate', 'invoiceDate', 'Due date cannot be before the invoice date');
+
+export const invoiceCreateSchema = invoiceBaseSchema.superRefine(requireLineReference).superRefine(dueAfterInvoice);
 
 export const invoiceUpdateSchema = invoiceBaseSchema
   .partial()

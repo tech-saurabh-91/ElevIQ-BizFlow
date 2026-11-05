@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription, ErrorAlert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
-import { dateInput, num } from '@/components/company/form-utils';
+import { dateInput, num, todayInput, notFutureDate } from '@/components/company/form-utils';
 import { formatDate, formatMoney, formatNumber } from '@/utils/format';
 import {
   CREDIT_NOTE_REASONS,
@@ -49,17 +49,12 @@ const itemSchema = z.object({
 
 const schema = z.object({
   invoiceId: z.string().min(1, 'Select the invoice to credit'),
-  creditNoteDate: z.string().optional().or(z.literal('')),
+  creditNoteDate: z.string().optional().or(z.literal('')).refine(notFutureDate, 'Credit note date cannot be in the future'),
   reason: z.enum(CREDIT_NOTE_REASONS),
   reasonNote: text(1000),
   notes: text(1000),
   items: z.array(itemSchema),
 });
-
-const todayInput = () => {
-  const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-};
 
 const rowFromInvoiceOption = (row) => ({
   invoiceItemId: String(row.invoiceItemId),
@@ -463,7 +458,7 @@ export default function CreditNoteEditor() {
                 </Field>
 
                 <Field label="Credit note date" error={errors.creditNoteDate?.message}>
-                  <Input type="date" {...register('creditNoteDate')} />
+                  <Input type="date" max={todayInput()} {...register('creditNoteDate')} />
                 </Field>
                 <Field label="Reason" error={errors.reason?.message}>
                   <Select {...register('reason')}>

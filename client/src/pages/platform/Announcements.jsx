@@ -32,7 +32,19 @@ const schema = z.object({
   endsAt: z.string().optional().or(z.literal('')),
   ctaLabel: z.string().trim().max(80).optional().or(z.literal('')),
   ctaLink: z.string().trim().max(400).optional().or(z.literal('')),
+}).superRefine((v, ctx) => {
+  if (v.startsAt && v.endsAt && v.endsAt <= v.startsAt) {
+    ctx.addIssue({ code: 'custom', path: ['endsAt'], message: '"Hide after" must be later than "Visible from"' });
+  }
 });
+
+/** Saved instant -> `<input type="datetime-local">` value in local time (not UTC). */
+const localDateTime = (value) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
 
 const DEFAULTS = {
   title: '',
@@ -242,8 +254,8 @@ function AnnouncementDialog({ announcement, onClose, onSaved }) {
           type: announcement.type,
           broadcast: announcement.broadcast,
           active: announcement.active,
-          startsAt: announcement.startsAt ? new Date(announcement.startsAt).toISOString().slice(0, 16) : '',
-          endsAt: announcement.endsAt ? new Date(announcement.endsAt).toISOString().slice(0, 16) : '',
+          startsAt: localDateTime(announcement.startsAt),
+          endsAt: localDateTime(announcement.endsAt),
           ctaLabel: announcement.ctaLabel || '',
           ctaLink: announcement.ctaLink || '',
         }
@@ -260,8 +272,8 @@ function AnnouncementDialog({ announcement, onClose, onSaved }) {
         type: v.type,
         broadcast: v.broadcast,
         active: v.active,
-        startsAt: v.startsAt || undefined,
-        endsAt: v.endsAt || undefined,
+        startsAt: v.startsAt ? new Date(v.startsAt).toISOString() : undefined,
+        endsAt: v.endsAt ? new Date(v.endsAt).toISOString() : undefined,
         ctaLabel: v.ctaLabel,
         ctaLink: v.ctaLink,
       };
@@ -339,7 +351,7 @@ function AnnouncementDialog({ announcement, onClose, onSaved }) {
           <Input type="datetime-local" {...register('startsAt')} error={!!errors.startsAt} />
         </Field>
         <Field label="Hide after" error={errors.endsAt?.message}>
-          <Input type="datetime-local" {...register('endsAt')} error={!!errors.endsAt} />
+          <Input type="datetime-local" min={watch('startsAt') || undefined} {...register('endsAt')} error={!!errors.endsAt} />
         </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Button label" error={errors.ctaLabel?.message}>

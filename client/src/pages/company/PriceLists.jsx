@@ -50,6 +50,10 @@ const schema = z.object({
   validTo: text(40),
   notes: text(500),
   items: z.array(itemSchema).max(5000),
+}).superRefine((v, ctx) => {
+  if (v.validFrom && v.validTo && v.validTo < v.validFrom) {
+    ctx.addIssue({ code: 'custom', path: ['validTo'], message: 'Valid to cannot be before valid from' });
+  }
 });
 
 const toDefaults = (initial, currency = 'INR') => ({
@@ -83,6 +87,7 @@ function PriceListForm({ mode, initial, onClose, onSaved }) {
     handleSubmit,
     setValue,
     setError,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(schema),
@@ -196,7 +201,7 @@ function PriceListForm({ mode, initial, onClose, onSaved }) {
           <Input type="date" {...register('validFrom')} />
         </Field>
         <Field label="Valid to" error={errors.validTo?.message}>
-          <Input type="date" {...register('validTo')} />
+          <Input type="date" min={watch('validFrom') || undefined} {...register('validTo')} />
         </Field>
         <Field label="Description" error={errors.description?.message} className="sm:col-span-2">
           <Input {...register('description')} placeholder="Applies to all retail counters" />

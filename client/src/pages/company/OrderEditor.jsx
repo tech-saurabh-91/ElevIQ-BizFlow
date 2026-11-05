@@ -23,7 +23,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription, ErrorAlert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useLookups } from '@/hooks/useLookups';
-import { dateInput, num, opt } from '@/components/company/form-utils';
+import { dateInput, num, opt, todayInput, notFutureDate } from '@/components/company/form-utils';
 import { formatMoney } from '@/utils/format';
 import {
   PAYMENT_MODES,
@@ -62,7 +62,7 @@ const itemSchema = z.object({
 
 const schema = z.object({
   customerId: z.string().min(1, 'Select a customer'),
-  orderDate: z.string().optional().or(z.literal('')),
+  orderDate: z.string().optional().or(z.literal('')).refine(notFutureDate, 'Order date cannot be in the future'),
   expectedDeliveryDate: z.string().optional().or(z.literal('')),
   salesman: z.string().optional().or(z.literal('')),
   route: z.string().optional().or(z.literal('')),
@@ -75,6 +75,10 @@ const schema = z.object({
   internalNotes: text(1000),
   deliveryInstructions: text(1000),
   items: z.array(itemSchema).min(1, 'Add at least one product'),
+}).superRefine((v, ctx) => {
+  if (v.expectedDeliveryDate && v.expectedDeliveryDate < (v.orderDate || todayInput())) {
+    ctx.addIssue({ code: 'custom', path: ['expectedDeliveryDate'], message: 'Delivery cannot be before the order date' });
+  }
 });
 
 const emptyRow = () => ({
@@ -85,11 +89,6 @@ const emptyRow = () => ({
   discountPercent: '',
   note: '',
 });
-
-const todayInput = () => {
-  const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-};
 
 const toFormValues = (order) => ({
   customerId: orderIdOf(order.customer?.id || order.customerId),
@@ -170,6 +169,7 @@ export default function OrderEditor() {
   const { fields, append, remove, replace } = useFieldArray({ control, name: 'items' });
   const watchedItems = useWatch({ control, name: 'items' }) || [];
   const customerId = useWatch({ control, name: 'customerId' }) || '';
+  const orderDate = useWatch({ control, name: 'orderDate' }) || '';
 
   // ---- Existing draft ------------------------------------------------------
   const orderQuery = useQuery({
@@ -539,10 +539,10 @@ export default function OrderEditor() {
                 </Field>
 
                 <Field label="Order date" error={errors.orderDate?.message}>
-                  <Input type="date" {...register('orderDate')} />
+                  <Input type="date" max={todayInput()} {...register('orderDate')} />
                 </Field>
                 <Field label="Expected delivery" error={errors.expectedDeliveryDate?.message}>
-                  <Input type="date" {...register('expectedDeliveryDate')} />
+                  <Input type="date" min={orderDate || todayInput()} {...register('expectedDeliveryDate')} />
                 </Field>
 
                 <Field label="Salesman" error={errors.salesman?.message}>

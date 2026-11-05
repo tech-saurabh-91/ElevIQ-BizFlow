@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema, objectIdSchema } from '../middlewares/validate.js';
+import { paginationSchema, objectIdSchema, dateNotBefore } from '../middlewares/validate.js';
 import {
   CUSTOMER_TYPES,
   PAYMENT_TERMS,
@@ -315,7 +315,7 @@ const priceListItemSchema = z.object({
   minQty: z.coerce.number().min(0).optional(),
 });
 
-export const priceListCreateSchema = z.object({
+const priceListBaseSchema = z.object({
   name: z.string().trim().min(2, 'Price list name is required').max(120),
   code: softString(24),
   description: softString(500),
@@ -329,7 +329,9 @@ export const priceListCreateSchema = z.object({
   notes: softString(500),
 });
 
-export const priceListUpdateSchema = priceListCreateSchema.partial();
+const validToAfterFrom = dateNotBefore('validTo', 'validFrom', 'Valid to cannot be before valid from');
+export const priceListCreateSchema = priceListBaseSchema.superRefine(validToAfterFrom);
+export const priceListUpdateSchema = priceListBaseSchema.partial().superRefine(validToAfterFrom);
 
 export const priceListListQuerySchema = paginationSchema.extend({
   sort: z.enum(['createdAt', 'name', 'code']).optional(),

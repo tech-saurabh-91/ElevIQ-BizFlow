@@ -17,7 +17,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription, ErrorAlert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useLookups } from '@/hooks/useLookups';
-import { dateInput, num } from '@/components/company/form-utils';
+import { dateInput, num, todayInput, notFutureDate } from '@/components/company/form-utils';
 import { formatDate, formatMoney, formatNumber } from '@/utils/format';
 import {
   PAYMENT_MODES,
@@ -48,7 +48,7 @@ const schema = z.object({
     .trim()
     .min(1, 'Enter the amount received')
     .refine((v) => Number(v) > 0, 'Amount must be greater than zero'),
-  paymentDate: z.string().optional().or(z.literal('')),
+  paymentDate: z.string().optional().or(z.literal('')).refine(notFutureDate, 'Payment date cannot be in the future'),
   mode: z.enum(PAYMENT_MODES),
   reference: text(100),
   bankName: text(120),
@@ -56,12 +56,12 @@ const schema = z.object({
   reason: z.enum(PAYMENT_REASONS),
   notes: text(1000),
   allocations: z.array(allocationSchema),
+}).superRefine((v, ctx) => {
+  // Post-dated cheques are fine; a cheque dated before the receipt is not.
+  if (v.mode === 'CHEQUE' && v.chequeDate && v.chequeDate < (v.paymentDate || todayInput())) {
+    ctx.addIssue({ code: 'custom', path: ['chequeDate'], message: 'Cheque date cannot be before the payment date' });
+  }
 });
-
-const todayInput = () => {
-  const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-};
 
 export default function PaymentEditor() {
   const { id } = useParams();
@@ -108,6 +108,7 @@ export default function PaymentEditor() {
 
   const { fields, replace, append, remove } = useFieldArray({ control, name: 'allocations' });
   const watchedAllocations = useWatch({ control, name: 'allocations' }) || [];
+  const paymentDate = useWatch({ control, name: 'paymentDate' }) || '';
   const customerId = useWatch({ control, name: 'customerId' }) || '';
   const amount = Number(useWatch({ control, name: 'amount' }) || 0);
   const mode = useWatch({ control, name: 'mode' }) || 'CASH';
@@ -475,7 +476,7 @@ export default function PaymentEditor() {
                 </Field>
 
                 <Field label="Payment date" error={errors.paymentDate?.message}>
-                  <Input type="date" {...register('paymentDate')} />
+                  <Input type="date" max={todayInput()} {...register('paymentDate')} />
                 </Field>
 
                 <Field label="Mode" error={errors.mode?.message}>
@@ -514,7 +515,7 @@ export default function PaymentEditor() {
 
                 {mode === 'CHEQUE' && (
                   <Field label="Cheque date" error={errors.chequeDate?.message}>
-                    <Input type="date" {...register('chequeDate')} />
+                    <Input type="date" min={paymentDate || todayInput()} {...register('chequeDate')} />
                   </Field>
                 )}
               </CardContent>

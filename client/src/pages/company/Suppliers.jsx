@@ -8,7 +8,7 @@ import { Truck } from 'lucide-react';
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
 import { useAuthStore } from '@/store/authStore';
-import { AddressFields, FormActions, FormSection, num, numInput, opt } from '@/components/company/form-utils';
+import { AddressFields, FormActions, FormSection, num, numInput, opt, checkContact, isIndiaCountry } from '@/components/company/form-utils';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -72,7 +72,14 @@ const schema = z.object({
   categories: text(400),
   notes: text(1000),
   isActive: z.boolean(),
-});
+}).superRefine((v, ctx) =>
+  checkContact(
+    v,
+    ctx,
+    { phone: 'phone', gstin: 'gstin', pan: 'pan', ifsc: ['bank', 'ifsc'], account: ['bank', 'accountNumber'] },
+    isIndiaCountry(v.address?.country)
+  )
+);
 
 // New addresses start in the company's own country.
 const emptyAddress = () => ({

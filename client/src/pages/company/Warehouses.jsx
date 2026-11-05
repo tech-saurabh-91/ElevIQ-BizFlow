@@ -9,15 +9,7 @@ import { CheckCircle2, History, Truck, Warehouse as WarehouseIcon, Package, Clip
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
 import { useAuthStore } from '@/store/authStore';
-import {
-  AddressFields,
-  FormActions,
-  FormSection,
-  dateInput,
-  num,
-  numInput,
-  opt,
-} from '@/components/company/form-utils';
+import { AddressFields, FormActions, FormSection, dateInput, num, numInput, opt, checkContact } from '@/components/company/form-utils';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -91,6 +83,10 @@ const schema = z
     notes: text(500),
   })
   .superRefine((values, ctx) => {
+    checkContact(values, ctx, { phone: 'phone' }, false);
+    if (values.vehicleNumber && !/^[A-Za-z0-9][A-Za-z0-9 -]{3,14}$/.test(values.vehicleNumber)) {
+      ctx.addIssue({ code: 'custom', path: ['vehicleNumber'], message: 'Letters and digits only, e.g. MH12AB1234' });
+    }
     const allowed = PARENT_TYPES[values.type] || [];
     if (allowed.length === 0) {
       if (values.parent) {

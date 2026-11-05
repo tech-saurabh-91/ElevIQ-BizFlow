@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema, objectIdSchema } from '../middlewares/validate.js';
+import { paginationSchema, objectIdSchema, notFutureDate, dateNotBefore } from '../middlewares/validate.js';
 import {
   MOVEMENT_TYPE_LIST,
   ADJUSTMENT_REASONS,
@@ -80,7 +80,7 @@ export const poLineSchema = z.object({
 export const poCreateSchema = z.object({
   supplierId: objectIdSchema,
   warehouse: refId,
-  poDate: optionalDate,
+  poDate: optionalDate.refine(notFutureDate, { message: 'PO date cannot be in the future' }),
   expectedDate: optionalDate,
   paymentTerms: z.string().trim().max(30).optional(),
   leadDays: z.coerce.number().min(0).max(365).optional(),
@@ -91,12 +91,12 @@ export const poCreateSchema = z.object({
   items: z.array(poLineSchema).min(1, 'Add at least one line').max(500),
   /** Optionally send the PO immediately on create. */
   send: z.boolean().optional(),
-});
+}).superRefine(dateNotBefore('expectedDate', 'poDate', 'Expected delivery cannot be before the PO date'));
 
 export const poUpdateSchema = z
   .object({
     warehouse: refId,
-    poDate: optionalDate,
+    poDate: optionalDate.refine(notFutureDate, { message: 'PO date cannot be in the future' }),
     expectedDate: optionalDate,
     paymentTerms: z.string().trim().max(30).optional(),
     leadDays: z.coerce.number().min(0).max(365).optional(),
@@ -137,7 +137,7 @@ export const grnLineSchema = z.object({
 export const grnCreateSchema = z.object({
   purchaseOrder: refId,
   warehouse: objectIdSchema,
-  grnDate: optionalDate,
+  grnDate: optionalDate.refine(notFutureDate, { message: 'Receipt date cannot be in the future' }),
   supplierId: refId,
   invoiceNo: softString(60),
   vehicleNo: softString(30),
@@ -151,7 +151,7 @@ export const grnCreateSchema = z.object({
 export const grnUpdateSchema = z
   .object({
     warehouse: refId,
-    grnDate: optionalDate,
+    grnDate: optionalDate.refine(notFutureDate, { message: 'Receipt date cannot be in the future' }),
     invoiceNo: softString(60),
     vehicleNo: softString(30),
     eWayBillNo: softString(30),

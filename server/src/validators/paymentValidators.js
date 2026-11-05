@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema, objectIdSchema } from '../middlewares/validate.js';
+import { paginationSchema, objectIdSchema, notFutureDate } from '../middlewares/validate.js';
 import { PAYMENT_STATUS_LIST, PAYMENT_MODES } from '../config/constants.js';
 import { PAYMENT_REASONS } from '../models/Payment.js';
 
@@ -27,7 +27,7 @@ export const paymentCreateSchema = z
   .object({
     customerId: objectIdSchema,
     amount: z.coerce.number().positive('Amount must be greater than zero').max(100_000_000),
-    paymentDate: optionalDate,
+    paymentDate: optionalDate.refine(notFutureDate, { message: 'Payment date cannot be in the future' }),
     mode: z.enum(PAYMENT_MODES).optional(),
     reference: softString(100),
     bankName: softString(120),
@@ -46,7 +46,7 @@ export const paymentCreateSchema = z
 export const paymentUpdateSchema = z
   .object({
     amount: z.coerce.number().positive('Amount must be greater than zero').max(100_000_000).optional(),
-    paymentDate: optionalDate,
+    paymentDate: optionalDate.refine(notFutureDate, { message: 'Payment date cannot be in the future' }),
     mode: z.enum(PAYMENT_MODES).optional(),
     reference: softString(100),
     bankName: softString(120),

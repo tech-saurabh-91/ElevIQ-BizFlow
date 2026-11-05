@@ -44,6 +44,7 @@ import {
   transferActionsFor,
 } from '@/components/company/inventory-shared';
 import BulkImport from '@/components/company/BulkImport';
+import { todayInput } from '@/components/company/form-utils';
 
 const TABS = [
   { value: 'stock', label: 'Stock on hand', icon: Boxes },
@@ -358,6 +359,7 @@ function MovementsTab() {
           <Input
             type="date"
             value={dateFrom}
+            max={dateTo || todayInput()}
             onChange={(e) => setParam({ dateFrom: e.target.value, page: 1 })}
             className="w-40"
             aria-label="From date"
@@ -365,6 +367,8 @@ function MovementsTab() {
           <Input
             type="date"
             value={dateTo}
+            min={dateFrom || undefined}
+            max={todayInput()}
             onChange={(e) => setParam({ dateTo: e.target.value, page: 1 })}
             className="w-40"
             aria-label="To date"
@@ -1365,6 +1369,14 @@ function PurchaseOrdersTab() {
       send: Boolean(form.send),
     };
     if (form.warehouse) payload.warehouse = form.warehouse;
+    if (form.poDate && form.poDate > todayInput()) {
+      toast.error('PO date cannot be in the future');
+      return;
+    }
+    if (form.expectedDate && form.expectedDate < (form.poDate || todayInput())) {
+      toast.error('Expected delivery cannot be before the PO date');
+      return;
+    }
     if (form.poDate) payload.poDate = form.poDate;
     if (form.expectedDate) payload.expectedDate = form.expectedDate;
     if (form.paymentTerms.trim()) payload.paymentTerms = form.paymentTerms.trim();
@@ -1634,6 +1646,7 @@ function PurchaseOrdersTab() {
                 id="po-date"
                 type="date"
                 value={form.poDate}
+                max={todayInput()}
                 onChange={(e) => setForm((f) => ({ ...f, poDate: e.target.value }))}
               />
             </div>
@@ -1646,6 +1659,7 @@ function PurchaseOrdersTab() {
                 id="po-expected"
                 type="date"
                 value={form.expectedDate}
+                min={form.poDate || todayInput()}
                 onChange={(e) => setForm((f) => ({ ...f, expectedDate: e.target.value }))}
               />
             </div>
@@ -1936,6 +1950,10 @@ function GoodsReceiptsTab() {
     };
     if (form.purchaseOrder) payload.purchaseOrder = form.purchaseOrder;
     else payload.supplierId = form.supplierId;
+    if (form.grnDate && form.grnDate > todayInput()) {
+      toast.error('Receipt date cannot be in the future');
+      return;
+    }
     if (form.grnDate) payload.grnDate = form.grnDate;
     if (form.invoiceNo.trim()) payload.invoiceNo = form.invoiceNo.trim();
     if (form.notes.trim()) payload.notes = form.notes.trim();
@@ -2199,6 +2217,7 @@ function GoodsReceiptsTab() {
                 id="grn-date"
                 type="date"
                 value={form.grnDate}
+                max={todayInput()}
                 onChange={(e) => setForm((f) => ({ ...f, grnDate: e.target.value }))}
               />
             </div>

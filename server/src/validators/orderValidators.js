@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema, objectIdSchema } from '../middlewares/validate.js';
+import { paginationSchema, objectIdSchema, notFutureDate, dateNotBefore } from '../middlewares/validate.js';
 import { ORDER_STATUS_LIST, PAYMENT_TERMS } from '../config/constants.js';
 import { ORDER_PAYMENT_MODES } from '../models/Order.js';
 
@@ -35,7 +35,7 @@ const orderItemSchema = z.object({
 
 const orderBaseSchema = z.object({
   customerId: objectIdSchema,
-  orderDate: optionalDate,
+  orderDate: optionalDate.refine(notFutureDate, { message: 'Order date cannot be in the future' }),
   expectedDeliveryDate: optionalDate,
 
   salesman: refId,
@@ -58,11 +58,14 @@ const orderBaseSchema = z.object({
   submit: z.boolean().optional(),
 });
 
-export const orderCreateSchema = orderBaseSchema;
+const deliveryAfterOrder = dateNotBefore('expectedDeliveryDate', 'orderDate', 'Delivery cannot be before the order date');
+
+export const orderCreateSchema = orderBaseSchema.superRefine(deliveryAfterOrder);
 
 export const orderUpdateSchema = orderBaseSchema
   .partial()
-  .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });
+  .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' })
+  .superRefine(deliveryAfterOrder);
 
 const reasonSchema = z.string().trim().min(3, 'Reason must be at least 3 characters').max(500);
 

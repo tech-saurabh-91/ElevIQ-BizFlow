@@ -1,11 +1,20 @@
 import * as React from 'react';
 import { cn } from '@/utils/cn';
 
-export const Input = React.forwardRef(({ className, type, error, ...props }, ref) => {
+export const Input = React.forwardRef(({ className, type, error, onWheel, ...props }, ref) => {
+  // A mouse wheel over a focused number field silently changes its value; blur instead.
+  const handleWheel =
+    type === 'number'
+      ? (e) => {
+          e.currentTarget.blur();
+          onWheel?.(e);
+        }
+      : onWheel;
   return (
     <input
       type={type}
       ref={ref}
+      onWheel={handleWheel}
       className={cn(
         'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors',
         'placeholder:text-muted-foreground focus-ring disabled:cursor-not-allowed disabled:opacity-50',

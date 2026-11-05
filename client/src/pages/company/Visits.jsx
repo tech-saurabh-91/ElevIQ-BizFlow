@@ -384,6 +384,7 @@ export default function Visits() {
             <Input
               type="date"
               value={dateFrom}
+              max={dateTo || undefined}
               onChange={(e) => setParam({ dateFrom: e.target.value, page: 1 })}
               className="w-40"
               aria-label="From date"
@@ -391,6 +392,7 @@ export default function Visits() {
             <Input
               type="date"
               value={dateTo}
+              min={dateFrom || undefined}
               onChange={(e) => setParam({ dateTo: e.target.value, page: 1 })}
               className="w-40"
               aria-label="To date"

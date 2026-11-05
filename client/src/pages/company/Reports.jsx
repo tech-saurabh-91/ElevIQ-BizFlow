@@ -44,6 +44,7 @@ import {
   ColumnChart,
   DonutChart,
 } from '@/components/company/report-charts';
+import { todayInput } from '@/components/company/form-utils';
 
 /**
  * Phase 8 - Reports.
@@ -743,6 +744,7 @@ export default function Reports() {
             <Input
               type="date"
               value={dateFrom}
+              max={dateTo || todayInput()}
               onChange={(e) => setParam({ dateFrom: e.target.value })}
               className="w-40"
               aria-label="From date"
@@ -750,6 +752,8 @@ export default function Reports() {
             <Input
               type="date"
               value={dateTo}
+              min={dateFrom || undefined}
+              max={todayInput()}
               onChange={(e) => setParam({ dateTo: e.target.value })}
               className="w-40"
               aria-label="To date"

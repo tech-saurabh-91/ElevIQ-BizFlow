@@ -17,7 +17,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription, ErrorAlert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useLookups } from '@/hooks/useLookups';
-import { dateInput, num } from '@/components/company/form-utils';
+import { dateInput, num, todayInput, notFutureDate } from '@/components/company/form-utils';
 import { formatDate, formatMoney, formatNumber } from '@/utils/format';
 import {
   PAYMENT_MODES,
@@ -62,7 +62,7 @@ const itemSchema = z.object({
 const schema = z.object({
   orderId: z.string().optional().or(z.literal('')),
   customerId: z.string().optional().or(z.literal('')),
-  invoiceDate: z.string().optional().or(z.literal('')),
+  invoiceDate: z.string().optional().or(z.literal('')).refine(notFutureDate, 'Invoice date cannot be in the future'),
   dueDate: z.string().optional().or(z.literal('')),
   paymentMode: z.enum(PAYMENT_MODES),
   paymentTerms: z.enum(PAYMENT_TERMS),
@@ -73,6 +73,10 @@ const schema = z.object({
   terms: text(2000),
   footerNote: text(500),
   items: z.array(itemSchema).min(1, 'Add at least one product'),
+}).superRefine((v, ctx) => {
+  if (v.dueDate && v.dueDate < (v.invoiceDate || todayInput())) {
+    ctx.addIssue({ code: 'custom', path: ['dueDate'], message: 'Due date cannot be before the invoice date' });
+  }
 });
 
 const emptyRow = () => ({
@@ -87,11 +91,6 @@ const emptyRow = () => ({
   taxRate: '',
   maxQty: null,
 });
-
-const todayInput = () => {
-  const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-};
 
 const addDaysInput = (days) => {
   const d = new Date();
@@ -200,6 +199,7 @@ export default function InvoiceEditor() {
   const watchedItems = useWatch({ control, name: 'items' }) || [];
   const orderId = useWatch({ control, name: 'orderId' }) || '';
   const customerId = useWatch({ control, name: 'customerId' }) || '';
+  const invoiceDate = useWatch({ control, name: 'invoiceDate' }) || '';
 
   // ---- Existing draft ------------------------------------------------------
   const invoiceQuery = useQuery({
@@ -743,14 +743,14 @@ export default function InvoiceEditor() {
                 )}
 
                 <Field label="Invoice date" error={errors.invoiceDate?.message}>
-                  <Input type="date" {...register('invoiceDate')} />
+                  <Input type="date" max={todayInput()} {...register('invoiceDate')} />
                 </Field>
                 <Field
                   label="Due date"
                   error={errors.dueDate?.message}
                   hint="Leave blank to derive it from the payment terms."
                 >
-                  <Input type="date" {...register('dueDate')} />
+                  <Input type="date" min={invoiceDate || todayInput()} {...register('dueDate')} />
                 </Field>
 
                 <Field label="Payment mode" error={errors.paymentMode?.message}>

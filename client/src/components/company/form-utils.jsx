@@ -227,12 +227,37 @@ export const csv = (value) =>
     .map((s) => s.trim())
     .filter(Boolean);
 
-/** Date -> `<input type="date">` value. */
+const pad2 = (n) => String(n).padStart(2, '0');
+const localDay = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+/**
+ * Date -> `<input type="date">` value, in the browser's own calendar day.
+ * (toISOString() is UTC: in India a saved date showed one day earlier.)
+ * A plain 'YYYY-MM-DD' string is kept as it is.
+ */
 export const dateInput = (value) => {
   if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+  return Number.isNaN(d.getTime()) ? '' : localDay(d);
 };
+
+/** Today as an `<input type="date">` value (for min / max). */
+export const todayInput = () => localDay(new Date());
+
+/** 'YYYY-MM-DD' shifted by n days (n may be negative). */
+export const shiftDateInput = (value, n) => {
+  const base = value ? new Date(`${value}T12:00:00`) : new Date();
+  base.setDate(base.getDate() + n);
+  return localDay(base);
+};
+
+/**
+ * Zod refinements for 'YYYY-MM-DD' strings. Empty strings pass (pair them
+ * with a required rule where the date is mandatory).
+ */
+export const notFutureDate = (v) => !v || v <= todayInput();
+export const notPastDate = (v) => !v || v >= todayInput();
 
 export default FormSection;
 
@@ -358,3 +383,42 @@ export function LocaleFields({ register, watch, setValue, errors, country, showR
     </>
   );
 }
+
+// ---- Shared field rules (mirror server/src/services/customerService.js) ----
+export const GSTIN_IN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+export const PAN_IN = /^[A-Z]{5}\d{4}[A-Z]$/;
+export const IFSC_IN = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+export const PHONE_RX = /^\+?\d[\d\s-]{5,18}\d$/;
+export const digitsOf = (v) => String(v || '').replace(/\D/g, '');
+
+/** True when an address/company country means India (code or name, or not set yet). */
+export const isIndiaCountry = (country) => !country || ['IN', 'IND', 'INDIA'].includes(String(country).trim().toUpperCase());
+
+/**
+ * Common checks for a contact + tax block inside a zod superRefine:
+ *   checkContact(v, ctx, { phone: ['phone'], gstin: 'gstin', pan: 'pan', ifsc: ['bank', 'ifsc'] }, india)
+ * A path is a field name or an array for a nested field; `phone` may list
+ * several. Empty values pass; pair with required rules where mandatory.
+ */
+export const checkContact = (v, ctx, paths, india = true) => {
+  const get = (path) => (Array.isArray(path) ? path.reduce((o, k) => o?.[k], v) : v?.[path]);
+  const at = (path) => (Array.isArray(path) ? path : [path]);
+  const issue = (path, message) => ctx.addIssue({ code: 'custom', path: at(path), message });
+  [].concat(paths.phone || []).forEach((p) => {
+    const value = String(get(p) || '').trim();
+    if (!value) return;
+    const d = digitsOf(value).length;
+    if (!PHONE_RX.test(value) || d < 7 || d > 15) issue(p, 'Enter a valid phone number (7-15 digits)');
+  });
+  if (!india) return;
+  const read = (path) => String((path && get(path)) || '').trim().toUpperCase();
+  const gstin = read(paths.gstin);
+  const pan = read(paths.pan);
+  if (gstin && !GSTIN_IN.test(gstin)) issue(paths.gstin, 'GSTIN must be 15 characters, e.g. 27AAAAA0000A1Z5');
+  if (pan && !PAN_IN.test(pan)) issue(paths.pan, 'PAN must look like AAAAA0000A');
+  if (gstin && pan && GSTIN_IN.test(gstin) && PAN_IN.test(pan) && gstin.slice(2, 12) !== pan) issue(paths.pan, 'PAN does not match the GSTIN');
+  const ifsc = read(paths.ifsc);
+  if (ifsc && !IFSC_IN.test(ifsc)) issue(paths.ifsc, 'IFSC must look like SBIN0001234');
+  const account = read(paths.account);
+  if (account && !/^\d{9,18}$/.test(account)) issue(paths.account, 'Account number must be 9-18 digits');
+};

@@ -11,7 +11,7 @@ import api, { apiError, toFieldErrors } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AddressFields, LocaleFields } from '@/components/company/form-utils';
+import { AddressFields, LocaleFields, checkContact, isIndiaCountry } from '@/components/company/form-utils';
 import { useCountries, findCountry } from '@/hooks/useLocations';
 import { Input, Select, Field } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -53,7 +53,7 @@ const schema = z.object({
   financialYearStartMonth: z.string().optional().or(z.literal('')),
   graceDays: z.coerce.number().int().min(0, 'Cannot be negative').max(60, 'Max 60 days').optional(),
   userLimit: z.coerce.number().int().min(1, 'At least 1').max(10000).optional(),
-});
+}).superRefine((v, ctx) => checkContact(v, ctx, { phone: 'phone', gstin: 'gstin', pan: 'pan' }, isIndiaCountry(v.country)));
 
 function Section({ icon: Icon, title, description, children }) {
   return (

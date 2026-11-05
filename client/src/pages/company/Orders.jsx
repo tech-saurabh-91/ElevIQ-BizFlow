@@ -48,6 +48,7 @@ import {
   orderActionsFor,
   statusLabel,
 } from '@/components/company/order-shared';
+import { todayInput } from '@/components/company/form-utils';
 
 const STATUS_OPTIONS = ['', ...ORDER_STATUSES];
 
@@ -354,6 +355,7 @@ export default function Orders() {
             <Input
               type="date"
               value={dateFrom}
+              max={dateTo || todayInput()}
               onChange={(e) => setParam({ dateFrom: e.target.value, page: 1 })}
               className="w-40"
               aria-label="From date"
@@ -361,6 +363,8 @@ export default function Orders() {
             <Input
               type="date"
               value={dateTo}
+              min={dateFrom || undefined}
+              max={todayInput()}
               onChange={(e) => setParam({ dateTo: e.target.value, page: 1 })}
               className="w-40"
               aria-label="To date"

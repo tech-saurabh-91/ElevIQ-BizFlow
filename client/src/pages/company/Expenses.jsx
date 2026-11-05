@@ -48,6 +48,7 @@ import {
   categoryLabel,
   expenseActionsFor,
 } from '@/components/company/fieldforce-shared';
+import { todayInput } from '@/components/company/form-utils';
 
 const STATUS_OPTIONS = ['', ...EXPENSE_STATUSES];
 const CATEGORY_OPTIONS = ['', ...EXPENSE_CATEGORIES];
@@ -120,6 +121,10 @@ function ExpenseForm({ open, mode, initial, onClose, onSaved }) {
   });
 
   const submit = (alsoSubmit) => {
+    if (form.expenseDate && form.expenseDate > todayInput()) {
+      toast.error('Expense date cannot be in the future');
+      return;
+    }
     const payload = { category: form.category, amount: Number(form.amount) };
     if (form.expenseDate) payload.expenseDate = form.expenseDate;
     if (form.description.trim()) payload.description = form.description.trim();
@@ -176,6 +181,7 @@ function ExpenseForm({ open, mode, initial, onClose, onSaved }) {
             id="exp-date"
             type="date"
             value={form.expenseDate}
+            max={todayInput()}
             onChange={(e) => set('expenseDate', e.target.value)}
           />
         </div>
@@ -656,6 +662,7 @@ export default function Expenses() {
             <Input
               type="date"
               value={dateFrom}
+              max={dateTo || todayInput()}
               onChange={(e) => setParam({ dateFrom: e.target.value, page: 1 })}
               className="w-40"
               aria-label="From date"
@@ -663,6 +670,8 @@ export default function Expenses() {
             <Input
               type="date"
               value={dateTo}
+              min={dateFrom || undefined}
+              max={todayInput()}
               onChange={(e) => setParam({ dateTo: e.target.value, page: 1 })}
               className="w-40"
               aria-label="To date"

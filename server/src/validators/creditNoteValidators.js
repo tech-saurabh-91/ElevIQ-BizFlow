@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema, objectIdSchema } from '../middlewares/validate.js';
+import { paginationSchema, objectIdSchema, notFutureDate } from '../middlewares/validate.js';
 import { CREDIT_NOTE_STATUS_LIST } from '../config/constants.js';
 import { CREDIT_NOTE_REASONS } from '../models/CreditNote.js';
 
@@ -27,7 +27,7 @@ const creditItemSchema = z.object({
 
 export const creditNoteCreateSchema = z.object({
   invoiceId: objectIdSchema,
-  creditNoteDate: optionalDate,
+  creditNoteDate: optionalDate.refine(notFutureDate, { message: 'Credit note date cannot be in the future' }),
   reason: z.enum(CREDIT_NOTE_REASONS).optional(),
   reasonNote: softString(1000),
   items: z.array(creditItemSchema).max(200).optional(),
@@ -37,7 +37,7 @@ export const creditNoteCreateSchema = z.object({
 
 export const creditNoteUpdateSchema = z
   .object({
-    creditNoteDate: optionalDate,
+    creditNoteDate: optionalDate.refine(notFutureDate, { message: 'Credit note date cannot be in the future' }),
     reason: z.enum(CREDIT_NOTE_REASONS).optional(),
     reasonNote: softString(1000),
     items: z.array(creditItemSchema).max(200).optional(),
