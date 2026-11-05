@@ -43,6 +43,7 @@ import {
   VISIT_OUTCOMES,
   VISIT_PURPOSES,
   WorkflowDialog,
+  CheckOutDialog,
   captureGps,
   outcomeLabel,
   purposeLabel,
@@ -52,19 +53,6 @@ import {
 const STATUS_OPTIONS = ['', ...VISIT_STATUSES];
 const OUTCOME_OPTIONS = ['', ...VISIT_OUTCOMES];
 const PURPOSE_OPTIONS = ['', ...VISIT_PURPOSES];
-
-const CHECKOUT_FIELDS = [
-  {
-    name: 'outcome',
-    label: 'Outcome',
-    type: 'select',
-    required: true,
-    options: VISIT_OUTCOMES,
-    autoFocus: true,
-  },
-  { name: 'collectionAmount', label: 'Amount collected (optional)', type: 'number', min: 0 },
-  { name: 'notes', label: 'Notes (optional)', type: 'textarea', rows: 2 },
-];
 
 /** Create-visit modal: pick a customer, day, purpose and optional notes. */
 function VisitForm({ open, onClose, onSaved }) {
@@ -753,27 +741,7 @@ export default function Visits() {
         />
       )}
 
-      {action?.kind === 'checkOut' && (
-        <WorkflowDialog
-          open
-          onClose={() => setAction(null)}
-          onDone={invalidate}
-          endpoint={`/v1/field-force/visits/${action.visit?.id}/check-out`}
-          title="Check out — record the outcome"
-          description="How did the stop go? Link any order or collection it produced."
-          subject={`${action.visit?.visitNo || 'Visit'} · ${action.visit?.customerName || ''}`}
-          confirmLabel="Complete visit"
-          fields={CHECKOUT_FIELDS}
-          errorTitle="Could not check out"
-          invalidateKeys={[['company', 'visits'], ['company', 'targets'], ['company', 'orders']]}
-          prepareBody={async (body) => {
-            const gps = await captureGps();
-            const payload = { ...body };
-            if (gps) payload.location = { lat: gps.lat, lng: gps.lng };
-            return payload;
-          }}
-        />
-      )}
+      {action?.kind === 'checkOut' && <CheckOutDialog visit={action.visit} onClose={() => setAction(null)} onDone={invalidate} />}
 
       {action?.kind === 'skip' && (
         <WorkflowDialog

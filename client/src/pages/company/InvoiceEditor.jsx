@@ -159,7 +159,8 @@ export default function InvoiceEditor() {
   const { company } = useAuth();
   const { lookups } = useLookups();
 
-  const [mode, setMode] = useState('order');
+  // From a customer visit there is no order to bill: start a direct (spot) invoice.
+  const [mode, setMode] = useState(searchParams.get('customerId') && !presetOrderId ? 'direct' : 'order');
   const [initialized, setInitialized] = useState(!isEdit);
   const [serverError, setServerError] = useState(null);
   const [intent, setIntent] = useState('draft');
@@ -177,7 +178,8 @@ export default function InvoiceEditor() {
     resolver: zodResolver(schema),
     defaultValues: {
       orderId: presetOrderId,
-      customerId: '',
+      // Opened from a customer visit (My Beat): start with that customer.
+      customerId: searchParams.get('customerId') || '',
       invoiceDate: todayInput(),
       dueDate: '',
       paymentMode: 'CREDIT',

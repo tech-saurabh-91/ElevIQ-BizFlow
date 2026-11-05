@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -124,6 +124,8 @@ const toFormValues = (order) => ({
 export default function OrderEditor() {
   const { taxIdLabel } = useTaxLabels();
   const { id } = useParams();
+  // Opened from a customer visit (My Beat): start with that customer.
+  const [searchParams] = useSearchParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -146,7 +148,7 @@ export default function OrderEditor() {
   } = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
-      customerId: '',
+      customerId: searchParams.get('customerId') || '',
       orderDate: todayInput(),
       expectedDeliveryDate: '',
       salesman: '',

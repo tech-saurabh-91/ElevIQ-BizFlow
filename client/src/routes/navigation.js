@@ -7,6 +7,8 @@
  */
 import {
   LayoutDashboard,
+  Navigation,
+  CalendarRange,
   Building2,
   CreditCard,
   Users,
@@ -92,7 +94,10 @@ export const companyNav = [
     section: 'Field Force',
     items: [
       // Only for people who can drive a van.
+      { to: '/app/my-beat', label: 'My Beat', icon: Navigation, roles: ['SALESMAN', 'MANAGER'] },
       { to: '/app/my-van', label: 'My Van', icon: Truck, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'] },
+      { to: '/app/stock-requests', label: 'Van Stock Requests', icon: ClipboardList, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE', 'COMPANY_ADMIN'] },
+      { to: '/app/beat-plan', label: 'Beat Plan', icon: CalendarRange, permission: 'fieldforce.targets.manage' },
       { to: '/app/visits', label: 'Visits & Check-ins', icon: MapPin, permission: 'fieldforce.visits.view' },
       { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, permission: 'fieldforce.attendance.view' },
       { to: '/app/targets', label: 'Targets', icon: Target, permission: 'fieldforce.targets.view' },

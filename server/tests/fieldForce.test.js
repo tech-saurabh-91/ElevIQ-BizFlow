@@ -399,14 +399,27 @@ describe('Phase 7 - visits with GPS and outcomes', () => {
       .send({
         at: todayAt(10, 45),
         location: { lat: 18.5075, lng: 73.8078 },
-        outcome: 'ORDER_TAKEN',
-        notes: 'Ordered 3 cartons',
+        outcome: 'ORDER_TAKEN', // ignored: nothing was booked, so a reason is required
+        notes: 'Owner will order next week',
       });
+    expect(checkedOut.status).toBe(422);
+    expect(checkedOut.body.code).toBe('NO_ORDER_REASON_REQUIRED');
 
-    expect(checkedOut.status).toBe(200);
-    expect(checkedOut.body.data.status).toBe('COMPLETED');
-    expect(checkedOut.body.data.outcome).toBe('ORDER_TAKEN');
-    expect(checkedOut.body.data.durationMinutes).toBe(45);
+    const withReason = await request
+      .post(`/api/v1/field-force/visits/${state.visitId}/check-out`)
+      .set(as(state.salesmanToken))
+      .send({
+        at: todayAt(10, 45),
+        location: { lat: 18.5075, lng: 73.8078 },
+        noOrderReason: 'STOCK_AVAILABLE',
+        notes: 'Owner will order next week',
+      });
+    const checkedOutOk = withReason;
+    expect(checkedOutOk.status).toBe(200);
+    expect(checkedOutOk.body.data.status).toBe('COMPLETED');
+    expect(checkedOutOk.body.data.outcome).toBe('NO_ORDER');
+    expect(checkedOutOk.body.data.noOrderReason).toBe('STOCK_AVAILABLE');
+    expect(checkedOutOk.body.data.durationMinutes).toBe(45);
   });
 
   test('locks a completed visit from edits and deletion', async () => {
@@ -478,7 +491,7 @@ describe('Phase 7 - visits with GPS and outcomes', () => {
       .query({ status: 'COMPLETED' });
     expect(completed.status).toBe(200);
     expect(completed.body.data.length).toBe(1);
-    expect(completed.body.data[0].outcome).toBe('ORDER_TAKEN');
+    expect(completed.body.data[0].outcome).toBe('NO_ORDER');
   });
 
   test('nearby customers are ranked by distance', async () => {

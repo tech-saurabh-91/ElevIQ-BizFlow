@@ -17,8 +17,9 @@ import {
   ATTENDANCE_STATUS,
   VISIT_STATUS,
   VISIT_OUTCOMES,
+  NO_ORDER_REASONS,
 } from '../../config/constants.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors.js';
+import { AppError, BadRequestError, ConflictError, NotFoundError } from '../../utils/errors.js';
 import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
 import {
   distanceMeters,
@@ -604,10 +605,45 @@ export const visitCheckOut = asyncHandler(async (req, res) => {
 
   const payload = { ...req.body };
   const location = payload.location || {};
-  const outcome = payload.outcome;
 
-  if (!outcome || !VISIT_OUTCOMES.includes(outcome)) {
-    throw new BadRequestError('A valid visit outcome is required', 'VALIDATION_ERROR');
+  // The outcome follows what was actually done at the customer since check-in:
+  // an invoice or an order needs no explanation; nothing booked needs a reason.
+  const since = doc.checkIn?.at || doc.createdAt;
+  const by = { $or: [{ salesman: doc.salesman._id || doc.salesman }, { createdBy: doc.salesman._id || doc.salesman }] };
+  const customerId = doc.customerId._id || doc.customerId;
+  const [invoice, order, payment] = await Promise.all([
+    mongoose.model('Invoice').findOne({ customerId, createdAt: { $gte: since }, status: { $ne: 'CANCELLED' }, ...by }).sort({ createdAt: -1 }).lean(),
+    payload.order
+      ? mongoose.model('Order').findById(payload.order).lean()
+      : mongoose.model('Order').findOne({ customerId, createdAt: { $gte: since }, status: { $ne: 'CANCELLED' }, ...by }).sort({ createdAt: -1 }).lean(),
+    payload.payment
+      ? mongoose.model('Payment').findById(payload.payment).lean()
+      : mongoose.model('Payment').findOne({ customerId, createdAt: { $gte: since }, collectedBy: doc.salesman._id || doc.salesman }).sort({ createdAt: -1 }).lean(),
+  ]);
+
+  let outcome;
+  if (invoice) outcome = 'INVOICED';
+  else if (order) outcome = 'ORDER_TAKEN';
+  else if (payment) outcome = 'PAYMENT_COLLECTED';
+  else {
+    const reason = payload.noOrderReason;
+    if (!reason || !NO_ORDER_REASONS.includes(reason)) {
+      throw new AppError('No order was booked at this customer - choose the reason', {
+        status: 422,
+        code: 'NO_ORDER_REASON_REQUIRED',
+        errors: [{ field: 'body.noOrderReason', message: 'Choose why no order was taken' }],
+      });
+    }
+    if (reason === 'OTHER' && !String(payload.notes || '').trim()) {
+      throw new BadRequestError('Describe the reason in the notes', 'VALIDATION_ERROR');
+    }
+    doc.noOrderReason = reason;
+    outcome = ['SHOP_CLOSED', 'OWNER_ABSENT'].includes(reason) ? 'CUSTOMER_UNAVAILABLE' : 'NO_ORDER';
+  }
+  if (invoice) {
+    doc.invoice = invoice._id;
+    doc.invoiceNo = invoice.invoiceNo || '';
+    doc.invoiceValue = Number(invoice.total || 0);
   }
 
   doc.checkOut = {
@@ -622,21 +658,15 @@ export const visitCheckOut = asyncHandler(async (req, res) => {
   if (payload.notes !== undefined) doc.notes = payload.notes;
   if (payload.proofUrl !== undefined) doc.proofUrl = payload.proofUrl;
 
-  if (payload.order) {
-    const order = await mongoose.model('Order').findById(payload.order).lean();
-    if (order) {
-      doc.order = order._id;
-      doc.orderNo = order.orderNo || '';
-      doc.orderValue = Number(order.total || 0);
-    }
+  if (order) {
+    doc.order = order._id;
+    doc.orderNo = order.orderNo || '';
+    doc.orderValue = Number(order.total || 0);
   }
-  if (payload.payment) {
-    const payment = await mongoose.model('Payment').findById(payload.payment).lean();
-    if (payment) {
-      doc.payment = payment._id;
-      doc.paymentNo = payment.paymentNo || '';
-      doc.collectionAmount = Number(payload.collectionAmount ?? payment.amount ?? 0);
-    }
+  if (payment) {
+    doc.payment = payment._id;
+    doc.paymentNo = payment.paymentNo || '';
+    doc.collectionAmount = Number(payload.collectionAmount ?? payment.amount ?? 0);
   }
 
   doc.status = VISIT_STATUS.COMPLETED;

@@ -82,6 +82,9 @@ const invoiceSchema = new mongoose.Schema(
     // Seller (our company) as it was when the document was issued, so a
     // reprint years later shows the registration details valid at the time.
     seller: { type: Object, default: null },
+
+    // Van sale: stock left the van when this direct invoice was issued.
+    stockPosted: { type: Boolean, default: false },
     billingAddress: { type: addressSchema, default: () => ({}) },
     shippingAddress: { type: addressSchema, default: () => ({}) },
 

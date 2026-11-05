@@ -239,7 +239,19 @@ export const TRANSFER_TRANSITIONS = Object.freeze({
 // ---------------------------------------------------------------------------
 // Field force (Phase 7)
 // ---------------------------------------------------------------------------
-export const VISIT_OUTCOMES = Object.freeze(['ORDER_TAKEN', 'NO_ORDER', 'PAYMENT_COLLECTED', 'CLOSED', 'CUSTOMER_UNAVAILABLE']);
+export const VISIT_OUTCOMES = Object.freeze(['ORDER_TAKEN', 'INVOICED', 'NO_ORDER', 'PAYMENT_COLLECTED', 'CLOSED', 'CUSTOMER_UNAVAILABLE']);
+
+/** Why a checked-in customer gave no order (asked at check-out). */
+export const NO_ORDER_REASONS = Object.freeze([
+  'STOCK_AVAILABLE', // still has enough stock
+  'SHOP_CLOSED',
+  'OWNER_ABSENT',
+  'NO_PAYMENT', // cannot pay / pending dues
+  'PRICE_ISSUE',
+  'WAITING_FOR_SCHEME',
+  'COMPETITOR',
+  'OTHER',
+]);
 
 /**
  * Status constants are keyed objects (`EXPENSE_STATUS.DRAFT`), never arrays —

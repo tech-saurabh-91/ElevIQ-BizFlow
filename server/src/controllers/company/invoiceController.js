@@ -19,7 +19,7 @@ import { success, created, paginated } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { listDocuments, searchRegex } from '../../utils/query.js';
 import { audit } from '../../middlewares/audit.js';
-import { AUDIT_ACTIONS, INVOICE_STATUS, INVOICE_STATUS_LIST } from '../../config/constants.js';
+import { AUDIT_ACTIONS, INVOICE_STATUS, INVOICE_STATUS_LIST, MOVEMENT_TYPES } from '../../config/constants.js';
 import { AppError, BadRequestError, ConflictError, ErrorCodes } from '../../utils/errors.js';
 import { toPlain, loadDoc, assertRef, refOrNull, dateOrNull } from './_helpers.js';
 import {
@@ -33,6 +33,9 @@ import {
   syncOrderInvoicing,
 } from '../../services/invoiceService.js';
 import { taxBreakupFor, sellerStateOf, buyerStateOf } from '../../services/orderService.js';
+import { activeVanOf, assertDayClosed, assertVanStock } from '../../services/vanService.js';
+import { recordMovement } from '../../services/inventoryService.js';
+import { baseQtyOf } from '../../services/catalogService.js';
 
 /** Relations returned on every invoice read so the UI never needs a second call. */
 const POPULATE = [
@@ -288,6 +291,31 @@ const issueInvoice = async (req, invoice, note = '') => {
   await assertDraftQuantities(invoice);
 
   recalcInvoiceBalance(invoice);
+  // A direct invoice raised on a van is a spot sale: goods leave the van now.
+  if (!invoice.order && invoice.warehouse && !invoice.stockPosted) {
+    const van = await Warehouse.findOne({ _id: invoice.warehouse, type: 'VAN' }).lean();
+    if (van) {
+      const settings = await settingsOf(req);
+      await assertVanStock(van, invoice.items, settings);
+      for (const line of invoice.items) {
+        await recordMovement({
+          product: line.product,
+          warehouse: van._id,
+          qty: -baseQtyOf(line),
+          type: MOVEMENT_TYPES.SALES_OUT,
+          refType: 'INVOICE',
+          refId: invoice._id,
+          refNo: invoice.invoiceNo || '',
+          reason: 'Van sale',
+          unitCost: Number(line.unitPrice || 0) / Number(line.unitFactor || 1),
+          movedBy: req.user.id,
+          settings,
+        });
+      }
+      invoice.stockPosted = true;
+    }
+  }
+
   invoice.status = INVOICE_STATUS.ISSUED;
   invoice.seller = sellerSnapshot(req.company);
   invoice.issuedAt = new Date();
@@ -431,6 +459,12 @@ export const create = asyncHandler(async (req, res) => {
     priced = await buildInvoiceLinesFromOrder(order, normalizeItems(payload.items || []), settings);
   } else {
     if (!payload.customerId) throw new BadRequestError('Customer is required', 'VALIDATION_ERROR');
+    // Van sales: an executive driving a van invoices from it (once earlier
+    // days are settled when day close is mandatory).
+    const seller = payload.salesman || req.user.id;
+    await assertDayClosed(seller, req.company);
+    const driving = await activeVanOf(seller);
+    if (driving && !payload.warehouse) payload.warehouse = String(driving.van._id);
     customer = await getCustomer(payload.customerId);
     const priceList = await getPriceList(customer, payload.priceList);
     const rawItems = normalizeItems(payload.items || []);
@@ -439,6 +473,10 @@ export const create = asyncHandler(async (req, res) => {
   }
 
   const snapshot = snapshotFor({ customer, order, payload, settings, req });
+  if (!order && snapshot.warehouse) {
+    const van = await Warehouse.findOne({ _id: snapshot.warehouse, type: 'VAN' }).lean();
+    if (van) await assertVanStock(van, priced.lines, settings);
+  }
   priced.taxBreakup = taxBreakupFor(priced.totals.taxTotal, settings, {
     sellerState: sellerStateOf(settings, req.company),
     buyerState: snapshot.placeOfSupply,
@@ -604,6 +642,26 @@ export const cancel = asyncHandler(async (req, res) => {
       );
     }
     invoice.balanceDue = 0;
+  }
+
+  // Goods of a cancelled van sale go back onto the van.
+  if (wasIssued && invoice.stockPosted) {
+    const settings = await settingsOf(req);
+    for (const line of invoice.items) {
+      await recordMovement({
+        product: line.product,
+        warehouse: invoice.warehouse,
+        qty: baseQtyOf(line),
+        type: MOVEMENT_TYPES.SALES_RETURN,
+        refType: 'INVOICE',
+        refId: invoice._id,
+        refNo: invoice.invoiceNo || '',
+        reason: 'Van sale cancelled',
+        movedBy: req.user.id,
+        settings,
+      });
+    }
+    invoice.stockPosted = false;
   }
 
   invoice.status = INVOICE_STATUS.CANCELLED;

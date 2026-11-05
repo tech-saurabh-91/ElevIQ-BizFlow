@@ -103,6 +103,14 @@ const visitSchema = new mongoose.Schema(
     paymentNo: { type: String, default: '', trim: true },
     collectionAmount: { type: Number, default: 0, min: 0 },
 
+    /** Invoice raised during the visit (van / spot sale). */
+    invoice: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
+    invoiceNo: { type: String, default: '', trim: true },
+    invoiceValue: { type: Number, default: 0, min: 0 },
+
+    /** Why no order came out of a check-in (required when nothing was booked). */
+    noOrderReason: { type: String, default: '', trim: true },
+
     /** Why a planned visit was skipped/cancelled. */
     skipReason: { type: String, default: '', trim: true, maxlength: 300 },
 

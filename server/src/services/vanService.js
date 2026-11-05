@@ -154,7 +154,7 @@ export const daySummary = async (van, day, { tz, executiveId }) => {
     const q = Number(m.qty || 0);
     if (m.type === MOVEMENT_TYPES.TRANSFER_IN) l.loaded += q;
     else if (m.type === MOVEMENT_TYPES.TRANSFER_OUT) l.unloaded += -q;
-    else if (m.type === MOVEMENT_TYPES.SALES_OUT) l.sold += -q;
+    else if (m.type === MOVEMENT_TYPES.SALES_OUT || m.type === MOVEMENT_TYPES.SALES_RETURN) l.sold += -q;
     else l.adjusted += q;
   });
 
@@ -336,4 +336,112 @@ export const assertVanStock = async (van, lines, settings) => {
   if (errors.length) {
     throw new AppError(`Not enough stock on van ${van.code}`, { status: 422, code: 'INSUFFICIENT_STOCK', errors });
   }
+};
+
+/**
+ * Issue stock from the van's parent warehouse towards the van: a VAN_LOAD
+ * transfer left DISPATCHED (stock out of the godown, not yet on the van)
+ * until the executive confirms receipt with receiveOnVan().
+ */
+export const issueToVan = async ({ van, lines, userId, settings, companyId, notes = '', refNo = '' }) => {
+  const parent = await Warehouse.findOne({ _id: van.parent }).lean();
+  if (!parent) throw new BadRequestError('This van has no parent warehouse to load from', 'WAREHOUSE_PARENT');
+  const balances = await StockBalance.find({ warehouse: parent._id, product: { $in: lines.map((l) => l.product) } }).lean();
+  const onHand = new Map(balances.map((b) => [String(b.product), Number(b.qty || 0)]));
+  const short = lines.filter((l) => (onHand.get(String(l.product)) || 0) + 1e-9 < l.qty);
+  if (short.length) {
+    throw new AppError(`Not enough stock in ${parent.name}`, {
+      status: 422,
+      code: 'INSUFFICIENT_STOCK',
+      errors: short.map((l) => ({
+        field: 'items',
+        message: `${l.name}: ${round3(onHand.get(String(l.product)) || 0)} ${l.unit} in ${parent.name}, ${l.qty} approved`,
+      })),
+    });
+  }
+
+  const now = new Date();
+  const doc = new StockTransfer({
+    purpose: 'VAN_LOAD',
+    fromWarehouse: parent._id,
+    fromWarehouseCode: parent.code || '',
+    fromWarehouseName: parent.name || '',
+    toWarehouse: van._id,
+    toWarehouseCode: van.code || '',
+    toWarehouseName: van.name || '',
+    transferDate: now,
+    vehicleNo: van.vehicleNumber || '',
+    notes: notes || (refNo ? `Stock request ${refNo}` : ''),
+    items: lines.map((l) => ({ product: l.product, name: l.name, sku: l.sku, unit: l.unit, qty: l.qty, dispatchedQty: l.qty, receivedQty: 0 })),
+    status: TRANSFER_STATUS.DISPATCHED,
+    dispatchedAt: now,
+    dispatchedBy: userId,
+    statusHistory: [{ status: TRANSFER_STATUS.DISPATCHED, at: now, by: userId, note: refNo ? `Issued for ${refNo}` : 'Issued to van' }],
+    source: 'WEB',
+  });
+  doc.transferNo = await nextTransferNumber(companyId, settings, now);
+  await doc.save();
+  for (const l of lines) {
+    await recordMovement({
+      product: l.product,
+      warehouse: parent._id,
+      qty: -l.qty,
+      type: MOVEMENT_TYPES.TRANSFER_OUT,
+      refType: 'TRANSFER',
+      refId: doc._id,
+      refNo: doc.transferNo,
+      reason: 'Issued to van',
+      note: refNo ? `For ${refNo}` : `To ${van.name}`,
+      movedBy: userId,
+      settings,
+    });
+  }
+  return doc;
+};
+
+/**
+ * The executive confirms what reached the van. Anything not received was
+ * never sent, so it goes back into the parent warehouse.
+ */
+export const receiveOnVan = async ({ transfer, received, userId, settings }) => {
+  for (const line of transfer.items) {
+    const sent = Number(line.dispatchedQty || 0);
+    const got = Math.min(sent, Math.max(0, Number(received.get(String(line.product)) ?? sent)));
+    if (got > 0) {
+      await recordMovement({
+        product: line.product,
+        warehouse: transfer.toWarehouse,
+        qty: got,
+        type: MOVEMENT_TYPES.TRANSFER_IN,
+        refType: 'TRANSFER',
+        refId: transfer._id,
+        refNo: transfer.transferNo,
+        reason: 'Received on van',
+        movedBy: userId,
+        settings,
+      });
+    }
+    if (sent - got > 1e-9) {
+      await recordMovement({
+        product: line.product,
+        warehouse: transfer.fromWarehouse,
+        qty: sent - got,
+        type: MOVEMENT_TYPES.TRANSFER_IN,
+        refType: 'TRANSFER',
+        refId: transfer._id,
+        refNo: transfer.transferNo,
+        reason: 'Not received on van - returned',
+        movedBy: userId,
+        settings,
+      });
+    }
+    line.receivedQty = got;
+  }
+  const now = new Date();
+  transfer.status = TRANSFER_STATUS.RECEIVED;
+  transfer.receivedAt = now;
+  transfer.receivedBy = userId;
+  transfer.statusHistory.push({ status: TRANSFER_STATUS.RECEIVED, at: now, by: userId, note: 'Received on van' });
+  await transfer.save();
+  return transfer;
 };

@@ -20,6 +20,8 @@ import settingsRoutes from './settings.js';
 import auditLogRoutes from './auditLogs.js';
 import lookupRoutes from './lookups.js';
 import vanRoutes from './vans.js';
+import stockRequestRoutes from './stockRequests.js';
+import beatPlanRoutes from './beatPlans.js';
 import { units as unitRoutes, categories as categoryRoutes } from './catalog.js';
 import * as dashboardController from '../../controllers/company/dashboardController.js';
 import { authenticate } from '../../middlewares/auth.js';
@@ -77,6 +79,8 @@ router.use('/payments', paymentRoutes);
 // ---- Phase 7: inventory + field force --------------------------------------
 router.use('/inventory', inventoryRoutes);
 router.use('/vans', vanRoutes);
+router.use('/stock-requests', stockRequestRoutes);
+router.use('/beat-plans', beatPlanRoutes);
 router.use('/purchase-orders', purchaseOrders);
 router.use('/goods-receipts', goodsReceipts);
 router.use('/field-force/attendance', attendance);

@@ -23,11 +23,25 @@ export const VISIT_STATUSES = ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'SKIPPED',
 
 export const VISIT_OUTCOMES = [
   'ORDER_TAKEN',
+  'INVOICED',
   'NO_ORDER',
   'PAYMENT_COLLECTED',
   'CLOSED',
   'CUSTOMER_UNAVAILABLE',
 ];
+
+/** Why a checked-in customer gave no order (asked at check-out). */
+export const NO_ORDER_REASONS = [
+  { value: 'STOCK_AVAILABLE', label: 'Has enough stock' },
+  { value: 'SHOP_CLOSED', label: 'Shop closed' },
+  { value: 'OWNER_ABSENT', label: 'Owner / buyer not available' },
+  { value: 'NO_PAYMENT', label: 'Payment issue / pending dues' },
+  { value: 'PRICE_ISSUE', label: 'Price or margin issue' },
+  { value: 'WAITING_FOR_SCHEME', label: 'Waiting for a scheme' },
+  { value: 'COMPETITOR', label: 'Buying from a competitor' },
+  { value: 'OTHER', label: 'Other (write in notes)' },
+];
+export const noOrderReasonLabel = (v) => NO_ORDER_REASONS.find((r) => r.value === v)?.label || v;
 
 export const VISIT_PURPOSES = [
   'ORDER',
@@ -313,5 +327,86 @@ function WorkflowDialog({
   );
 }
 
-export { WorkflowDialog };
+/**
+ * Check out of a visit. The server works out the outcome from what was booked
+ * since check-in (invoice / order / payment). Only when nothing was booked
+ * does it answer NO_ORDER_REASON_REQUIRED - then we ask why.
+ */
+function CheckOutDialog({ visit, onClose, onDone }) {
+  const queryClient = useQueryClient();
+  const [needReason, setNeedReason] = useState(false);
+  const [reason, setReason] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const body = {};
+      if (needReason) body.noOrderReason = reason;
+      if (notes.trim()) body.notes = notes.trim();
+      const gps = await captureGps();
+      if (gps) body.location = { lat: gps.lat, lng: gps.lng };
+      return (await api.post(`/v1/field-force/visits/${visit.id}/check-out`, body)).data;
+    },
+    onSuccess: (payload) => {
+      toast.success(payload?.message || 'Checked out');
+      [['company', 'visits'], ['company', 'beat'], ['company', 'targets']].forEach((k) => queryClient.invalidateQueries({ queryKey: k }));
+      onDone?.(payload?.data);
+      onClose?.();
+    },
+    onError: (err) => {
+      if (err?.response?.data?.code === 'NO_ORDER_REASON_REQUIRED') setNeedReason(true);
+    },
+  });
+
+  const err = mutation.error ? apiError(mutation.error) : null;
+  const showErr = err && err.code !== 'NO_ORDER_REASON_REQUIRED' && mutation.error?.response?.data?.code !== 'NO_ORDER_REASON_REQUIRED';
+  const invalid = needReason && (!reason || (reason === 'OTHER' && !notes.trim()));
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={needReason ? 'No order - why?' : 'Check out'}
+      description={`${visit.visitNo || 'Visit'} · ${visit.customerName || ''}`}
+      size="sm"
+      dismissible={!mutation.isPending}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={() => mutation.mutate()} disabled={invalid} loading={mutation.isPending}>
+            Check out
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {needReason ? (
+          <>
+            <p className="rounded-lg bg-warning/15 p-3 text-sm">No order, invoice or payment was booked at this customer. Tell us why.</p>
+            <Field label="Reason" required>
+              <Select value={reason} onChange={(e) => setReason(e.target.value)} autoFocus aria-label="No order reason">
+                <option value="">Choose a reason…</option>
+                {NO_ORDER_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">The outcome is taken from the order, invoice or payment you booked here.</p>
+        )}
+        <Field label={reason === 'OTHER' ? 'Notes' : 'Notes (optional)'} required={reason === 'OTHER'}>
+          <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
+        {showErr && <ErrorAlert title="Could not check out" message={err.message} errors={err.errors} />}
+      </div>
+    </Dialog>
+  );
+}
+
+export { WorkflowDialog, CheckOutDialog };
 export default WorkflowDialog;

@@ -9,6 +9,7 @@ import {
   VISIT_OUTCOMES,
   VISIT_STATUS_LIST,
   VISIT_PURPOSES,
+  NO_ORDER_REASONS,
 } from '../config/constants.js';
 
 /**
@@ -136,7 +137,9 @@ export const visitCheckOutSchema = z.object({
   accuracy: z.coerce.number().min(0).max(1e6).optional(),
   address: softString(300),
   source: z.enum(['WEB', 'MOBILE', 'MANUAL']).optional(),
-  outcome: z.enum(VISIT_OUTCOMES),
+  // The outcome is derived from what was booked; kept optional for old clients.
+  outcome: z.enum(VISIT_OUTCOMES).optional(),
+  noOrderReason: z.enum(NO_ORDER_REASONS).optional(),
   order: refId,
   payment: refId,
   collectionAmount: z.coerce.number().min(0).max(1e9).optional(),

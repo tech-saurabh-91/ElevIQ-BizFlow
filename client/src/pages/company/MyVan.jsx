@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Truck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ClipboardList, Truck } from 'lucide-react';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
@@ -14,10 +15,11 @@ import { VanStockTable, DayCloseDialog } from '@/components/company/VanPanels';
 
 /** The signed-in executive's van: stock on board and the day close. */
 export default function MyVan() {
+  const navigate = useNavigate();
   const [closing, setClosing] = useState(false);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['company', 'vans', 'mine'],
-    queryFn: async () => (await api.get('/v1/vans/mine')).data?.data,
+    queryFn: async () => (await api.get('/v1/vans/mine')).data?.data ?? null,
   });
 
   return (
@@ -28,9 +30,14 @@ export default function MyVan() {
         breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'My van' }]}
         actions={
           data ? (
-            <Button onClick={() => setClosing(true)}>
-              <Truck className="h-4 w-4" /> Day close
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => navigate('/app/stock-requests')}>
+                <ClipboardList className="h-4 w-4" /> Request stock
+              </Button>
+              <Button onClick={() => setClosing(true)}>
+                <Truck className="h-4 w-4" /> Day close
+              </Button>
+            </div>
           ) : null
         }
       />
