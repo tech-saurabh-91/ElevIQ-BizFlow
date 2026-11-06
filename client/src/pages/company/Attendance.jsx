@@ -205,7 +205,7 @@ function TodayPanel({ canManage }) {
                 {cashout.rejectReason ? ` (${cashout.rejectReason})` : ''}
               </span>
               {['NONE', 'REJECTED'].includes(cashout.status) && (
-                <Button size="sm" variant="outline" onClick={() => navigate('/app/my-van')}>
+                <Button size="sm" variant="outline" onClick={() => navigate('/app/day-cashout')}>
                   Submit day cashout
                 </Button>
               )}

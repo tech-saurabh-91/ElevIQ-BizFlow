@@ -1,4 +1,7 @@
 import VanDayClose from '../../models/VanDayClose.js';
+import Warehouse from '../../models/Warehouse.js';
+import StockBalance from '../../models/StockBalance.js';
+import Product from '../../models/Product.js';
 import VanAssignment from '../../models/VanAssignment.js';
 import Setting from '../../models/Setting.js';
 import { success, created } from '../../utils/apiResponse.js';
@@ -57,6 +60,66 @@ export const mine = asyncHandler(async (req, res) => {
       dayCloseMandatory: active.spell.dayCloseMandatory,
       pendingDays: pending,
       stock,
+    },
+  });
+});
+
+/**
+ * GET /vans/stock-query?q= - free stock per product in the warehouses the
+ * user may see: a salesman sees their van and the godown it is loaded from
+ * (else the default godown); inventory staff and managers see every warehouse.
+ */
+export const stockQuery = asyncHandler(async (req, res) => {
+  let warehouses;
+  if (can(req, 'inventory.view') || req.user.role === COMPANY_ROLES.MANAGER) {
+    warehouses = await Warehouse.find({ isActive: { $ne: false }, type: { $nin: ['DAMAGED', 'TRANSIT'] } })
+      .select('name code type parent isDefault')
+      .sort({ isDefault: -1, type: 1, name: 1 })
+      .lean();
+  } else {
+    const active = await activeVanOf(req.user.id);
+    const settings = req.settings || (await Setting.forCompany(req.companyId));
+    const godownId = active?.van?.parent || settings?.inventory?.defaultWarehouse || null;
+    const godown = godownId
+      ? await Warehouse.findById(godownId).select('name code type isDefault').lean()
+      : await Warehouse.findOne({ isActive: { $ne: false }, type: 'MAIN' }).sort({ isDefault: -1 }).select('name code type isDefault').lean();
+    warehouses = [active?.van, godown].filter(Boolean);
+  }
+  const ids = warehouses.map((w) => w._id);
+  const productFilter = { isActive: true };
+  if (req.query.q) {
+    const rx = new RegExp(String(req.query.q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    productFilter.$or = [{ name: rx }, { sku: rx }, { customCode: rx }];
+  }
+  const [products, balances] = await Promise.all([
+    Product.find(productFilter).select('name sku unit category').sort({ name: 1 }).limit(500).lean(),
+    StockBalance.find({ warehouse: { $in: ids } }).select('product warehouse qty reservedQty').lean(),
+  ]);
+  const byProduct = new Map();
+  const typeOf = new Map(warehouses.map((w) => [String(w._id), w.type]));
+  balances.forEach((b) => {
+    const key = String(b.product);
+    if (!byProduct.has(key)) byProduct.set(key, {});
+    // A godown keeps confirmed orders' units aside; a van's stock is all free.
+    const reserved = typeOf.get(String(b.warehouse)) === 'VAN' ? 0 : Number(b.reservedQty || 0);
+    byProduct.get(key)[String(b.warehouse)] = Math.round((Number(b.qty || 0) - reserved) * 1000) / 1000;
+  });
+  const rows = products.map((p) => {
+    const qty = byProduct.get(String(p._id)) || {};
+    return {
+      product: String(p._id),
+      name: p.name,
+      sku: p.sku || '',
+      unit: p.unit || 'PCS',
+      category: p.category || '',
+      qty,
+      total: Math.round(Object.values(qty).reduce((s, v) => s + v, 0) * 1000) / 1000,
+    };
+  });
+  return success(res, {
+    data: {
+      warehouses: warehouses.map((w) => ({ id: String(w._id), name: w.name, code: w.code || '', type: w.type })),
+      rows,
     },
   });
 });
@@ -330,4 +393,4 @@ export const dayCloses = asyncHandler(async (req, res) => {
   return success(res, { data: rows.map(toPlain) });
 });
 
-export default { mine, stock, load, unload, dayClosePreview, closeDay, dayCloses, allDayCloses, approveDayClose, rejectDayClose };
+export default { mine, stockQuery, stock, load, unload, dayClosePreview, closeDay, dayCloses, allDayCloses, approveDayClose, rejectDayClose };

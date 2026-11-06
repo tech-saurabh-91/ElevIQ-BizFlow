@@ -76,8 +76,9 @@ export const companyNav = [
     items: [
       { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, roles: ['SALESMAN'] },
       { to: '/app/sales', label: 'Sales Visit', icon: Navigation, roles: ['SALESMAN', 'MANAGER'] },
-      { to: '/app/my-van', label: 'My Van & Cashout', icon: Truck, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'], channel: 'VAN_SALE' },
+      { to: '/app/stock-query', label: 'Stock Query', icon: Boxes, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'] },
       { to: '/app/stock-requests', label: 'Van Stock Requests', icon: ClipboardList, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE', 'COMPANY_ADMIN'], channel: 'VAN_SALE' },
+      { to: '/app/day-cashout', label: 'Day Cashout', icon: Wallet, roles: ['SALESMAN'], channel: 'VAN_SALE' },
     ],
   },
   {

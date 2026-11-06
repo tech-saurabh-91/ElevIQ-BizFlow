@@ -35,6 +35,8 @@ const invoiceItemSchema = z.object({
 
 const invoiceBaseSchema = z.object({
   orderId: refId,
+  /** Bill several orders of the same customer on one invoice. */
+  orderIds: z.array(objectIdSchema).max(20).optional(),
   customerId: refId,
 
   invoiceDate: optionalDate.refine(notFutureDate, { message: 'Invoice date cannot be in the future' }),
@@ -61,7 +63,7 @@ const invoiceBaseSchema = z.object({
 });
 
 const requireLineReference = (value, ctx) => {
-  const hasOrder = Boolean(value.orderId);
+  const hasOrder = Boolean(value.orderId || value.orderIds?.length);
   (value.items || []).forEach((item, index) => {
     if (!item.product && !item.orderItemId) {
       ctx.addIssue({
@@ -126,6 +128,8 @@ export const invoiceListQuerySchema = paginationSchema.extend({
 
 export const invoiceFormOptionsQuerySchema = z.object({
   orderId: objectIdSchema.optional().or(z.literal('')),
+  /** Comma-separated order ids billed together (same customer). */
+  orderIds: z.string().trim().max(600).optional(),
   customerId: objectIdSchema.optional().or(z.literal('')),
   invoiceId: objectIdSchema.optional().or(z.literal('')),
 });

@@ -41,7 +41,9 @@ import { cn } from '@/utils/cn';
  */
 
 const NO_ROUTE = 'none';
-const RETURN_TO = '/app/sales?checkout=1';
+// Back from the order / invoice / collection form lands on Sales visit; the
+// salesman checks out when they are done at the shop (nothing is forced).
+const RETURN_TO = '/app/sales';
 const OUTCOME_TONE = { ORDER_TAKEN: 'success', INVOICED: 'success', PAYMENT_COLLECTED: 'info', NO_ORDER: 'warning', CUSTOMER_UNAVAILABLE: 'muted' };
 
 const minutesSince = (at) => (at ? Math.max(0, Math.round((Date.now() - new Date(at).getTime()) / 60000)) : 0);
@@ -117,13 +119,10 @@ export default function SalesVisit() {
   });
   const rows = customers.data || [];
 
-  // Back from the order / invoice form: offer the check-out straight away.
+  // Old links (?checkout=1) no longer pop the check-out; just tidy the URL.
   useEffect(() => {
-    if (searchParams.get('checkout') && open) {
-      setCheckingOut(open);
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, open, setSearchParams]);
+    if (searchParams.get('checkout')) setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Keep the "time at shop" clock moving.
   useEffect(() => {

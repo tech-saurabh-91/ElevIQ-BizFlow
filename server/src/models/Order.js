@@ -125,6 +125,8 @@ const orderSchema = new mongoose.Schema(
     // Fulfilment / invoicing progress (driven by later phases)
     dispatchedAt: { type: Date, default: null },
     deliveredAt: { type: Date, default: null },
+    /** Delivered at the shop from a van invoice (stock left the van, no dispatch). */
+    deliveredByInvoice: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
     invoicedQty: { type: Number, default: 0, min: 0 },
     invoicedAmount: money(),
 

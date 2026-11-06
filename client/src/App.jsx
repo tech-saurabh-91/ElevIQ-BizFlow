@@ -52,7 +52,8 @@ const PaymentEditor = lazy(() => import('@/pages/company/PaymentEditor'));
 const PaymentDetail = lazy(() => import('@/pages/company/PaymentDetail'));
 const Products = lazy(() => import('@/pages/company/Products'));
 const CatalogMasters = lazy(() => import('@/pages/company/CatalogMasters'));
-const MyVan = lazy(() => import('@/pages/company/MyVan'));
+const StockQuery = lazy(() => import('@/pages/company/StockQuery'));
+const DayCashout = lazy(() => import('@/pages/company/DayCashout'));
 const StockRequests = lazy(() => import('@/pages/company/StockRequests'));
 const SalesVisit = lazy(() => import('@/pages/company/SalesVisit'));
 const DayCashouts = lazy(() => import('@/pages/company/DayCashouts'));
@@ -242,7 +243,9 @@ export default function App() {
           <Route path="customers" element={guard('customers.view', <Customers />)} />
           <Route path="products" element={guard('products.view', <Products />)} />
           <Route path="catalog" element={guard('products.view', <CatalogMasters />)} />
-          <Route path="my-van" element={<MyVan />} />
+          <Route path="stock-query" element={<StockQuery />} />
+          <Route path="day-cashout" element={<DayCashout />} />
+          <Route path="my-van" element={<Navigate to="/app/stock-query" replace />} />
           <Route path="stock-requests" element={<StockRequests />} />
           <Route path="sales" element={<SalesVisit />} />
           <Route path="my-beat" element={<Navigate to="/app/sales" replace />} />

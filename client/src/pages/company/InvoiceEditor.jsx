@@ -134,6 +134,7 @@ const toFormValues = (invoice) => ({
 const orderRowFromOption = (row) => ({
   product: row.product,
   orderItemId: row.orderItemId,
+  orderNo: row.orderNo || '',
   name: row.name || '',
   sku: row.sku || '',
   unit: row.unit || 'PCS',
@@ -202,6 +203,9 @@ export default function InvoiceEditor() {
   const { fields, append, remove, replace } = useFieldArray({ control, name: 'items' });
   const watchedItems = useWatch({ control, name: 'items' }) || [];
   const orderId = useWatch({ control, name: 'orderId' }) || '';
+  // More orders of the same customer billed on this invoice (one delivery).
+  const [extraOrderIds, setExtraOrderIds] = useState([]);
+  useEffect(() => setExtraOrderIds((ids) => (ids.length ? [] : ids)), [orderId]);
   const customerId = useWatch({ control, name: 'customerId' }) || '';
   const invoiceDate = useWatch({ control, name: 'invoiceDate' }) || '';
 
@@ -232,11 +236,13 @@ export default function InvoiceEditor() {
       'invoice-form-options',
       mode,
       mode === 'order' ? orderId || 'none' : 'na',
+      mode === 'order' ? extraOrderIds.join(',') : 'na',
       mode === 'direct' ? customerId || 'none' : 'na',
     ],
     queryFn: async () => {
       const params = {};
       if (mode === 'order' && orderId) params.orderId = orderId;
+      if (mode === 'order' && orderId && extraOrderIds.length) params.orderIds = [orderId, ...extraOrderIds].join(',');
       if (mode === 'direct' && customerId) params.customerId = customerId;
       const { data } = await api.get('/v1/invoices/form-options', { params });
       return data?.data;
@@ -266,10 +272,11 @@ export default function InvoiceEditor() {
   useEffect(() => {
     const order = options?.order;
     if (!order) return;
-    if (appliedOrder.current === order.id) return;
+    const orderKey = (order.orderIds || [order.id]).join(',');
+    if (appliedOrder.current === orderKey) return;
 
     if (skipOrderApply.current) {
-      appliedOrder.current = order.id;
+      appliedOrder.current = orderKey;
       skipOrderApply.current = false;
       // Keep the saved quantities but learn the maximum billable quantity.
       const caps = new Map(
@@ -293,7 +300,7 @@ export default function InvoiceEditor() {
       return;
     }
 
-    appliedOrder.current = order.id;
+    appliedOrder.current = orderKey;
     if (order.customerId) setValue('customerId', order.customerId);
     setValue('paymentMode', order.paymentMode || 'CREDIT');
     setValue('paymentTerms', order.paymentTerms || 'IMMEDIATE');
@@ -484,7 +491,8 @@ export default function InvoiceEditor() {
               })),
       };
 
-      if (mode === 'order') payload.orderId = values.orderId;
+      if (mode === 'order' && extraOrderIds.length) payload.orderIds = [values.orderId, ...extraOrderIds];
+      else if (mode === 'order') payload.orderId = values.orderId;
       else payload.customerId = values.customerId;
 
       mutation.mutate(payload);
@@ -601,6 +609,17 @@ export default function InvoiceEditor() {
   const itemsError = errors.items?.message || errors.items?.root?.message;
   const saving = isSubmitting || mutation.isPending;
   const direct = mode === 'direct';
+  const sameCustomerOrders = (options?.orders || []).filter(
+    (o) => options?.order && o.customerId === options.order.customerId && o.id !== orderId && (!lockedCustomer || o.customerId === lockedCustomer)
+  );
+  // Where the goods come from and what is free there (van for a van salesman).
+  const stockFrom = options?.stock?.warehouse || null;
+  const availableFor = (row, product) => {
+    if (!options?.stock || !row?.product) return null;
+    const base = Number(options.stock.available?.[String(row.product)] ?? 0);
+    const factor = product ? unitOf(product, row.unit).factor : 1;
+    return Math.floor((base / (factor || 1)) * 100) / 100;
+  };
 
   return (
     <div className="space-y-5">
@@ -742,7 +761,7 @@ export default function InvoiceEditor() {
                         : 'Only confirmed, dispatched or delivered orders with unbilled quantity are listed.'
                     }
                   >
-                    <Select {...register('orderId')} error={!!errors.orderId}>
+                    <Select {...register('orderId')} error={!!errors.orderId} disabled={isEdit}>
                       <option value="">Select an order…</option>
                       {(options?.orders || []).filter((o) => !lockedCustomer || o.customerId === lockedCustomer).map((o) => (
                         <option key={o.id} value={o.id}>
@@ -750,6 +769,26 @@ export default function InvoiceEditor() {
                         </option>
                       ))}
                     </Select>
+                    {!isEdit && options?.order && sameCustomerOrders.length > 0 && (
+                      <div className="mt-2 space-y-1 rounded-lg border p-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          More orders of {options.order.customerName} - bill them on this invoice (one delivery):
+                        </p>
+                        {sameCustomerOrders.map((o) => (
+                          <label key={o.id} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="accent-primary"
+                              checked={extraOrderIds.includes(o.id)}
+                              onChange={(e) =>
+                                setExtraOrderIds((ids) => (e.target.checked ? [...ids, o.id] : ids.filter((x) => x !== o.id)))
+                              }
+                            />
+                            {o.orderNo} · {formatDate(o.orderDate)} · {formatNumber(o.remainingQty)} left
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </Field>
                 )}
 
@@ -872,12 +911,22 @@ export default function InvoiceEditor() {
                                 <div>
                                   <p className="font-medium">{name}</p>
                                   <p className="text-xs text-muted-foreground">
+                                    {row.orderNo && extraOrderIds.length ? `${row.orderNo} · ` : ''}
                                     {row.sku || product?.sku || '—'}
                                     {row.unit || product?.unit ? ` · ${row.unit || product.unit}` : ''}
                                     {max > 0 ? ` · ${formatNumber(max)} billable` : ''}
                                   </p>
                                 </div>
                               )}
+                              {stockFrom && row.product && (() => {
+                                const avail = availableFor(row, product);
+                                const short = avail != null && Number(row.qty || 0) > avail;
+                                return (
+                                  <p className={`mt-1 text-xs ${short ? 'font-medium text-destructive' : 'text-muted-foreground'}`}>
+                                    {stockFrom.type === 'VAN' ? 'Van' : 'Stock'} {stockFrom.code || stockFrom.name}: {formatNumber(avail ?? 0)} {row.unit || product?.unit || ''} available
+                                  </p>
+                                );
+                              })()}
                             </td>
                             <td className="py-2 px-2 align-top">
                               <Input

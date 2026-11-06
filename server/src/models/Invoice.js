@@ -21,6 +21,8 @@ const invoiceItemSchema = new mongoose.Schema(
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
     /** Order line this invoice line was generated from (order-based invoices). */
     orderItemId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    /** Order this line bills (an invoice may bill several orders of one customer). */
+    order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: null },
 
     name: { type: String, default: '', trim: true },
     sku: { type: String, default: '', trim: true },
@@ -70,6 +72,9 @@ const invoiceSchema = new mongoose.Schema(
     /** Source sales order (null for a direct/counter invoice). */
     order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: null, index: true },
     orderNo: { type: String, default: '', trim: true },
+    /** Every order billed here (same customer); `order` is the first of them. */
+    orders: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Order' }], default: [], index: true },
+    orderNos: { type: [String], default: [] },
     direct: { type: Boolean, default: false, index: true },
 
     // Customer + snapshot

@@ -13,7 +13,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../utils/error
 import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, VISIT_STATUS } from '../../config/constants.js';
 import { toPlain } from './_helpers.js';
-import { distanceMeters, nextVisitNumber, assertCanStartVisit, markGeofence } from '../../services/fieldForceService.js';
+import { distanceMeters, nextVisitNumber, assertCanStartVisit, markGeofence, visitBookings } from '../../services/fieldForceService.js';
 import { tzOf, todayIn, dayBounds } from '../../services/vanService.js';
 
 dayjs.extend(utc);
@@ -197,6 +197,12 @@ export const mine = asyncHandler(async (req, res) => {
       day: openDay,
       earlierDay: openDay < day,
     };
+    // What is already booked here: the check-out asks for a reason only if nothing.
+    const { invoice, order, payment } = await visitBookings(open);
+    openVisit.booked =
+      invoice || order || payment
+        ? { invoiceNo: invoice?.invoiceNo || '', orderNo: order?.orderNo || '', paymentNo: payment?.paymentNo || '' }
+        : null;
   }
   const done = [...visits.values()].filter((v) => v.status === VISIT_STATUS.COMPLETED).length;
   return success(res, { data: { day, routes: mineRoutes, openVisit, visitsDone: done } });

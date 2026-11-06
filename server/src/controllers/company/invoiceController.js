@@ -12,6 +12,7 @@ import Product from '../../models/Product.js';
 import PriceList from '../../models/PriceList.js';
 import Route from '../../models/Route.js';
 import Warehouse from '../../models/Warehouse.js';
+import StockBalance from '../../models/StockBalance.js';
 import User from '../../models/User.js';
 import Setting from '../../models/Setting.js';
 
@@ -31,10 +32,12 @@ import {
   buildInvoiceLinesFromOrder,
   buildDirectInvoiceLines,
   syncOrderInvoicing,
+  lineOfOrder,
+  invoicesOfOrder,
 } from '../../services/invoiceService.js';
-import { taxBreakupFor, sellerStateOf, buyerStateOf } from '../../services/orderService.js';
+import { taxBreakupFor, sellerStateOf, buyerStateOf, computeTotals } from '../../services/orderService.js';
 import { activeVanOf, assertDayClosed } from '../../services/vanService.js';
-import { recordMovement, resolveDefaultWarehouse, assertWarehouseStock } from '../../services/inventoryService.js';
+import { recordMovement, resolveDefaultWarehouse, assertWarehouseStock, releaseReservation, reserveStock } from '../../services/inventoryService.js';
 import { baseQtyOf } from '../../services/catalogService.js';
 
 /** Relations returned on every invoice read so the UI never needs a second call. */
@@ -188,6 +191,48 @@ const loadOrderForInvoice = async (orderId) => {
   return order;
 };
 
+/** The order ids an invoice payload bills (orderIds wins over orderId). */
+const orderIdsOf = (payload) =>
+  [...new Set((payload.orderIds?.length ? payload.orderIds : payload.orderId ? [payload.orderId] : []).map(String))];
+
+/** The orders an invoice bills (old invoices: just `order`). */
+const ordersOfInvoice = (invoice) =>
+  invoice.orders?.length ? invoice.orders.map(String) : invoice.order ? [String(invoice.order)] : [];
+
+/** Load the orders to bill together: all invoiceable, all for one customer. */
+const loadOrdersForInvoice = async (ids) => {
+  const orders = [];
+  for (const id of ids) orders.push(await loadOrderForInvoice(id));
+  const customer = String(orders[0].customerId);
+  if (orders.some((o) => String(o.customerId) !== customer)) {
+    throw new BadRequestError('All orders on one invoice must be for the same customer', 'ORDER_CUSTOMER_MISMATCH');
+  }
+  return orders;
+};
+
+/**
+ * Invoice lines from one or several orders. Requested lines carry the
+ * orderItemId they bill; an empty request bills everything still unbilled.
+ */
+const buildLinesFromOrders = async (orders, requested, settings, options = {}) => {
+  if (orders.length === 1) {
+    const built = await buildInvoiceLinesFromOrder(orders[0], requested, settings, options);
+    return { ...built, used: orders };
+  }
+  const lines = [];
+  const used = [];
+  for (const order of orders) {
+    const ids = new Set((order.items || []).map((i) => String(i._id)));
+    const mine = requested.filter((r) => r.orderItemId && ids.has(String(r.orderItemId)));
+    if (requested.length && !mine.length) continue;
+    const built = await buildInvoiceLinesFromOrder(order, mine, settings, options);
+    lines.push(...built.lines);
+    used.push(order);
+  }
+  if (!lines.length) throw new BadRequestError('Add at least one item to invoice', 'VALIDATION_ERROR');
+  return { lines, ...computeTotals(lines, settings), used };
+};
+
 /** Build the header snapshot for a new invoice. */
 const snapshotFor = ({ customer, order, payload, settings, req, existing = null }) => {
   const resolve = (key, fallback) => {
@@ -258,10 +303,12 @@ const pushHistory = (invoice, status, req, note = '') => {
 /** Re-validate that a draft's quantities still fit the unbilled order quantity. */
 const assertDraftQuantities = async (invoice) => {
   if (!invoice.order) return;
-  const order = await Order.findById(invoice.order);
-  if (!order) throw new BadRequestError('Linked order not found', 'INVALID_REFERENCE');
-
-  const rows = await remainingOrderLines(order);
+  const rows = [];
+  for (const id of ordersOfInvoice(invoice)) {
+    const order = await Order.findById(id);
+    if (!order) throw new BadRequestError('Linked order not found', 'INVALID_REFERENCE');
+    rows.push(...(await remainingOrderLines(order)));
+  }
   const errors = [];
   (invoice.items || []).forEach((line, index) => {
     const row = rows.find((r) => String(r.orderItemId) === String(line.orderItemId));
@@ -280,6 +327,14 @@ const assertDraftQuantities = async (invoice) => {
       errors,
     });
   }
+};
+
+/** Every unit of the order was billed on invoices that took the goods off a van. */
+const vanDeliveredAll = async (order) => {
+  const invoices = await Invoice.find({ ...invoicesOfOrder(order._id), status: { $nin: ['DRAFT', 'CANCELLED'] } })
+    .select('order items stockPosted')
+    .lean();
+  return invoices.every((inv) => inv.stockPosted || !(inv.items || []).some((l) => lineOfOrder(inv, l, order._id)));
 };
 
 /** Issue a draft invoice: balance, customer outstanding and order progress. */
@@ -320,6 +375,40 @@ const issueInvoice = async (req, invoice, note = '') => {
     }
   }
 
+  // Billed at the shop from a van (the order was booked earlier): the goods
+  // are handed over now - they leave the van, the godown reservation is let
+  // go, and the order needs no dispatch / delivery.
+  let vanDelivery = false;
+  if (invoice.order && !invoice.stockPosted && invoice.warehouse) {
+    const warehouse = await Warehouse.findById(invoice.warehouse).lean();
+    if (warehouse?.type === 'VAN') {
+      const settings = await settingsOf(req);
+      await assertWarehouseStock(warehouse, invoice.items, settings);
+      for (const line of invoice.items) {
+        await recordMovement({
+          product: line.product,
+          warehouse: warehouse._id,
+          qty: -baseQtyOf(line),
+          type: MOVEMENT_TYPES.SALES_OUT,
+          refType: 'INVOICE',
+          refId: invoice._id,
+          refNo: invoice.invoiceNo || '',
+          reason: 'Van delivery against order',
+          unitCost: Number(line.unitPrice || 0) / Number(line.unitFactor || 1),
+          movedBy: req.user.id,
+          settings,
+        });
+      }
+      for (const id of ordersOfInvoice(invoice)) {
+        const order = await Order.findById(id).select('warehouse').lean();
+        const lines = invoice.items.filter((l) => lineOfOrder(invoice, l, id));
+        await releaseReservation(lines, { warehouseId: order?.warehouse || null, settings });
+      }
+      invoice.stockPosted = true;
+      vanDelivery = true;
+    }
+  }
+
   invoice.status = INVOICE_STATUS.ISSUED;
   invoice.seller = sellerSnapshot(req.company);
   invoice.issuedAt = new Date();
@@ -333,7 +422,17 @@ const issueInvoice = async (req, invoice, note = '') => {
     { $inc: { outstanding: Number(invoice.total || 0) } }
   );
 
-  if (invoice.order) await syncOrderInvoicing(invoice.order);
+  for (const id of ordersOfInvoice(invoice)) {
+    const order = await syncOrderInvoicing(id);
+    // Fully billed and every unit handed over from vans: the order is delivered.
+    if (vanDelivery && order && order.status === 'FULLY_INVOICED' && (await vanDeliveredAll(order))) {
+      order.status = 'DELIVERED';
+      order.deliveredAt = new Date();
+      order.deliveredByInvoice = invoice._id;
+      order.statusHistory.push({ status: 'DELIVERED', at: new Date(), by: req.user.id, byName: req.user.name, note: `Delivered from the van with invoice ${invoice.invoiceNo}` });
+      await order.save();
+    }
+  }
 
   audit(req, {
     action: AUDIT_ACTIONS.STATUS_CHANGE,
@@ -354,7 +453,7 @@ const issueInvoice = async (req, invoice, note = '') => {
 
 export const list = asyncHandler(async (req, res) => {
   const filter = { ...scopeFilter(req) };
-  if (req.query.orderId) filter.order = req.query.orderId;
+  if (req.query.orderId) Object.assign(filter, invoicesOfOrder(req.query.orderId));
   if (req.query.overdue) {
     filter.status = INVOICE_STATUS.OVERDUE;
   }
@@ -457,10 +556,19 @@ export const create = asyncHandler(async (req, res) => {
   let customer = null;
   let priced;
 
-  if (payload.orderId) {
-    order = await loadOrderForInvoice(payload.orderId);
+  let billed = [];
+  const orderIds = orderIdsOf(payload);
+  if (orderIds.length) {
+    const orders = await loadOrdersForInvoice(orderIds);
+    order = orders[0];
     customer = await getCustomer(order.customerId);
-    priced = await buildInvoiceLinesFromOrder(order, normalizeItems(payload.items || []), settings);
+    priced = await buildLinesFromOrders(orders, normalizeItems(payload.items || []), settings);
+    billed = priced.used;
+    // A van salesman bills at the shop: the goods leave their van.
+    if (req.user.role === 'SALESMAN') {
+      const driving = await activeVanOf(req.user.id);
+      if (driving) payload.warehouse = String(driving.van._id);
+    }
   } else {
     if (!payload.customerId) throw new BadRequestError('Customer is required', 'VALIDATION_ERROR');
     // Van sales: an executive driving a van invoices from it (once earlier
@@ -478,6 +586,11 @@ export const create = asyncHandler(async (req, res) => {
   }
 
   const snapshot = snapshotFor({ customer, order, payload, settings, req });
+  if (billed.length) {
+    snapshot.orders = billed.map((o) => o._id);
+    snapshot.orderNos = billed.map((o) => o.orderNo || '');
+    snapshot.orderNo = snapshot.orderNos.join(', ');
+  }
   if (!order) {
     // Fail early (at draft time) when the selling warehouse cannot cover it.
     const warehouseId = snapshot.warehouse || (await resolveDefaultWarehouse(settings))?._id;
@@ -500,7 +613,7 @@ export const create = asyncHandler(async (req, res) => {
     creditNoteCount: 0,
     statusHistory: [],
   });
-  pushHistory(invoice, INVOICE_STATUS.DRAFT, req, order ? `Created from order ${order.orderNo}` : 'Direct invoice created');
+  pushHistory(invoice, INVOICE_STATUS.DRAFT, req, order ? `Created from order ${invoice.orderNo || order.orderNo}` : 'Direct invoice created');
 
   invoice.invoiceNo = await nextInvoiceNumber(req.companyId, settings, invoice.invoiceDate);
   await invoice.save();
@@ -540,12 +653,16 @@ export const update = asyncHandler(async (req, res) => {
 
   let priced;
   if (invoice.order) {
-    const order = await Order.findById(invoice.order);
-    if (!order) throw new BadRequestError('Linked order not found', 'INVALID_REFERENCE');
+    const orders = [];
+    for (const id of ordersOfInvoice(invoice)) {
+      const order = await Order.findById(id);
+      if (!order) throw new BadRequestError('Linked order not found', 'INVALID_REFERENCE');
+      orders.push(order);
+    }
     const rawItems = payload.items
       ? normalizeItems(payload.items)
       : normalizeItems(invoice.items.map((i) => ({ orderItemId: i.orderItemId, product: i.product, qty: i.qty })));
-    priced = await buildInvoiceLinesFromOrder(order, rawItems, settings);
+    priced = await buildLinesFromOrders(orders, rawItems, settings);
   } else {
     const priceList = await getPriceList(customer, payload.priceList);
     const rawItems = payload.items ? normalizeItems(payload.items) : normalizeItems(invoice.items);
@@ -650,6 +767,9 @@ export const cancel = asyncHandler(async (req, res) => {
     invoice.balanceDue = 0;
   }
 
+  // A van delivery against orders: the godown reservation comes back below.
+  const vanDelivered = wasIssued && invoice.stockPosted && Boolean(invoice.order);
+
   // Goods of a cancelled direct sale go back where they left from.
   if (wasIssued && invoice.stockPosted) {
     const settings = await settingsOf(req);
@@ -677,7 +797,24 @@ export const cancel = asyncHandler(async (req, res) => {
   pushHistory(invoice, INVOICE_STATUS.CANCELLED, req, reason || 'Invoice cancelled');
   await invoice.save();
 
-  if (invoice.order) await syncOrderInvoicing(invoice.order);
+  const settingsForUndo = await settingsOf(req);
+  for (const id of ordersOfInvoice(invoice)) {
+    const order = await Order.findById(id);
+    if (!order) continue;
+    // An order delivered from the van with this invoice is open again: its
+    // goods went back to the van, the godown reservation is taken back.
+    if (order.status === 'DELIVERED' && String(order.deliveredByInvoice || '') === String(invoice._id)) {
+      order.status = 'CONFIRMED';
+      order.deliveredAt = null;
+      order.deliveredByInvoice = null;
+      order.statusHistory.push({ status: 'CONFIRMED', at: new Date(), by: req.user.id, byName: req.user.name, note: `Van invoice ${invoice.invoiceNo} cancelled` });
+      await order.save();
+    }
+    if (vanDelivered && !['DISPATCHED', 'DELIVERED', 'CANCELLED'].includes(order.status)) {
+      await reserveStock(invoice.items.filter((l) => lineOfOrder(invoice, l, id)), { warehouseId: order.warehouse || null, settings: settingsForUndo });
+    }
+    await syncOrderInvoicing(order);
+  }
 
   audit(req, {
     action: AUDIT_ACTIONS.STATUS_CHANGE,
@@ -699,7 +836,11 @@ export const cancel = asyncHandler(async (req, res) => {
 
 export const formOptions = asyncHandler(async (req, res) => {
   const settings = await settingsOf(req);
-  const orderId = refOrNull(req.query.orderId);
+  // One order, or several of the same customer billed together (?orderIds=a,b).
+  const pickedOrders = [
+    ...new Set([refOrNull(req.query.orderId), ...String(req.query.orderIds || '').split(',').map((v) => refOrNull(v.trim()))].filter(Boolean).map(String)),
+  ];
+  const orderId = pickedOrders[0] || null;
   const customerId = refOrNull(req.query.customerId);
 
   const [products, warehouses] = await Promise.all([
@@ -732,14 +873,14 @@ export const formOptions = asyncHandler(async (req, res) => {
       $match: {
         companyId: new mongoose.Types.ObjectId(req.companyId),
         isDeleted: { $ne: true },
-        order: { $in: orderIds },
+        $or: [{ order: { $in: orderIds } }, { orders: { $in: orderIds } }],
         status: { $nin: ['DRAFT', 'CANCELLED'] },
       },
     },
     { $unwind: '$items' },
     {
       $group: {
-        _id: { order: '$order', line: '$items.orderItemId' },
+        _id: { order: { $ifNull: ['$items.order', '$order'] }, line: '$items.orderItemId' },
         qty: { $sum: '$items.qty' },
       },
     },
@@ -778,10 +919,22 @@ export const formOptions = asyncHandler(async (req, res) => {
   if (orderId) {
     const doc = await Order.findById(orderId);
     if (!doc) throw new BadRequestError('Order not found', 'INVALID_REFERENCE');
-    const rows = await remainingOrderLines(doc);
+    const docs = [doc];
+    for (const id of pickedOrders.slice(1)) {
+      const extra = await Order.findById(id);
+      if (!extra) throw new BadRequestError('Order not found', 'INVALID_REFERENCE');
+      if (String(extra.customerId) !== String(doc.customerId)) {
+        throw new BadRequestError('All orders on one invoice must be for the same customer', 'ORDER_CUSTOMER_MISMATCH');
+      }
+      docs.push(extra);
+    }
+    const rows = [];
+    for (const d of docs) (await remainingOrderLines(d)).forEach((row) => rows.push({ ...row, orderDoc: d }));
     remaining = rows
       .filter((row) => row.remainingQty > 0.0001)
       .map((row) => ({
+        orderId: String(row.orderDoc._id),
+        orderNo: row.orderDoc.orderNo,
         orderItemId: String(row.orderItemId),
         product: String(row.product),
         name: row.line.name,
@@ -812,7 +965,31 @@ export const formOptions = asyncHandler(async (req, res) => {
       warehouse: doc.warehouse ? String(doc.warehouse) : null,
       billingAddress: doc.billingAddress || {},
       shippingAddress: doc.shippingAddress || {},
+      orderIds: docs.map((d) => String(d._id)),
+      orderNos: docs.map((d) => d.orderNo),
       items: remaining,
+    };
+  }
+
+  // Where the goods will come from, and what is free there: a van salesman's
+  // van, else the order's / default warehouse.
+  let stockFrom = null;
+  if (req.user.role === 'SALESMAN') stockFrom = (await activeVanOf(req.user.id))?.van || null;
+  if (!stockFrom) {
+    const id = (order && order.warehouse) || (defaultWarehouse && defaultWarehouse._id);
+    stockFrom = id ? warehouses.find((w) => String(w._id) === String(id)) || (await Warehouse.findById(id).lean()) : null;
+  }
+  let stock = null;
+  if (stockFrom) {
+    const balances = await StockBalance.find({ warehouse: stockFrom._id }).select('product qty reservedQty').lean();
+    const isVan = stockFrom.type === 'VAN';
+    stock = {
+      warehouse: { id: String(stockFrom._id), name: stockFrom.name, code: stockFrom.code || '', type: stockFrom.type },
+      // Base units free to sell (a godown keeps confirmed orders' reservations
+      // aside; billing those orders consumes them, so they show as on hand).
+      available: Object.fromEntries(
+        balances.map((b) => [String(b.product), Math.round((Number(b.qty || 0) - (isVan || order ? 0 : Number(b.reservedQty || 0))) * 100) / 100])
+      ),
     };
   }
 
@@ -844,6 +1021,7 @@ export const formOptions = asyncHandler(async (req, res) => {
     data: {
       order,
       orders: orderOptions,
+      stock,
       customer,
       products: products.map(idOf),
       warehouses: warehouses.map(idOf),
@@ -905,7 +1083,7 @@ const buildExportFilter = (req) => {
   ['status', 'customerId', 'salesman', 'route', 'warehouse', 'paymentMode'].forEach((key) => {
     if (req.query[key]) filter[key] = req.query[key];
   });
-  if (req.query.orderId) filter.order = req.query.orderId;
+  if (req.query.orderId) Object.assign(filter, invoicesOfOrder(req.query.orderId));
   if (req.query.overdue) filter.status = INVOICE_STATUS.OVERDUE;
 
   if (req.query.dateFrom || req.query.dateTo) {

@@ -335,7 +335,9 @@ function WorkflowDialog({
  */
 function CheckOutDialog({ visit, onClose, onDone }) {
   const queryClient = useQueryClient();
-  const [needReason, setNeedReason] = useState(false);
+  // The open visit says what was booked here (`booked`); nothing booked ->
+  // ask for the reason straight away. (Unknown -> the server asks on submit.)
+  const [needReason, setNeedReason] = useState(visit?.booked === null);
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -398,7 +400,13 @@ function CheckOutDialog({ visit, onClose, onDone }) {
             </Field>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">The outcome is taken from the order, invoice or payment you booked here.</p>
+          <p className="text-sm text-muted-foreground">
+            {visit?.booked
+              ? `Booked here: ${[visit.booked.invoiceNo && `invoice ${visit.booked.invoiceNo}`, visit.booked.orderNo && `order ${visit.booked.orderNo}`, visit.booked.paymentNo && `collection ${visit.booked.paymentNo}`]
+                  .filter(Boolean)
+                  .join(', ')}.`
+              : 'The outcome is taken from the order, invoice or payment you booked here.'}
+          </p>
         )}
         <Field label={reason === 'OTHER' ? 'Notes' : 'Notes (optional)'} required={reason === 'OTHER'}>
           <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />

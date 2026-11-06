@@ -29,6 +29,7 @@ import {
   assertCheckoutOrder,
   nextVisitNumber,
   assertCanStartVisit,
+  visitBookings,
   markGeofence,
 } from '../../services/fieldForceService.js';
 import { assertCanMarkIn, assertCanMarkOut, fieldDayState } from '../../services/fieldDayService.js';
@@ -632,18 +633,7 @@ export const visitCheckOut = asyncHandler(async (req, res) => {
 
   // The outcome follows what was actually done at the customer since check-in:
   // an invoice or an order needs no explanation; nothing booked needs a reason.
-  const since = doc.checkIn?.at || doc.createdAt;
-  const by = { $or: [{ salesman: doc.salesman._id || doc.salesman }, { createdBy: doc.salesman._id || doc.salesman }] };
-  const customerId = doc.customerId._id || doc.customerId;
-  const [invoice, order, payment] = await Promise.all([
-    mongoose.model('Invoice').findOne({ customerId, createdAt: { $gte: since }, status: { $ne: 'CANCELLED' }, ...by }).sort({ createdAt: -1 }).lean(),
-    payload.order
-      ? mongoose.model('Order').findById(payload.order).lean()
-      : mongoose.model('Order').findOne({ customerId, createdAt: { $gte: since }, status: { $ne: 'CANCELLED' }, ...by }).sort({ createdAt: -1 }).lean(),
-    payload.payment
-      ? mongoose.model('Payment').findById(payload.payment).lean()
-      : mongoose.model('Payment').findOne({ customerId, createdAt: { $gte: since }, collectedBy: doc.salesman._id || doc.salesman }).sort({ createdAt: -1 }).lean(),
-  ]);
+  const { invoice, order, payment } = await visitBookings(doc, { order: payload.order, payment: payload.payment });
 
   let outcome;
   if (invoice) outcome = 'INVOICED';

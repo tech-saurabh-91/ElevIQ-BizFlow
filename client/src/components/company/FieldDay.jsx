@@ -48,7 +48,7 @@ export const useFieldDay = () => {
 
 const actionFor = (code) =>
   code === 'DAY_CASHOUT_PENDING'
-    ? { to: '/app/my-van', label: 'Open day cashout', icon: Truck }
+    ? { to: '/app/day-cashout', label: 'Open day cashout', icon: Truck }
     : code === 'DAY_ENDED'
       ? null
       : { to: '/app/attendance', label: code === 'ATTENDANCE_OUT_PENDING' ? 'Mark out now' : 'Mark attendance', icon: CalendarCheck };

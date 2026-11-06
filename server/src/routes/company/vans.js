@@ -27,6 +27,7 @@ const closeSchema = z.object({
 
 const router = Router();
 router.get('/mine', ctrl.mine);
+router.get('/stock-query', ctrl.stockQuery);
 router.get('/day-closes', ctrl.allDayCloses);
 router.post('/day-closes/:closeId/approve', validate({ params: z.object({ closeId: objectIdSchema }) }), ctrl.approveDayClose);
 router.post(

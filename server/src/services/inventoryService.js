@@ -365,7 +365,29 @@ export const dispatchOrderStock = async (order, { settings = null, movedBy = nul
   const cfg = settings || (await Setting.forCompany(order.companyId));
   const warehouse = order.warehouse || (await resolveDefaultWarehouse(cfg))?._id || null;
   const negativeAllowed = Boolean(cfg?.order?.allowNegativeStock);
-  const lines = (order.items || []).filter((l) => baseQtyOf(l) > 0);
+  // Units already handed over from a van (invoiced at the shop) left no
+  // godown stock to ship: dispatch only the rest of each line.
+  const fromVan = new Map();
+  const vanInvoices = await mongoose
+    .model('Invoice')
+    .find({ $or: [{ order: order._id }, { orders: order._id }], stockPosted: true, status: { $nin: ['DRAFT', 'CANCELLED'] } })
+    .select('order items')
+    .lean();
+  vanInvoices.forEach((inv) =>
+    (inv.items || []).forEach((l) => {
+      const ofThis = l.order ? String(l.order) === String(order._id) : String(inv.order) === String(order._id);
+      if (ofThis && l.orderItemId) fromVan.set(String(l.orderItemId), (fromVan.get(String(l.orderItemId)) || 0) + Number(l.qty || 0));
+    })
+  );
+  const lines = (order.items || [])
+    .map((l) => {
+      const done = fromVan.get(String(l._id)) || 0;
+      if (!done) return l;
+      const qty = Math.max(0, Number(l.qty || 0) - done);
+      const plain = typeof l.toObject === 'function' ? l.toObject() : { ...l };
+      return { ...plain, qty, baseQty: qty * Number(l.unitFactor || 1) };
+    })
+    .filter((l) => baseQtyOf(l) > 0);
 
   // ---- pre-flight: nothing is written unless the whole dispatch can go out ----
   // Checked against the dispatching warehouse, not the company total (stock on

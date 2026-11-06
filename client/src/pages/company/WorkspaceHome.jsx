@@ -91,8 +91,8 @@ export default function WorkspaceHome() {
           ...(sellsVia(user, 'VAN_SALE')
             ? [
                 {
-                  to: '/app/my-van',
-                  label: 'My van & cashout',
+                  to: '/app/day-cashout',
+                  label: 'Day cashout',
                   icon: Truck,
                   perm: 'fieldforce.visits.manage',
                 },

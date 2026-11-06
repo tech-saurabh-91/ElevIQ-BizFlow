@@ -124,7 +124,8 @@ export const requireVisitForSale = asyncHandler(async (req, _res, next) => {
   // The shop being sold to: given directly, or through the invoice / order.
   let customerId = req.body?.customerId || req.body?.customer;
   if (!customerId && req.body?.invoiceId) customerId = (await Invoice.findById(req.body.invoiceId).select('customerId').lean().catch(() => null))?.customerId;
-  if (!customerId && req.body?.orderId) customerId = (await Order.findById(req.body.orderId).select('customerId').lean().catch(() => null))?.customerId;
+  const firstOrder = req.body?.orderId || req.body?.orderIds?.[0];
+  if (!customerId && firstOrder) customerId = (await Order.findById(firstOrder).select('customerId').lean().catch(() => null))?.customerId;
   if (customerId && String(customerId) !== String(visit.customerId)) {
     throw fail(`You are checked in at ${visit.customerName} - book for that shop, or check out first.`, 'VISIT_CUSTOMER_MISMATCH', {
       customerName: visit.customerName,

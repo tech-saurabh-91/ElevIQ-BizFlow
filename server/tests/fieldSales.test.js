@@ -224,3 +224,63 @@ describe('Beat plan and the salesman day', () => {
     expect(day.body.data[0].visit.outcome).toBe('ORDER_TAKEN');
   });
 });
+
+describe('Van invoice at the shop against booked orders', () => {
+  const onVan = async (productId) =>
+    (await call(state.sam).get(`/api/v1/vans/${state.van}/stock`)).body.data.find((r) => r.product === productId)?.qty || 0;
+  const orderOf = async (id) => (await call(state.admin).get(`/api/v1/orders/${id}`)).body.data;
+
+  test('one invoice bills two orders of the customer, the van hands the goods over, cancel undoes it', async () => {
+    const sam = call(state.sam);
+    const a = await sam.post('/api/v1/orders', { customerId: state.customer, items: [{ product: state.chips, qty: 2 }], submit: true });
+    const b = await sam.post('/api/v1/orders', { customerId: state.customer, items: [{ product: state.chips, qty: 3 }], submit: true });
+    expect(a.status).toBe(201);
+    expect(b.status).toBe(201);
+    const before = await onVan(state.chips);
+
+    // Another customer's order cannot ride on the same invoice.
+    const other = await call(state.admin).post('/api/v1/customers', {
+      name: 'Other Store',
+      phone: '+91 90000 33333',
+      address: { country: 'India', state: 'Maharashtra', city: 'Pune' },
+    });
+    const c = await call(state.admin).post('/api/v1/orders', { customerId: other.body.data.id, items: [{ product: state.chips, qty: 1 }], submit: true });
+    const mixed = await call(state.admin).post('/api/v1/invoices', { orderIds: [a.body.data.id, c.body.data.id] });
+    expect(mixed.status).toBe(400);
+    expect(mixed.body.code).toBe('ORDER_CUSTOMER_MISMATCH');
+
+    // The form shows both orders' lines and the van stock.
+    const form = (await sam.get('/api/v1/invoices/form-options', { orderIds: `${a.body.data.id},${b.body.data.id}` })).body.data;
+    expect(form.order.items).toHaveLength(2);
+    expect(form.stock.warehouse.type).toBe('VAN');
+    expect(form.stock.available[state.chips]).toBe(before);
+
+    const inv = await sam.post('/api/v1/invoices', { orderIds: [a.body.data.id, b.body.data.id], issue: true });
+    expect(inv.status).toBe(201);
+    expect(inv.body.data.items).toHaveLength(2);
+    expect(await onVan(state.chips)).toBe(before - 5);
+    expect((await orderOf(a.body.data.id)).status).toBe('DELIVERED');
+    expect((await orderOf(b.body.data.id)).status).toBe('DELIVERED');
+    // Nothing left to dispatch from the godown.
+    expect((await call(state.admin).post(`/api/v1/orders/${a.body.data.id}/dispatch`, {})).status).toBeGreaterThanOrEqual(400);
+
+    expect((await call(state.admin).post(`/api/v1/invoices/${inv.body.data.id}/cancel`, { reason: 'Wrong goods' })).status).toBe(200);
+    expect(await onVan(state.chips)).toBe(before);
+    expect((await orderOf(a.body.data.id)).status).toBe('CONFIRMED');
+    expect((await orderOf(b.body.data.id)).status).toBe('CONFIRMED');
+  });
+});
+
+describe('Stock query', () => {
+  test('a salesman sees their van and its godown; inventory staff see every warehouse', async () => {
+    const mine = (await call(state.sam).get('/api/v1/vans/stock-query', { q: 'chi' })).body.data;
+    expect(mine.warehouses.map((w) => w.code).sort()).toEqual(['MAIN', 'VAN1']);
+    expect(mine.rows.map((r) => r.name)).toEqual(['Chips']);
+    expect(mine.rows[0].qty[state.van]).toBeGreaterThan(0);
+    // Ravi has no van: the godown only.
+    const ravi = (await call(state.ravi).get('/api/v1/vans/stock-query')).body.data;
+    expect(ravi.warehouses.map((w) => w.code)).toEqual(['MAIN']);
+    const all = (await call(state.admin).get('/api/v1/vans/stock-query')).body.data;
+    expect(all.warehouses.length).toBeGreaterThanOrEqual(2);
+  });
+});

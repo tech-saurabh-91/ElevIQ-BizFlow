@@ -107,14 +107,22 @@ export const isIssued = (invoice) => ISSUED_INVOICE_STATUSES.includes(invoice?.s
 // ---------------------------------------------------------------------------
 
 /** Quantity of each order line already billed by issued invoices. */
+/** Invoices that bill an order (as their only order or one of several). */
+export const invoicesOfOrder = (orderId) => ({ $or: [{ order: orderId }, { orders: orderId }] });
+
+/** Does this invoice line bill that order? (Old invoices carry no line order.) */
+export const lineOfOrder = (invoice, line, orderId) =>
+  line.order ? String(line.order) === String(orderId) : String(invoice.order) === String(orderId);
+
 export const billedQtyByOrderLine = async (orderId, { excludeInvoiceId = null } = {}) => {
-  const filter = { order: orderId, status: { $nin: UNBILLED_INVOICE_STATUSES } };
+  const filter = { ...invoicesOfOrder(orderId), status: { $nin: UNBILLED_INVOICE_STATUSES } };
   if (excludeInvoiceId) filter._id = { $ne: excludeInvoiceId };
-  const invoices = await Invoice.find(filter).select('items').lean();
+  const invoices = await Invoice.find(filter).select('order items').lean();
 
   const used = new Map();
   invoices.forEach((invoice) => {
     (invoice.items || []).forEach((line) => {
+      if (!lineOfOrder(invoice, line, orderId)) return;
       const key = line.orderItemId ? String(line.orderItemId) : String(line.product);
       used.set(key, (used.get(key) || 0) + Number(line.qty || 0));
     });
@@ -193,6 +201,7 @@ export const buildInvoiceLinesFromOrder = async (order, requested = [], settings
     lines.push({
       product: line.product,
       orderItemId: row.orderItemId,
+      order: order._id,
       name: line.name || '',
       sku: line.sku || '',
       ...unitFieldsFrom(line, qty),
@@ -376,17 +385,22 @@ export const syncOrderInvoicing = async (order) => {
   if (!doc) return null;
 
   const invoices = await Invoice.find({
-    order: doc._id,
+    ...invoicesOfOrder(doc._id),
     status: { $nin: UNBILLED_INVOICE_STATUSES },
   })
-    .select('items total')
+    .select('order items total')
     .lean();
 
-  const billedQty = invoices.reduce(
-    (sum, invoice) => sum + (invoice.items || []).reduce((s, line) => s + Number(line.qty || 0), 0),
-    0
-  );
-  const billedAmount = invoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
+  // Only the lines that bill THIS order count (an invoice may bill several).
+  let billedQty = 0;
+  let billedAmount = 0;
+  invoices.forEach((invoice) => {
+    (invoice.items || []).forEach((line) => {
+      if (!lineOfOrder(invoice, line, doc._id)) return;
+      billedQty += Number(line.qty || 0);
+      billedAmount += Number(line.lineTotal || 0);
+    });
+  });
   const orderedQty = (doc.items || []).reduce((sum, line) => sum + Number(line.qty || 0), 0);
 
   doc.invoicedQty = round2(billedQty);

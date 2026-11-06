@@ -70,6 +70,28 @@ export const assertCanStartVisit = async (userId, settings, { exceptVisit = null
 };
 
 /**
+ * What the salesman booked at the visit's customer since checking in: the
+ * latest invoice, order and collection (any may be null). Drives the
+ * check-out outcome, and whether a no-order reason is needed.
+ */
+export const visitBookings = async (visit, { order: orderId = null, payment: paymentId = null } = {}) => {
+  const salesman = visit.salesman?._id || visit.salesman;
+  const customerId = visit.customerId?._id || visit.customerId;
+  const since = visit.checkIn?.at || visit.createdAt;
+  const by = { $or: [{ salesman }, { createdBy: salesman }] };
+  const [invoice, order, payment] = await Promise.all([
+    mongoose.model('Invoice').findOne({ customerId, createdAt: { $gte: since }, status: { $ne: 'CANCELLED' }, ...by }).sort({ createdAt: -1 }).lean(),
+    orderId
+      ? mongoose.model('Order').findById(orderId).lean()
+      : mongoose.model('Order').findOne({ customerId, createdAt: { $gte: since }, status: { $ne: 'CANCELLED' }, ...by }).sort({ createdAt: -1 }).lean(),
+    paymentId
+      ? mongoose.model('Payment').findById(paymentId).lean()
+      : mongoose.model('Payment').findOne({ customerId, createdAt: { $gte: since }, collectedBy: salesman }).sort({ createdAt: -1 }).lean(),
+  ]);
+  return { invoice, order, payment };
+};
+
+/**
  * How far the check-in is from the customer's pinned location. Beyond the
  * radius the check-in is refused (when the company enforces it), else flagged.
  * Customers without a pinned location can always be checked in.
