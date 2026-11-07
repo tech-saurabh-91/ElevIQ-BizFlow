@@ -216,3 +216,39 @@ describe('A day left open blocks the next one', () => {
     expect((await markIn(state.ravi)).status).toBe(200);
   });
 });
+
+describe("Today's cashout needs an open working day", () => {
+  test('not marked in, or an earlier cashout waiting approval -> refused; settled and marked in -> accepted', async () => {
+    const admin = call(state.admin);
+    const User = (await import('../src/models/User.js')).default;
+    const VanDayClose = (await import('../src/models/VanDayClose.js')).default;
+    const { runWithContext } = await import('../src/middlewares/tenantContext.js');
+    const kiranId = await runWithContext({ scope: 'company', companyId: state.companyId }, async () =>
+      String((await User.create({ companyId: state.companyId, name: 'Kiran Van', email: 'kiran@fd.test', password: PASSWORD, role: 'SALESMAN', salesType: 'VAN_SALE' }))._id)
+    );
+    const token = (await request.post('/api/auth/login').send({ identifier: 'kiran@fd.test', password: PASSWORD })).body.data.accessToken;
+    const van2 = (await admin.post('/api/v1/warehouses', { name: 'Van 2', code: 'VAN2', type: 'VAN', parent: state.main, vehicleNumber: 'MH12AB0002' })).body.data.id;
+    await admin.post(`/api/v1/warehouses/${van2}/assignments`, { executive: kiranId });
+    const kiran = call(token);
+
+    // Not marked in today.
+    const early = await kiran.post(`/api/v1/vans/${van2}/day-close`, { date: today(), cashDeposited: 0 });
+    expect(early.status).toBe(409);
+    expect(early.body.code).toBe('ATTENDANCE_REQUIRED');
+
+    // Yesterday's cashout is still waiting for the manager.
+    const yesterday = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(Date.now() - 86400000));
+    const old = await runWithContext({ scope: 'company', companyId: state.companyId }, () =>
+      VanDayClose.create({ warehouse: van2, day: yesterday, status: 'SUBMITTED' })
+    );
+    const waiting = await kiran.post(`/api/v1/vans/${van2}/day-close`, { date: today(), cashDeposited: 0 });
+    expect(waiting.status).toBe(409);
+    expect(waiting.body.code).toBe('DAY_CASHOUT_PENDING');
+
+    // Approved -> mark in -> today's cashout goes through.
+    expect((await call(state.mona).post(`/api/v1/vans/day-closes/${old._id}/approve`)).status).toBe(200);
+    expect((await markIn(token)).status).toBe(200);
+    const ok = await kiran.post(`/api/v1/vans/${van2}/day-close`, { date: today(), cashDeposited: 0 });
+    expect(ok.status).toBe(201);
+  });
+});

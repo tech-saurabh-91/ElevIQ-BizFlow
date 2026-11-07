@@ -12,6 +12,7 @@ import { AUDIT_ACTIONS, COMPANY_ROLES, DEFAULT_PERMISSIONS, MOVEMENT_TYPES } fro
 import { toPlain } from './_helpers.js';
 import { recordMovement } from '../../services/inventoryService.js';
 import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
+import { fieldDayState } from '../../services/fieldDayService.js';
 import {
   activeVanOf,
   assertDayClosed,
@@ -234,6 +235,18 @@ export const closeDay = asyncHandler(async (req, res) => {
   const day = req.body.date;
   if (!DAY.test(day || '')) throw new BadRequestError('Choose the day to close', 'VALIDATION_ERROR');
   if (day > todayIn(tz)) throw new BadRequestError('A future day cannot be closed', 'INVALID_DATE');
+  // A salesman's cashout for today is the end of a working day: it needs the
+  // day started (marked in) and every earlier day settled. Earlier pending
+  // days can still be cashed out - that is how the salesman catches up.
+  if (req.user.role === COMPANY_ROLES.SALESMAN && day === todayIn(tz)) {
+    const fieldDay = await fieldDayState(req);
+    const blocked = fieldDay.required ? fieldDay.blocked : null;
+    if (blocked && blocked.code !== 'DAY_ENDED') {
+      const message =
+        blocked.code === 'ATTENDANCE_REQUIRED' ? `Mark your attendance in for ${day} before submitting its day cashout.` : blocked.message;
+      throw new AppError(message, { status: 409, code: blocked.code, details: { day: blocked.day || day } });
+    }
+  }
   const existing = await VanDayClose.findOne({ warehouse: van._id, day });
   if (existing && existing.status !== 'REJECTED') {
     throw new ConflictError(
