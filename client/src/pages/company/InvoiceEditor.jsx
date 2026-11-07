@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Plus, Save, Send, Trash2 } from 'lucide-react';
 
@@ -249,6 +249,8 @@ export default function InvoiceEditor() {
     },
     enabled: initialized,
     staleTime: 30_000,
+    // Keep the last lists on screen while the next order / customer loads.
+    placeholderData: keepPreviousData,
   });
 
   const options = optionsQuery.data;
@@ -609,6 +611,15 @@ export default function InvoiceEditor() {
   const itemsError = errors.items?.message || errors.items?.root?.message;
   const saving = isSubmitting || mutation.isPending;
   const direct = mode === 'direct';
+  // Orders offered in the picker; the picked one always stays listed.
+  const orderChoices = (() => {
+    const list = (options?.orders || []).filter((o) => !lockedCustomer || o.customerId === lockedCustomer);
+    const picked = options?.order;
+    if (orderId && picked && picked.id === orderId && !list.some((o) => o.id === orderId)) {
+      list.unshift({ id: picked.id, orderNo: picked.orderNo, customerName: picked.customerName, remainingQty: (picked.items || []).reduce((s, r) => s + Number(r.remainingQty || 0), 0) });
+    }
+    return list;
+  })();
   const sameCustomerOrders = (options?.orders || []).filter(
     (o) => options?.order && o.customerId === options.order.customerId && o.id !== orderId && (!lockedCustomer || o.customerId === lockedCustomer)
   );
@@ -761,9 +772,12 @@ export default function InvoiceEditor() {
                         : 'Only confirmed, dispatched or delivered orders with unbilled quantity are listed.'
                     }
                   >
-                    <Select {...register('orderId')} error={!!errors.orderId} disabled={isEdit}>
+                    {/* Controlled: the list reloads when an order is picked, and an
+                        uncontrolled select would fall back to the placeholder
+                        (a blur then clears the picked order). */}
+                    <Select {...register('orderId')} value={orderId} error={!!errors.orderId} disabled={isEdit}>
                       <option value="">Select an order…</option>
-                      {(options?.orders || []).filter((o) => !lockedCustomer || o.customerId === lockedCustomer).map((o) => (
+                      {orderChoices.map((o) => (
                         <option key={o.id} value={o.id}>
                           {o.orderNo} · {o.customerName} · {formatNumber(o.remainingQty)} left
                         </option>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardList, Search } from 'lucide-react';
 
@@ -32,7 +32,7 @@ export default function StockQuery() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['company', 'stock-query', search],
     queryFn: async () => (await api.get('/v1/vans/stock-query', { params: { q: search || undefined } })).data?.data ?? null,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
   const warehouses = data?.warehouses || [];
   const rows = (data?.rows || []).filter((r) => !onlyInStock || r.total > 0);
