@@ -25,6 +25,8 @@ import {
   distanceMeters,
   withinGeofence,
   startOfDay,
+  dayKey,
+  dayRange,
   ensureAttendanceDay,
   assertCheckoutOrder,
   nextVisitNumber,
@@ -33,6 +35,7 @@ import {
   markGeofence,
 } from '../../services/fieldForceService.js';
 import { assertCanMarkIn, assertCanMarkOut, fieldDayState } from '../../services/fieldDayService.js';
+import { tzOf } from '../../services/vanService.js';
 
 /**
  * Phase 7 - Field Force controller: attendance + visits.
@@ -58,6 +61,14 @@ const POPULATE_VISIT = [
 ];
 
 const settingsOf = async (req) => req.settings || (await Setting.forCompany(req.companyId));
+
+/**
+ * A working day is the company's calendar day (its time zone), the same day
+ * the van cashout uses - not the server's. A 'YYYY-MM-DD' given by the client
+ * is taken as that day; a timestamp is placed in the company's day.
+ */
+const tzFor = (req) => tzOf(req.company);
+const validDay = (value) => (value && dateOrNull(value) ? value : null);
 const round2 = (n) => Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 
 /** Restrict to own records (SALESMAN) or team records (MANAGER). */
@@ -121,8 +132,9 @@ export const getAttendance = asyncHandler(async (req, res) => {
 
 /** Today's attendance for the signed-in user (drives the check-in/out button). */
 export const myToday = asyncHandler(async (req, res) => {
-  const day = startOfDay(dateOrNull(req.query.day) || new Date());
-  const doc = await Attendance.findOne({ user: req.user.id, day });
+  const tz = tzFor(req);
+  const { start: day, end } = dayRange(validDay(req.query.day) || new Date(), tz);
+  const doc = await Attendance.findOne({ user: req.user.id, day: { $gte: day, $lt: end } });
   const settings = await settingsOf(req);
 
   return success(res, {
@@ -135,7 +147,7 @@ export const myToday = asyncHandler(async (req, res) => {
         const st = await fieldDayState(req);
         return {
           blocked: st.blocked,
-          previousOpen: st.previousOpen ? { id: String(st.previousOpen._id), day: dayjs(st.previousOpen.day).format('YYYY-MM-DD') } : null,
+          previousOpen: st.previousOpen ? { id: String(st.previousOpen._id), day: dayKey(st.previousOpen.day, tz) } : null,
           cashout: st.cashout,
         };
       })(),
@@ -149,8 +161,9 @@ export const checkIn = asyncHandler(async (req, res) => {
   const config = settingsFieldForce(settings);
   const payload = { ...req.body };
 
+  const tz = tzFor(req);
   const at = dateOrNull(payload.at) || new Date();
-  const day = startOfDay(dateOrNull(payload.day) || at);
+  const day = startOfDay(validDay(payload.day) || at, tz);
   const location = payload.location || {};
 
   if (config.requireGps && (location.lat == null || location.lng == null)) {
@@ -158,10 +171,12 @@ export const checkIn = asyncHandler(async (req, res) => {
   }
   if (req.user.role === 'SALESMAN' && config.requireAttendance) await assertCanMarkIn(req);
 
-  const doc = await ensureAttendanceDay(req.user.id, day, {
-    userName: req.user.name,
-    userRole: req.user.role,
-  });
+  const doc = await ensureAttendanceDay(
+    req.user.id,
+    day,
+    { userName: req.user.name, userRole: req.user.role },
+    tz
+  );
 
   if (doc.isCheckedIn && !doc.isCheckedOut) {
     throw new ConflictError('You are already checked in for today', 'ALREADY_CHECKED_IN');
@@ -193,7 +208,7 @@ export const checkIn = asyncHandler(async (req, res) => {
     action: AUDIT_ACTIONS.STATUS_CHANGE,
     entityType: 'Attendance',
     entityId: doc._id,
-    entityLabel: `${req.user.name} ${dayjs(day).format('YYYY-MM-DD')}`,
+    entityLabel: `${req.user.name} ${dayKey(day, tz)}`,
     after: { status: doc.status, checkIn: doc.checkIn.at },
     description: `${req.user.name} checked in`,
   });
@@ -208,8 +223,10 @@ export const checkOut = asyncHandler(async (req, res) => {
   const config = settingsFieldForce(settings);
   const payload = { ...req.body };
 
+  const tz = tzFor(req);
   const at = dateOrNull(payload.at) || new Date();
-  const day = startOfDay(dateOrNull(payload.day) || at);
+  const { start: day, end } = dayRange(validDay(payload.day) || at, tz);
+  const thatDay = { $gte: day, $lt: end };
   const location = payload.location || {};
 
   if (config.requireGps && (location.lat == null || location.lng == null)) {
@@ -218,10 +235,10 @@ export const checkOut = asyncHandler(async (req, res) => {
 
   // Without an explicit day, mark out the day that is open - yesterday's if
   // it was left open, else today's.
-  const doc = payload.day
-    ? await Attendance.findOne({ user: req.user.id, day })
+  const doc = validDay(payload.day)
+    ? await Attendance.findOne({ user: req.user.id, day: thatDay })
     : (await Attendance.findOne({ user: req.user.id, isCheckedIn: true, isCheckedOut: false, day: { $lt: day } }).sort({ day: -1 })) ||
-      (await Attendance.findOne({ user: req.user.id, day }));
+      (await Attendance.findOne({ user: req.user.id, day: thatDay }));
   if (!doc) throw new NotFoundError('No check-in found for that day');
   if (!doc.isCheckedIn) throw new ConflictError('You have not checked in for this day', 'NOT_CHECKED_IN');
   if (doc.isCheckedOut) throw new ConflictError('You are already checked out', 'ALREADY_CHECKED_OUT');
@@ -247,7 +264,7 @@ export const checkOut = asyncHandler(async (req, res) => {
     action: AUDIT_ACTIONS.STATUS_CHANGE,
     entityType: 'Attendance',
     entityId: doc._id,
-    entityLabel: `${req.user.name} ${dayjs(day).format('YYYY-MM-DD')}`,
+    entityLabel: `${req.user.name} ${dayKey(doc.day, tz)}`,
     before: { isCheckedOut: false },
     after: { isCheckedOut: true, workedMinutes: doc.workedMinutes },
     description: `${req.user.name} checked out (${doc.workedLabel})`,
@@ -285,7 +302,7 @@ export const updateAttendance = asyncHandler(async (req, res) => {
     action: AUDIT_ACTIONS.UPDATE,
     entityType: 'Attendance',
     entityId: doc._id,
-    entityLabel: `${doc.userName || 'User'} ${dayjs(doc.day).format('YYYY-MM-DD')}`,
+    entityLabel: `${doc.userName || 'User'} ${dayKey(doc.day, tzFor(req))}`,
     before,
     after: toPlain(doc),
     description: `Attendance corrected: ${doc.manualReason}`,
@@ -314,7 +331,7 @@ export const reviewAttendance = asyncHandler(async (req, res) => {
     action: AUDIT_ACTIONS.STATUS_CHANGE,
     entityType: 'Attendance',
     entityId: doc._id,
-    entityLabel: `${doc.userName || 'User'} ${dayjs(doc.day).format('YYYY-MM-DD')}`,
+    entityLabel: `${doc.userName || 'User'} ${dayKey(doc.day, tzFor(req))}`,
     before: { status: before },
     after: { status: doc.status },
     description: `Attendance reviewed: ${doc.userName} -> ${doc.status}`,
@@ -332,8 +349,9 @@ export const attendanceSummary = asyncHandler(async (req, res) => {
   const filter = { ...activityScope(req, 'user') };
   if (req.query.dateFrom || req.query.dateTo) {
     filter.day = {};
-    if (req.query.dateFrom) filter.day.$gte = startOfDay(new Date(req.query.dateFrom));
-    if (req.query.dateTo) filter.day.$lte = startOfDay(new Date(req.query.dateTo));
+    const tz = tzFor(req);
+    if (validDay(req.query.dateFrom)) filter.day.$gte = dayRange(req.query.dateFrom, tz).start;
+    if (validDay(req.query.dateTo)) filter.day.$lt = dayRange(req.query.dateTo, tz).end;
   }
 
   const rows = await Attendance.aggregate([
@@ -449,7 +467,7 @@ export const createVisit = asyncHandler(async (req, res) => {
   if (!route && customer.route) route = customer.route;
   const routeDoc = route ? await Route.findById(route).lean() : null;
 
-  const visitDay = dateOrNull(payload.visitDay) || startOfDay(new Date());
+  const visitDay = startOfDay(validDay(payload.visitDay) || new Date(), tzFor(req));
 
   const doc = new Visit({
     customerId: customer._id,
@@ -517,7 +535,7 @@ export const updateVisit = asyncHandler(async (req, res) => {
     doc.route = routeDoc?._id || null;
     doc.routeName = routeDoc?.name || '';
   }
-  if (payload.visitDay !== undefined) doc.visitDay = dateOrNull(payload.visitDay) || doc.visitDay;
+  if (payload.visitDay !== undefined && validDay(payload.visitDay)) doc.visitDay = startOfDay(payload.visitDay, tzFor(req));
   if (payload.plannedAt !== undefined) doc.plannedAt = dateOrNull(payload.plannedAt);
   if (payload.purpose !== undefined) doc.purpose = payload.purpose;
   if (payload.notes !== undefined) doc.notes = payload.notes;
@@ -767,8 +785,9 @@ export const visitStats = asyncHandler(async (req, res) => {
     ...aggregateScopeIds(req, 'salesman'),
   };
 
-  const todayStart = startOfDay();
-  const todayEnd = dayjs(todayStart).add(1, 'day').toDate();
+  const tz = tzFor(req);
+  const { start: todayStart, end: todayEnd } = dayRange(new Date(), tz);
+  const monthStart = dayjs.tz(`${dayKey(new Date(), tz).slice(0, 7)}-01`, tz).toDate();
 
   const [byStatus, today, byOutcome, month] = await Promise.all([
     Visit.aggregate([{ $match: base }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
@@ -784,7 +803,7 @@ export const visitStats = asyncHandler(async (req, res) => {
       {
         $match: {
           ...base,
-          visitDay: { $gte: dayjs().startOf('month').toDate() },
+          visitDay: { $gte: monthStart },
           status: VISIT_STATUS.COMPLETED,
         },
       },

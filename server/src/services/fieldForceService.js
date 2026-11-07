@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek.js';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
 
 import Attendance from '../models/Attendance.js';
 import Visit from '../models/Visit.js';
@@ -15,6 +17,8 @@ import { getCompanyId } from '../middlewares/tenantContext.js';
 import { ORDER_STATUS, TARGET_STATUS } from '../config/constants.js';
 
 dayjs.extend(isoWeek);
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 /**
  * Field force domain rules (Phase 7).
@@ -56,8 +60,29 @@ export const withinGeofence = (point, centre, radiusM = 100) => {
   return d <= Number(radiusM || 0);
 };
 
-/** Start of the current day (tenant-date boundary for attendance/visits). */
-export const startOfDay = (value = new Date()) => dayjs(value).startOf('day').toDate();
+/** Company time zone (same default as the van day cashout). */
+export const DEFAULT_TZ = 'Asia/Kolkata';
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The company's calendar day ('YYYY-MM-DD') for a moment. A plain
+ * 'YYYY-MM-DD' string is already a day and is returned as is.
+ */
+export const dayKey = (value = new Date(), tz = DEFAULT_TZ) =>
+  typeof value === 'string' && DAY_KEY.test(value.trim()) ? value.trim() : dayjs(value).tz(tz).format('YYYY-MM-DD');
+
+/**
+ * Start of the company's day (tenant-date boundary for attendance/visits).
+ * Counted in the company time zone, never the server's, so "today" here is the
+ * same day the van cashout uses (vanService.todayIn).
+ */
+export const startOfDay = (value = new Date(), tz = DEFAULT_TZ) => dayjs.tz(dayKey(value, tz), tz).toDate();
+
+/** [start, end) of the company day holding `value`, for range queries. */
+export const dayRange = (value = new Date(), tz = DEFAULT_TZ) => {
+  const start = startOfDay(value, tz);
+  return { start, end: dayjs.tz(dayKey(value, tz), tz).add(1, 'day').toDate() };
+};
 
 /**
  * Rules before a salesman checks in at a customer: the working day must be
@@ -115,10 +140,13 @@ export const markGeofence = (visit, customerGps, settings) => {
 // ---------------------------------------------------------------------------
 
 /** Load (or lazily create) the attendance record for a user on a given day. */
-export const ensureAttendanceDay = async (userId, day, extra = {}) => {
+export const ensureAttendanceDay = async (userId, day, extra = {}, tz = DEFAULT_TZ) => {
+  // Match the whole company day, so a record stamped with an older boundary
+  // (server-local midnight) is still found instead of duplicated.
+  const { start, end } = dayRange(day, tz);
   const doc = await Attendance.findOneAndUpdate(
-    { user: userId, day },
-    { $setOnInsert: { user: userId, day, ...extra } },
+    { user: userId, day: { $gte: start, $lt: end } },
+    { $setOnInsert: { user: userId, day: start, ...extra } },
     { new: true, upsert: true, setDefaultsOnInsert: true }
   );
   return doc;
@@ -293,6 +321,8 @@ export default {
   distanceMeters,
   withinGeofence,
   startOfDay,
+  dayKey,
+  dayRange,
   ensureAttendanceDay,
   assertCheckoutOrder,
   nextVisitNumber,

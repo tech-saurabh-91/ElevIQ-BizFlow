@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { boot, shutdown, clearDb } from './helpers.js';
 
 /**
@@ -250,5 +251,67 @@ describe("Today's cashout needs an open working day", () => {
     expect((await markIn(token)).status).toBe(200);
     const ok = await kiran.post(`/api/v1/vans/${van2}/day-close`, { date: today(), cashDeposited: 0 });
     expect(ok.status).toBe(201);
+  });
+});
+
+describe('The working day is the company day, not the server day', () => {
+  // Only Date is faked: the database driver and supertest keep real timers.
+  const KEEP_REAL = ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'];
+  const realTZ = process.env.TZ;
+  afterEach(() => {
+    jest.useRealTimers();
+    if (realTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = realTZ;
+  });
+
+  // Both moments fall on the next calendar day in India but not on the server:
+  // a UTC server (Vercel) at 01:30 IST, and a dev machine in Nairobi at 22:00 (00:30 IST).
+  test.each([
+    ['UTC', 20, 'neha'],
+    ['Africa/Nairobi', 19, 'omar'],
+  ])('server in %s near the IST midnight: mark in, cashout and mark out all use the IST day', async (serverTz, utcHour, who) => {
+    process.env.TZ = serverTz;
+    const at = new Date();
+    at.setUTCHours(utcHour, 0, 0, 0);
+    jest.useFakeTimers({ now: at, advanceTimers: true, doNotFake: KEEP_REAL });
+    const istDay = today();
+    expect(istDay).not.toBe(at.toISOString().slice(0, 10)); // the boundary really is crossed
+
+    const admin = call((await request.post('/api/auth/login').send({ identifier: 'admin@fd.test', password: PASSWORD })).body.data.accessToken);
+    const User = (await import('../src/models/User.js')).default;
+    const { runWithContext } = await import('../src/middlewares/tenantContext.js');
+    const userId = await runWithContext({ scope: 'company', companyId: state.companyId }, async () =>
+      String((await User.create({ companyId: state.companyId, name: who, email: `${who}@fd.test`, password: PASSWORD, role: 'SALESMAN', salesType: 'VAN_SALE' }))._id)
+    );
+    const van = (await admin.post('/api/v1/warehouses', { name: `Van ${who}`, code: `VAN${who.toUpperCase()}`, type: 'VAN', parent: state.main, vehicleNumber: `MH12${who.toUpperCase()}01` })).body.data.id;
+    expect((await admin.post(`/api/v1/warehouses/${van}/assignments`, { executive: userId })).status).toBeLessThan(300);
+    const token = (await request.post('/api/auth/login').send({ identifier: `${who}@fd.test`, password: PASSWORD })).body.data.accessToken;
+    const me = call(token);
+    const mona = call((await request.post('/api/auth/login').send({ identifier: 'mona@fd.test', password: PASSWORD })).body.data.accessToken);
+
+    const markedIn = await markIn(token);
+    expect(markedIn.status).toBe(200);
+    const day = new Date(markedIn.body.data.day);
+    expect(new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(day)).toBe(istDay);
+
+    const state1 = (await me.get('/api/v1/field-force/attendance/today')).body.data;
+    expect(state1.attendance.id).toBe(markedIn.body.data.id);
+    expect(state1.fieldDay.blocked).toBeNull();
+    expect(state1.fieldDay.cashout.day).toBe(istDay);
+
+    const noCash = await markOut(token);
+    expect(noCash.body.code).toBe('DAY_CASHOUT_REQUIRED');
+    expect(noCash.body.message).toContain(istDay);
+
+    const cash = await me.post(`/api/v1/vans/${van}/day-close`, { date: istDay, cashDeposited: 0 });
+    expect(cash.status).toBe(201);
+    const waiting = await markOut(token);
+    expect(waiting.status).toBe(409);
+    expect(waiting.body.code).toBe('DAY_CASHOUT_PENDING');
+
+    expect((await mona.post(`/api/v1/vans/day-closes/${cash.body.data.id}/approve`)).status).toBe(200);
+    const out = await markOut(token);
+    expect(out.status).toBe(200);
+    expect(new Date(out.body.data.day).getTime()).toBe(day.getTime());
   });
 });

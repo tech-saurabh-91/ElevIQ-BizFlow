@@ -21,10 +21,12 @@ const PASSWORD = 'FieldForce#Pass123';
 const as = (token) => ({ Authorization: `Bearer ${token}` });
 
 /** Local wall-clock time on today's date (keeps check-in/out on one day). */
+// A time on the company's day (Asia/Kolkata, the default), not the machine's:
+// late in the evening on a UTC+3 machine it is already tomorrow in India.
 const todayAt = (h, m) => {
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  const pad = (n) => String(n).padStart(2, '0');
+  return new Date(`${day}T${pad(h)}:${pad(m)}:00+05:30`).toISOString();
 };
 
 const login = async (identifier, password = PASSWORD) => {

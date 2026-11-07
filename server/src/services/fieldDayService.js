@@ -1,4 +1,3 @@
-import dayjs from 'dayjs';
 import Attendance from '../models/Attendance.js';
 import VanDayClose from '../models/VanDayClose.js';
 import Visit from '../models/Visit.js';
@@ -8,7 +7,7 @@ import Setting from '../models/Setting.js';
 import { AppError } from '../utils/errors.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { blockedBySalesType, salesTypeAllows } from '../config/constants.js';
-import { startOfDay } from './fieldForceService.js';
+import { dayKey, dayRange } from './fieldForceService.js';
 import { activeVanOf, pendingDays, todayIn, tzOf } from './vanService.js';
 
 /**
@@ -23,7 +22,11 @@ import { activeVanOf, pendingDays, todayIn, tzOf } from './vanService.js';
  * missing or waiting for approval.
  */
 
-const fmt = (d) => dayjs(d).format('YYYY-MM-DD');
+/**
+ * Days are counted in the company time zone (as the van cashout does), never
+ * the server's: on a UTC server at 01:00 IST it is already the new day here.
+ */
+const fmt = (d, tz) => dayKey(d, tz);
 const fail = (message, code, details) => new AppError(message, { status: 409, code, details });
 
 /** The van a salesman sells from, when their sales type includes van sale. */
@@ -50,9 +53,10 @@ const unsettledVanDays = async (duty, company) => {
 export const fieldDayState = async (req) => {
   const settings = req.settings || (await Setting.forCompany(req.companyId));
   const required = settings?.fieldForce?.requireAttendance !== false;
-  const today = startOfDay();
+  const tz = tzOf(req.company);
+  const { start: today, end } = dayRange(new Date(), tz);
   const [attendance, previousOpen, duty] = await Promise.all([
-    Attendance.findOne({ user: req.user.id, day: today }).lean(),
+    Attendance.findOne({ user: req.user.id, day: { $gte: today, $lt: end } }).lean(),
     Attendance.findOne({ user: req.user.id, isCheckedIn: true, isCheckedOut: false, day: { $lt: today } }).sort({ day: -1 }).lean(),
     vanDutyOf(req.user),
   ]);
@@ -60,7 +64,7 @@ export const fieldDayState = async (req) => {
   let cashout = null;
   let unsettled = { missing: [], open: [] };
   if (duty) {
-    const day = todayIn(tzOf(req.company));
+    const day = todayIn(tz);
     const doc = await VanDayClose.findOne({ warehouse: duty.van._id, day }).select('status rejectReason day').lean();
     cashout = { required: true, day, status: doc?.status || 'NONE', rejectReason: doc?.rejectReason || '', van: { id: String(duty.van._id), code: duty.van.code } };
     unsettled = await unsettledVanDays(duty, req.company);
@@ -70,7 +74,7 @@ export const fieldDayState = async (req) => {
   let blocked = null;
   if (required) {
     if (previousOpen) {
-      blocked = { code: 'ATTENDANCE_OUT_PENDING', message: `Mark out your attendance for ${fmt(previousOpen.day)} first.`, day: fmt(previousOpen.day) };
+      blocked = { code: 'ATTENDANCE_OUT_PENDING', message: `Mark out your attendance for ${fmt(previousOpen.day, tz)} first.`, day: fmt(previousOpen.day, tz) };
     } else if (unsettled.open.length) {
       const d = unsettled.open[0];
       blocked = {
@@ -87,7 +91,7 @@ export const fieldDayState = async (req) => {
     }
   }
 
-  return { required, today: fmt(today), attendance, previousOpen, cashout, unsettled, blocked };
+  return { required, tz, today: fmt(today, tz), attendance, previousOpen, cashout, unsettled, blocked };
 };
 
 /**
@@ -138,7 +142,8 @@ export const requireVisitForSale = asyncHandler(async (req, _res, next) => {
 export const assertCanMarkIn = async (req) => {
   const state = await fieldDayState(req);
   if (state.previousOpen) {
-    throw fail(`Mark out your attendance for ${fmt(state.previousOpen.day)} first.`, 'ATTENDANCE_OUT_PENDING', { day: fmt(state.previousOpen.day) });
+    const day = fmt(state.previousOpen.day, state.tz);
+    throw fail(`Mark out your attendance for ${day} first.`, 'ATTENDANCE_OUT_PENDING', { day });
   }
   if (state.blocked?.code === 'DAY_CASHOUT_PENDING') throw fail(state.blocked.message, state.blocked.code, { day: state.blocked.day });
 };
@@ -154,7 +159,7 @@ export const assertCanMarkOut = async (req, attendanceDay) => {
   }
   const duty = await vanDutyOf(req.user);
   if (!duty) return;
-  const day = fmt(attendanceDay);
+  const day = fmt(attendanceDay, tzOf(req.company));
   const doc = await VanDayClose.findOne({ warehouse: duty.van._id, day }).select('status').lean();
   if (!doc) throw fail(`Submit your day cashout for ${day} before marking out.`, 'DAY_CASHOUT_REQUIRED', { day });
   if (doc.status === 'SUBMITTED') throw fail(`Your day cashout for ${day} is waiting for manager approval.`, 'DAY_CASHOUT_PENDING', { day });
