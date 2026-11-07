@@ -32,6 +32,8 @@ import {
 import { breakupRows, buyerStateOf } from '@/utils/tax';
 import { useTaxLabels } from '@/hooks/useLocations';
 import { unitOf, unitOptions, unitPriceFor } from '@/utils/units';
+import { usePermissions } from '@/hooks/usePermissions';
+import { FreeGoodsRows, LinePricingNote, OffersCard, effectiveRows, pricingInput, useSalePricing } from '@/components/company/sale-pricing';
 
 const text = (max = 200) => z.string().trim().max(max).optional().or(z.literal(''));
 const numberText = (message) =>
@@ -57,6 +59,12 @@ const itemSchema = z.object({
     .refine((v) => v === '' || (Number(v) >= 0 && Number(v) <= 100), 'Discount must be 0–100'),
   taxRate: numberText('Enter a valid tax rate'),
   maxQty: z.number().optional().nullable(),
+  // Direct invoices: '1' when the user typed the price / discount.
+  manualPrice: z.string().optional(),
+  manualDiscount: z.string().optional(),
+  // Order lines given free under a scheme.
+  isFree: z.boolean().optional(),
+  schemeName: z.string().optional(),
 });
 
 const schema = z.object({
@@ -90,6 +98,8 @@ const emptyRow = () => ({
   discountPercent: '',
   taxRate: '',
   maxQty: null,
+  manualPrice: '',
+  manualDiscount: '',
 });
 
 const addDaysInput = (days) => {
@@ -111,9 +121,11 @@ const toFormValues = (invoice) => ({
   notes: invoice.notes || '',
   terms: invoice.terms || '',
   footerNote: invoice.footerNote || '',
+  // A direct invoice's free goods are rebuilt by the schemes; an order
+  // invoice bills the order's free lines like any other line.
   items:
-    Array.isArray(invoice.items) && invoice.items.length
-      ? invoice.items.map((item) => ({
+    Array.isArray(invoice.items) && invoice.items.some((i) => invoice.order || !i.isFree)
+      ? invoice.items.filter((item) => invoice.order || !item.isFree).map((item) => ({
           product: idOf(item.product),
           orderItemId: item.orderItemId ? String(item.orderItemId) : '',
           name: item.name || '',
@@ -127,6 +139,10 @@ const toFormValues = (invoice) => ({
               : String(item.discountPercent),
           taxRate: item.taxRate == null ? '' : String(item.taxRate),
           maxQty: null,
+          manualPrice: item.manualPrice ? '1' : '',
+          manualDiscount: item.manualDiscount ? '1' : '',
+          isFree: Boolean(item.isFree),
+          schemeName: item.schemeName || '',
         }))
       : [emptyRow()],
 });
@@ -146,6 +162,8 @@ const orderRowFromOption = (row) => ({
       : String(row.discountPercent),
   taxRate: String(row.taxRate ?? ''),
   maxQty: Number(row.remainingQty ?? row.qty ?? 0),
+  isFree: Boolean(row.isFree),
+  schemeName: row.schemeName || '',
 });
 
 export default function InvoiceEditor() {
@@ -159,6 +177,9 @@ export default function InvoiceEditor() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { company, user } = useAuth();
+  // Typing a price / discount by hand is a permission (direct invoices).
+  const { can } = usePermissions();
+  const canOverride = can('pricing.override');
   // A van salesman invoices the shop they are checked in at (Sales visit):
   // the customer is fixed, and only that shop's orders are offered. Stock
   // goes out of their van (set by the server).
@@ -381,17 +402,43 @@ export default function InvoiceEditor() {
     }
   }, [options, mode, getValues, setValue]);
 
+  // ---- Live pricing from the server (direct: rules, schemes, free goods) --
+  const pricing = useSalePricing({
+    customerId,
+    date: invoiceDate,
+    rows: watchedItems,
+    canOverride,
+    enabled: initialized && mode === 'direct',
+  });
+  const livePricing = mode === 'direct';
+  useEffect(() => {
+    if (!livePricing) return;
+    pricing.byRow.forEach((line, index) => {
+      const row = getValues(`items.${index}`);
+      if (!row) return;
+      if (row.manualPrice !== '1' && row.unitPrice !== String(line.unitPrice)) setValue(`items.${index}.unitPrice`, String(line.unitPrice));
+      if (row.manualDiscount !== '1') {
+        const shown = Number(line.discountPercent) ? String(line.discountPercent) : '';
+        if (row.discountPercent !== shown) setValue(`items.${index}.discountPercent`, shown);
+      }
+    });
+  }, [livePricing, pricing.byRow, getValues, setValue]);
+
   // ---- Preview ------------------------------------------------------------
+  const pricedRows = useMemo(
+    () => (livePricing ? effectiveRows(watchedItems, pricing.byRow) : watchedItems),
+    [livePricing, watchedItems, pricing.byRow]
+  );
   const preview = useMemo(
     () =>
       computeInvoicePreview({
-        items: watchedItems,
+        items: pricedRows,
         products: productMap,
         priceList: options?.priceList,
         settings: options?.settings,
         buyerState: buyerStateOf(options?.customer),
       }),
-    [watchedItems, productMap, options?.priceList, options?.settings, options?.customer]
+    [pricedRows, productMap, options?.priceList, options?.settings, options?.customer]
   );
 
   const currency = options?.settings?.currency || company?.currency || 'INR';
@@ -482,15 +529,8 @@ export default function InvoiceEditor() {
                 orderItemId: item.orderItemId,
                 qty: num(item.qty),
               }))
-            : values.items.map((item) => ({
-                product: item.product,
-                qty: num(item.qty),
-                unit: item.unit || undefined,
-                unitPrice: item.unitPrice === '' ? undefined : num(item.unitPrice),
-                discountPercent:
-                  item.discountPercent === '' ? undefined : num(item.discountPercent),
-                taxRate: item.taxRate === '' ? undefined : num(item.taxRate),
-              })),
+            : // Only typed prices / discounts go up; the server prices the rest.
+              values.items.map((item) => pricingInput(item, canOverride)),
       };
 
       if (mode === 'order' && extraOrderIds.length) payload.orderIds = [values.orderId, ...extraOrderIds];
@@ -536,8 +576,10 @@ export default function InvoiceEditor() {
     const product = productMap.get(String(productId));
     if (!product) return;
     const qty = Number(getValues(`items.${index}.qty`)) || 1;
-    // A new product starts in its base unit.
+    // A new product starts in its base unit, priced by the server again.
     setValue(`items.${index}.unit`, product.unit || 'PCS');
+    setValue(`items.${index}.manualPrice`, '');
+    setValue(`items.${index}.manualDiscount`, '');
     const entry = findInvoicePriceEntry(options?.priceList, productId, qty);
     setValue(`items.${index}.unitPrice`, String(priceFor(product, product.unit, qty)));
     setValue(
@@ -920,10 +962,18 @@ export default function InvoiceEditor() {
                                       {errors.items[index].product.message}
                                     </p>
                                   )}
+                                  <LinePricingNote line={pricing.byRow.get(index)} />
                                 </>
                               ) : (
                                 <div>
-                                  <p className="font-medium">{name}</p>
+                                  <p className="font-medium">
+                                    {name}
+                                    {row.isFree && (
+                                      <span className="ml-2 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                                        Free{row.schemeName ? ` · ${row.schemeName}` : ''}
+                                      </span>
+                                    )}
+                                  </p>
                                   <p className="text-xs text-muted-foreground">
                                     {row.orderNo && extraOrderIds.length ? `${row.orderNo} · ` : ''}
                                     {row.sku || product?.sku || '—'}
@@ -979,7 +1029,11 @@ export default function InvoiceEditor() {
                                     min="0"
                                     step="0.01"
                                     placeholder={product ? String(product.sellingPrice ?? '') : 'Auto'}
-                                    {...register(`items.${index}.unitPrice`)}
+                                    {...register(`items.${index}.unitPrice`, {
+                                      onChange: (e) => setValue(`items.${index}.manualPrice`, e.target.value === '' ? '' : '1'),
+                                    })}
+                                    readOnly={!canOverride}
+                                    title={canOverride ? undefined : 'Set by the price list'}
                                     error={!!errors.items?.[index]?.unitPrice}
                                     aria-label={`Unit price for line ${index + 1}`}
                                   />
@@ -1002,7 +1056,11 @@ export default function InvoiceEditor() {
                                   min="0"
                                   max="100"
                                   step="0.01"
-                                  {...register(`items.${index}.discountPercent`)}
+                                  {...register(`items.${index}.discountPercent`, {
+                                    onChange: (e) => setValue(`items.${index}.manualDiscount`, e.target.value === '' ? '' : '1'),
+                                  })}
+                                  readOnly={!canOverride}
+                                  title={canOverride ? undefined : 'Set by discounts and schemes'}
                                   error={!!errors.items?.[index]?.discountPercent}
                                   aria-label={`Discount percent for line ${index + 1}`}
                                 />
@@ -1036,6 +1094,7 @@ export default function InvoiceEditor() {
                           </tr>
                         );
                       })}
+                      {livePricing && <FreeGoodsRows lines={pricing.freeLines} colSpan={6} />}
                     </tbody>
                   </table>
                 </div>
@@ -1140,6 +1199,8 @@ export default function InvoiceEditor() {
                 )}
               </CardContent>
             </Card>
+
+            {livePricing && <OffersCard offers={pricing.offers} applied={pricing.applied} />}
 
             <div className="flex flex-col gap-2">
               <Button type="submit" variant="outline" disabled={saving}>

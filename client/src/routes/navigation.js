@@ -34,6 +34,8 @@ import {
   ClipboardList,
   LineChart,
   Globe2,
+  Gift,
+  Percent,
 } from 'lucide-react';
 import { sellsVia } from '@/utils/salesType';
 
@@ -79,6 +81,8 @@ export const companyNav = [
       { to: '/app/stock-query', label: 'Stock Query', icon: Boxes, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'] },
       { to: '/app/stock-requests', label: 'Van Stock Requests', icon: ClipboardList, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE', 'COMPANY_ADMIN'], channel: 'VAN_SALE' },
       { to: '/app/day-cashout', label: 'Day Cashout', icon: Wallet, roles: ['SALESMAN'], channel: 'VAN_SALE' },
+      // Running offers, so the salesman can pitch them at the shop.
+      { to: '/app/schemes', label: 'Schemes', icon: Gift, permission: 'schemes.view', roles: ['SALESMAN'] },
     ],
   },
   {
@@ -111,6 +115,8 @@ export const companyNav = [
       { to: '/app/catalog', label: 'Categories & Units', icon: Layers, permission: 'products.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/suppliers', label: 'Suppliers', icon: Truck, permission: 'products.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/price-lists', label: 'Price Lists', icon: Tags, permission: 'products.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/discounts', label: 'Discounts', icon: Percent, permission: 'discounts.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/schemes', label: 'Schemes', icon: Gift, permission: 'schemes.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/warehouses', label: 'Warehouses', icon: Warehouse, permission: 'inventory.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/routes', label: 'Routes & Beats', icon: RouteIcon, permission: 'customers.view', excludeRoles: ['SALESMAN'] },
     ],

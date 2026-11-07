@@ -213,10 +213,11 @@ export const buildInvoiceLinesFromOrder = async (order, requested = [], settings
           unitPrice: Number(line.unitPrice || 0),
           discountPercent: Number(line.discountPercent || 0),
           taxRate: Number(line.taxRate || 0),
-          note: input.note || '',
+          note: input.note || line.note || '',
         },
         settings
       ),
+      ...schemeTrailOf(line),
     });
   });
 
@@ -232,6 +233,20 @@ export const buildInvoiceLinesFromOrder = async (order, requested = [], settings
   const totals = computeTotals(lines, settings);
   return { lines, ...totals };
 };
+
+/** The pricing trail an order line hands on to its invoice line. */
+const schemeTrailOf = (line) => ({
+  manualPrice: Boolean(line.manualPrice),
+  manualDiscount: Boolean(line.manualDiscount),
+  tradeDiscountPercent: Number(line.tradeDiscountPercent || 0),
+  discountRule: line.discountRule || null,
+  discountRuleName: line.discountRuleName || '',
+  schemeDiscountPercent: Number(line.schemeDiscountPercent || 0),
+  scheme: line.scheme || null,
+  schemeName: line.schemeName || '',
+  isFree: Boolean(line.isFree),
+  freeWith: line.freeWith || '',
+});
 
 // ---------------------------------------------------------------------------
 // Direct invoice / credit note line building

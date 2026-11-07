@@ -2,6 +2,38 @@ import { ForbiddenError, AppError } from '../utils/errors.js';
 import { PLATFORM_ROLES, COMPANY_ROLES, DEFAULT_PERMISSIONS, blockedBySalesType } from '../config/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
+/** Whether the company user's role has `permission` (sales type, per-user, company, default). */
+const effectivePermission = (req, permission) => {
+  const user = req.user;
+  const role = user.role;
+  // 0. a salesman's sales type closes the other channel
+  if (blockedBySalesType(user, permission)) return false;
+  // 1. per-user explicit override
+  if (user.permissionsOverride && Array.isArray(user.permissionsOverride[permission])) {
+    return user.permissionsOverride[permission].includes(role);
+  }
+  // 2. per-company role matrix
+  const override = req.settings?.rolePermissions;
+  if (override && Array.isArray(override[permission])) {
+    return override[permission].includes(role);
+  }
+  // 3. global default matrix
+  if (Array.isArray(DEFAULT_PERMISSIONS[permission])) {
+    return DEFAULT_PERMISSIONS[permission].includes(role);
+  }
+  // Unknown permission -> deny by default (fail closed).
+  return false;
+};
+
+/** In-handler check, e.g. may this user change prices: hasPermission(req, 'pricing.override'). */
+export const hasPermission = (req, permission) => {
+  const user = req.user;
+  if (!user) return false;
+  if (user.scope === 'platform') return user.role === PLATFORM_ROLES.SUPER_ADMIN;
+  if (user.role === COMPANY_ROLES.COMPANY_ADMIN) return true;
+  return effectivePermission(req, permission);
+};
+
 /**
  * authorize('orders.create')  - company-level permission check
  * authorize('orders.create', 'orders.update') - any-of
@@ -41,28 +73,7 @@ export const authorize =
 
     if (!perms.length) return next();
 
-    // Build the effective permission set for this user's role.
-    const override = req.settings?.rolePermissions;
-    const effective = (permission) => {
-      // 0. a salesman's sales type closes the other channel
-      if (blockedBySalesType(user, permission)) return false;
-      // 1. per-user explicit override
-      if (user.permissionsOverride && Array.isArray(user.permissionsOverride[permission])) {
-        return user.permissionsOverride[permission].includes(role);
-      }
-      // 2. per-company role matrix
-      if (override && Array.isArray(override[permission])) {
-        return override[permission].includes(role);
-      }
-      // 3. global default matrix
-      if (Array.isArray(DEFAULT_PERMISSIONS[permission])) {
-        return DEFAULT_PERMISSIONS[permission].includes(role);
-      }
-      // Unknown permission -> deny by default (fail closed).
-      return false;
-    };
-
-    const allowed = perms.some((p) => effective(p));
+    const allowed = perms.some((p) => effectivePermission(req, p));
     if (!allowed) {
       throw new ForbiddenError(
         `You do not have permission to perform this action (${perms.join(' | ')})`,

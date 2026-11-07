@@ -30,12 +30,13 @@ import {
   refreshInvoiceStatus,
   remainingOrderLines,
   buildInvoiceLinesFromOrder,
-  buildDirectInvoiceLines,
   syncOrderInvoicing,
   lineOfOrder,
   invoicesOfOrder,
 } from '../../services/invoiceService.js';
 import { taxBreakupFor, sellerStateOf, buyerStateOf, computeTotals } from '../../services/orderService.js';
+import { buildSaleLines, repriceInput } from '../../services/pricingService.js';
+import { hasPermission } from '../../middlewares/rbac.js';
 import { activeVanOf, assertDayClosed } from '../../services/vanService.js';
 import { recordMovement, resolveDefaultWarehouse, assertWarehouseStock, releaseReservation, reserveStock } from '../../services/inventoryService.js';
 import { baseQtyOf } from '../../services/catalogService.js';
@@ -164,7 +165,20 @@ const normalizeItems = (items = []) =>
     discountPercent: i.discountPercent,
     taxRate: i.taxRate,
     note: i.note || '',
+    isFree: Boolean(i.isFree),
   }));
+
+/** Direct invoice lines: price list, discount rules, schemes + free goods. */
+const priceDirectLines = (req, rawItems, { products, priceList, settings, customer, date }) =>
+  buildSaleLines(rawItems, {
+    products,
+    priceList,
+    settings,
+    customer,
+    date,
+    canOverride: hasPermission(req, 'pricing.override'),
+    verb: 'invoiced',
+  });
 
 const validateRefs = async (payload) => {
   const out = { ...payload };
@@ -595,7 +609,7 @@ export const create = asyncHandler(async (req, res) => {
     const priceList = await getPriceList(customer, payload.priceList);
     const rawItems = normalizeItems(payload.items || []);
     const products = await loadProducts(rawItems);
-    priced = buildDirectInvoiceLines(rawItems, { products, priceList, settings });
+    priced = await priceDirectLines(req, rawItems, { products, priceList, settings, customer, date: dateOrNull(payload.invoiceDate) || new Date() });
   }
 
   const snapshot = snapshotFor({ customer, order, payload, settings, req });
@@ -678,9 +692,10 @@ export const update = asyncHandler(async (req, res) => {
     priced = await buildLinesFromOrders(orders, rawItems, settings);
   } else {
     const priceList = await getPriceList(customer, payload.priceList);
-    const rawItems = payload.items ? normalizeItems(payload.items) : normalizeItems(invoice.items);
+    const rawItems = payload.items ? normalizeItems(payload.items) : invoice.items.map(repriceInput);
     const products = await loadProducts(rawItems);
-    priced = buildDirectInvoiceLines(rawItems, { products, priceList, settings });
+    const date = dateOrNull(payload.invoiceDate) || invoice.invoiceDate || new Date();
+    priced = await priceDirectLines(req, rawItems, { products, priceList, settings, customer, date });
   }
 
   const snapshot = snapshotFor({ customer, order: null, payload, settings, req, existing: invoice });
@@ -959,6 +974,10 @@ export const formOptions = asyncHandler(async (req, res) => {
         unitPrice: Number(row.line.unitPrice || 0),
         discountPercent: Number(row.line.discountPercent || 0),
         taxRate: Number(row.line.taxRate || 0),
+        isFree: Boolean(row.line.isFree),
+        schemeName: row.line.schemeName || '',
+        schemeDiscountPercent: Number(row.line.schemeDiscountPercent || 0),
+        discountRuleName: row.line.discountRuleName || '',
       }));
 
     order = {
@@ -1297,7 +1316,7 @@ export const pdf = asyncHandler(async (req, res) => {
       headerRow();
     }
     doc.text(String(index + 1), cols[0].x, y, { width: cols[0].w });
-    doc.text(item.name || '—', cols[1].x, y, { width: cols[1].w });
+    doc.text(`${item.name || '—'}${item.isFree ? ' (FREE)' : ''}`, cols[1].x, y, { width: cols[1].w });
     const lineOrderNo = multiOrder ? orderNoOf.get(String(item.order || '')) : '';
     doc.text(item.hsnCode || '—', cols[2].x, y, { width: cols[2].w });
     doc.text(String(item.qty), cols[3].x, y, { width: cols[3].w, align: 'right' });

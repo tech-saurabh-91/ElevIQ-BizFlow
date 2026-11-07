@@ -19,7 +19,7 @@ export const options = asyncHandler(async (req, res) => {
   const { q, limit = 50 } = req.query;
   const active = { isActive: true };
 
-  const [customers, products, suppliers, warehouses, routes, priceLists, users, categories] =
+  const [customers, products, suppliers, warehouses, routes, priceLists, users, categories, brands] =
     await Promise.all([
       Customer.find({ ...active, ...match(q, ['name', 'code', 'phone']) })
         .select('name code phone type assignedTo route')
@@ -70,6 +70,18 @@ export const options = asyncHandler(async (req, res) => {
         { $sort: { _id: 1 } },
         { $limit: 200 },
       ]),
+      Product.aggregate([
+        {
+          $match: {
+            companyId: new mongoose.Types.ObjectId(req.companyId),
+            isDeleted: { $ne: true },
+            brand: { $nin: ['', null] },
+          },
+        },
+        { $group: { _id: '$brand' } },
+        { $sort: { _id: 1 } },
+        { $limit: 200 },
+      ]),
     ]);
 
   return success(res, {
@@ -82,6 +94,7 @@ export const options = asyncHandler(async (req, res) => {
       priceLists: priceLists.map(idOf),
       users: users.map(idOf),
       categories: categories.map((c) => c._id).filter(Boolean).sort(),
+      brands: brands.map((c) => c._id).filter(Boolean).sort(),
     },
   });
 });

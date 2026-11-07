@@ -10,6 +10,7 @@ const EMPTY = {
   priceLists: [],
   users: [],
   categories: [],
+  brands: [],
 };
 
 /**

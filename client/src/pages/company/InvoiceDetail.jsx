@@ -17,6 +17,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
+import { SavedLineTag } from '@/components/company/sale-pricing';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
@@ -324,7 +325,11 @@ export default function InvoiceDetail() {
                       <tr key={item.id || index}>
                         <td className="px-6 py-3 text-muted-foreground">{index + 1}</td>
                         <td className="px-3 py-3">
-                          <p className="font-medium">{item.name || '—'}</p>
+                          <p className="font-medium">
+                            {item.name || '—'}
+                            {item.isFree && <SavedLineTag item={item} />}
+                          </p>
+                          {!item.isFree && <SavedLineTag item={item} />}
                           <p className="text-xs text-muted-foreground">
                             {multiOrder && orderNoOf.get(String(item.order?.id || item.order || '')) ? `${orderNoOf.get(String(item.order?.id || item.order))} · ` : ''}
                             {item.sku || '—'}

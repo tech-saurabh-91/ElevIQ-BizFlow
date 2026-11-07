@@ -45,6 +45,19 @@ const invoiceItemSchema = new mongoose.Schema(
     taxAmount: money(),
     lineTotal: money(),
 
+    // Pricing trail: price list -> discount rule -> scheme (see pricingService).
+    manualPrice: { type: Boolean, default: false },
+    manualDiscount: { type: Boolean, default: false },
+    tradeDiscountPercent: { type: Number, default: 0, min: 0, max: 100 },
+    discountRule: { type: mongoose.Schema.Types.ObjectId, ref: 'DiscountRule', default: null },
+    discountRuleName: { type: String, default: '' },
+    schemeDiscountPercent: { type: Number, default: 0, min: 0, max: 100 },
+    scheme: { type: mongoose.Schema.Types.ObjectId, ref: 'Scheme', default: null },
+    schemeName: { type: String, default: '' },
+    /** Free goods given under a scheme (zero priced). */
+    isFree: { type: Boolean, default: false },
+    freeWith: { type: String, default: '' },
+
     note: { type: String, default: '', trim: true, maxlength: 300 },
   },
   { _id: true }

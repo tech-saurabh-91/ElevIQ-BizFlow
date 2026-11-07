@@ -957,6 +957,9 @@ const MODULE_LABELS = {
   users: 'Users & teams',
   customers: 'Customers',
   products: 'Products',
+  discounts: 'Discounts (master)',
+  schemes: 'Schemes',
+  pricing: 'Pricing',
   orders: 'Sales orders',
   invoices: 'Invoices',
   creditnotes: 'Credit notes',
@@ -988,6 +991,7 @@ const ACTION_LABELS = {
   manage: 'Manage',
   post: 'Post',
   dispatch: 'Dispatch & deliver',
+  override: 'Type price / discount by hand',
 };
 const ACTION_ORDER = ['view', 'create', 'update', 'delete', 'manage', 'approve', 'dispatch', 'post', 'cancel', 'export'];
 const humanize = (word) => word.charAt(0).toUpperCase() + word.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase();

@@ -60,6 +60,8 @@ const DayCashouts = lazy(() => import('@/pages/company/DayCashouts'));
 const BeatPlan = lazy(() => import('@/pages/company/BeatPlan'));
 const Suppliers = lazy(() => import('@/pages/company/Suppliers'));
 const PriceLists = lazy(() => import('@/pages/company/PriceLists'));
+const DiscountRules = lazy(() => import('@/pages/company/DiscountRules'));
+const Schemes = lazy(() => import('@/pages/company/Schemes'));
 const Warehouses = lazy(() => import('@/pages/company/Warehouses'));
 const RoutesPage = lazy(() => import('@/pages/company/Routes'));
 const Users = lazy(() => import('@/pages/company/Users'));
@@ -253,6 +255,8 @@ export default function App() {
           <Route path="beat-plan" element={guard('fieldforce.targets.manage', <BeatPlan />)} />
           <Route path="suppliers" element={guard('products.view', <Suppliers />)} />
           <Route path="price-lists" element={guard('products.view', <PriceLists />)} />
+          <Route path="discounts" element={guard('discounts.view', <DiscountRules />)} />
+          <Route path="schemes" element={guard('schemes.view', <Schemes />)} />
           <Route path="warehouses" element={guard('inventory.view', <Warehouses />)} />
           <Route path="routes" element={guard('customers.view', <RoutesPage />)} />
 

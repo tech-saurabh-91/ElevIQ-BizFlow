@@ -33,7 +33,6 @@ import {
   markSetup,
 } from './_helpers.js';
 import {
-  buildOrderLines,
   assertStockAvailable,
   assertCreditLimit,
   nextOrderNumber,
@@ -48,6 +47,8 @@ import {
   dispatchOrderStock,
 } from '../../services/inventoryService.js';
 import { activeVanOf, assertDayClosed, assertVanStock } from '../../services/vanService.js';
+import { buildSaleLines, repriceInput } from '../../services/pricingService.js';
+import { hasPermission } from '../../middlewares/rbac.js';
 import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
 
 /** Relations returned on every order read so the UI never needs a second call. */
@@ -159,6 +160,7 @@ const normalizeItems = (items = []) =>
     discountPercent: i.discountPercent,
     taxRate: i.taxRate,
     note: i.note || '',
+    isFree: Boolean(i.isFree),
   }));
 
 /** Validate optional reference fields that were actually sent. */
@@ -227,10 +229,21 @@ const assertVanWarehouseStock = async (warehouseId, lines, settings) => {
   if (van) await assertVanStock(van, lines, settings);
 };
 
-/** Run the pricing engine + stock/credit guards for a set of raw items. */
-const priceOrder = async (req, customer, priceList, rawItems, settings) => {
+/**
+ * Run the pricing engine (price list, discount rules, schemes + free goods)
+ * and the stock / credit guards for a set of raw items.
+ */
+const priceOrder = async (req, customer, priceList, rawItems, settings, date = new Date()) => {
   const products = await loadProducts(rawItems);
-  const priced = buildOrderLines(rawItems, { products, priceList, settings });
+  const priced = await buildSaleLines(rawItems, {
+    products,
+    priceList,
+    settings,
+    customer,
+    date,
+    canOverride: hasPermission(req, 'pricing.override'),
+    verb: 'ordered',
+  });
   priced.taxBreakup = taxBreakupFor(priced.totals.taxTotal, settings, {
     sellerState: sellerStateOf(settings, req.company),
     buyerState: buyerStateOf(customer),
@@ -461,7 +474,7 @@ export const create = asyncHandler(async (req, res) => {
   const customer = await getCustomer(payload.customerId);
   const priceList = await getPriceList(customer, payload.priceList);
   const rawItems = normalizeItems(payload.items);
-  const { priced, warnings } = await priceOrder(req, customer, priceList, rawItems, settings);
+  const { priced, warnings } = await priceOrder(req, customer, priceList, rawItems, settings, dateOrNull(payload.orderDate) || new Date());
 
   const snapshot = snapshotFrom(customer, payload, settings, priceList, req);
   await assertVanWarehouseStock(snapshot.warehouse, priced.lines, settings);
@@ -527,10 +540,11 @@ export const update = asyncHandler(async (req, res) => {
     payload.priceList !== undefined ? payload.priceList : order.priceList
   );
 
-  const rawItems = payload.items ? normalizeItems(payload.items) : normalizeItems(order.items);
-  if (!rawItems.length) throw new BadRequestError('Add at least one product', 'VALIDATION_ERROR');
+  const rawItems = payload.items ? normalizeItems(payload.items) : order.items.map(repriceInput);
+  if (!rawItems.filter((i) => !i.isFree).length) throw new BadRequestError('Add at least one product', 'VALIDATION_ERROR');
 
-  const { priced, warnings } = await priceOrder(req, customer, priceList, rawItems, settings);
+  const orderDate = dateOrNull(payload.orderDate) || order.orderDate || new Date();
+  const { priced, warnings } = await priceOrder(req, customer, priceList, rawItems, settings, orderDate);
   const snapshot = snapshotFrom(customer, payload, settings, priceList, req, order);
   await assertVanWarehouseStock(snapshot.warehouse, priced.lines, settings);
 
@@ -1068,7 +1082,7 @@ export const pdf = asyncHandler(async (req, res) => {
       headerRow();
     }
     doc.text(String(index + 1), cols[0].x, y, { width: cols[0].w });
-    doc.text(item.name || '—', cols[1].x, y, { width: cols[1].w });
+    doc.text(`${item.name || '—'}${item.isFree ? ' (FREE)' : ''}`, cols[1].x, y, { width: cols[1].w });
     doc.text(item.hsnCode || '—', cols[2].x, y, { width: cols[2].w });
     doc.text(String(item.qty), cols[3].x, y, { width: cols[3].w, align: 'right' });
     doc.text(money2(item.unitPrice), cols[4].x, y, { width: cols[4].w, align: 'right' });

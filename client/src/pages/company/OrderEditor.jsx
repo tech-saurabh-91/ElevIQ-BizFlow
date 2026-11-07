@@ -37,6 +37,8 @@ import {
 import { breakupRows, buyerStateOf } from '@/utils/tax';
 import { useTaxLabels } from '@/hooks/useLocations';
 import { unitOf, unitOptions, stockLabel, describeQty } from '@/utils/units';
+import { usePermissions } from '@/hooks/usePermissions';
+import { FreeGoodsRows, LinePricingNote, OffersCard, effectiveRows, pricingInput, useSalePricing } from '@/components/company/sale-pricing';
 
 const text = (max = 200) => z.string().trim().max(max).optional().or(z.literal(''));
 const numberText = (message) =>
@@ -58,6 +60,9 @@ const itemSchema = z.object({
     .or(z.literal(''))
     .refine((v) => v === '' || (Number(v) >= 0 && Number(v) <= 100), 'Discount must be 0–100'),
   note: text(300),
+  // '1' when the user typed the price / discount (else the server prices it).
+  manualPrice: z.string().optional(),
+  manualDiscount: z.string().optional(),
 });
 
 const schema = z.object({
@@ -88,6 +93,8 @@ const emptyRow = () => ({
   unitPrice: '',
   discountPercent: '',
   note: '',
+  manualPrice: '',
+  manualDiscount: '',
 });
 
 const toFormValues = (order) => ({
@@ -105,18 +112,26 @@ const toFormValues = (order) => ({
   internalNotes: order.internalNotes || '',
   deliveryInstructions: order.deliveryInstructions || '',
   items:
-    Array.isArray(order.items) && order.items.length
-      ? order.items.map((item) => ({
-          product: orderIdOf(item.product),
-          qty: String(item.qty ?? 1),
-          unit: item.unit || '',
-          unitPrice: item.unitPrice == null ? '' : String(item.unitPrice),
-          discountPercent:
-            item.discountPercent == null || Number(item.discountPercent) === 0
-              ? ''
-              : String(item.discountPercent),
-          note: item.note || '',
-        }))
+    // Free goods are rebuilt by the schemes; only bought lines are edited.
+    Array.isArray(order.items) && order.items.some((i) => !i.isFree)
+      ? order.items
+          .filter((item) => !item.isFree)
+          .map((item) => {
+            // A typed discount is shown without the scheme part added on top.
+            const discount = item.manualDiscount
+              ? Number(item.discountPercent || 0) - Number(item.schemeDiscountPercent || 0)
+              : Number(item.discountPercent || 0);
+            return {
+              product: orderIdOf(item.product),
+              qty: String(item.qty ?? 1),
+              unit: item.unit || '',
+              unitPrice: item.unitPrice == null ? '' : String(item.unitPrice),
+              discountPercent: discount ? String(Math.round(discount * 100) / 100) : '',
+              note: item.note || '',
+              manualPrice: item.manualPrice ? '1' : '',
+              manualDiscount: item.manualDiscount ? '1' : '',
+            };
+          })
       : [emptyRow()],
 });
 
@@ -137,6 +152,10 @@ export default function OrderEditor() {
   const isSalesman = user?.role === 'SALESMAN';
   const lockedCustomer = isSalesman ? searchParams.get('customerId') || '' : '';
   const { lookups } = useLookups();
+  // Typing a price / discount by hand is a permission; otherwise the price
+  // list, discount rules and schemes decide (on the server).
+  const { can } = usePermissions();
+  const canOverride = can('pricing.override');
 
   const [initialized, setInitialized] = useState(!isEdit);
   const [serverError, setServerError] = useState(null);
@@ -265,17 +284,34 @@ export default function OrderEditor() {
     }
   }, [options, getValues, setValue]);
 
+  // ---- Live pricing from the server (rules, schemes, free goods) ----------
+  const pricing = useSalePricing({ customerId, date: orderDate, rows: watchedItems, canOverride, enabled: initialized });
+
+  // Show the server's price / discount in rows the user did not type into.
+  useEffect(() => {
+    pricing.byRow.forEach((line, index) => {
+      const row = getValues(`items.${index}`);
+      if (!row) return;
+      if (row.manualPrice !== '1' && row.unitPrice !== String(line.unitPrice)) setValue(`items.${index}.unitPrice`, String(line.unitPrice));
+      if (row.manualDiscount !== '1') {
+        const shown = Number(line.discountPercent) ? String(line.discountPercent) : '';
+        if (row.discountPercent !== shown) setValue(`items.${index}.discountPercent`, shown);
+      }
+    });
+  }, [pricing.byRow, getValues, setValue]);
+
   // ---- Preview (server remains authoritative) -----------------------------
+  const pricedRows = useMemo(() => effectiveRows(watchedItems, pricing.byRow), [watchedItems, pricing.byRow]);
   const preview = useMemo(
     () =>
       computeOrderPreview({
-        items: watchedItems,
+        items: pricedRows,
         products: productMap,
         priceList: options?.priceList,
         settings: options?.settings,
         buyerState: buyerStateOf(options?.customer),
       }),
-    [watchedItems, productMap, options?.priceList, options?.settings, options?.customer]
+    [pricedRows, productMap, options?.priceList, options?.settings, options?.customer]
   );
 
   const money = (value) => formatMoney(value, options?.settings?.currency || company?.currency || 'INR');
@@ -302,6 +338,10 @@ export default function OrderEditor() {
       const base = (Number(row.qty) || 0) * unitOf(product, row.unit).factor;
       wanted.set(product.id, { product, qty: (wanted.get(product.id)?.qty || 0) + base });
     });
+    pricing.freeLines.forEach((line) => {
+      const product = productMap.get(String(line.product));
+      if (product) wanted.set(product.id, { product, qty: (wanted.get(product.id)?.qty || 0) + Number(line.qty || 0) });
+    });
     wanted.forEach(({ product, qty }) => {
       const available = Number(product.stock || 0);
       if (qty > available) {
@@ -309,7 +349,7 @@ export default function OrderEditor() {
       }
     });
     return out;
-  }, [watchedItems, productMap, showStock]);
+  }, [watchedItems, productMap, showStock, pricing.freeLines]);
 
   // ---- Save ---------------------------------------------------------------
   const pendingIntent = useRef('draft');
@@ -372,14 +412,8 @@ export default function OrderEditor() {
         notes: values.notes || '',
         internalNotes: values.internalNotes || '',
         deliveryInstructions: values.deliveryInstructions || '',
-        items: values.items.map((item) => ({
-          product: item.product,
-          qty: num(item.qty),
-          unit: item.unit || undefined,
-          unitPrice: item.unitPrice === '' ? undefined : num(item.unitPrice),
-          discountPercent: item.discountPercent === '' ? undefined : num(item.discountPercent),
-          note: item.note || '',
-        })),
+        // Only typed prices / discounts go up; the server prices the rest.
+        items: values.items.map((item) => ({ ...pricingInput(item, canOverride), note: item.note || '' })),
       };
       mutation.mutate(payload);
     })();
@@ -389,8 +423,10 @@ export default function OrderEditor() {
     const product = productMap.get(String(productId));
     if (!product) return;
     const qty = Number(getValues(`items.${index}.qty`)) || 1;
-    // A new product starts in its base unit.
+    // A new product starts in its base unit, priced by the server again.
     setValue(`items.${index}.unit`, product.unit || 'PCS');
+    setValue(`items.${index}.manualPrice`, '');
+    setValue(`items.${index}.manualDiscount`, '');
     const entry = findPriceEntry(options?.priceList, productId, qty);
     setValue(`items.${index}.unitPrice`, String(basePriceFromProduct(product, options?.priceList, qty, product.unit)));
     setValue(
@@ -639,7 +675,10 @@ export default function OrderEditor() {
               <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
                 <div>
                   <CardTitle>Products</CardTitle>
-                  <CardDescription>Prices default from the customer’s price list.</CardDescription>
+                  <CardDescription>
+                    Prices come from the customer’s price list; discounts and schemes apply on their own
+                    {canOverride ? '. Type a price or discount to override it.' : '.'}
+                  </CardDescription>
                 </div>
                 <Button
                   type="button"
@@ -712,6 +751,7 @@ export default function OrderEditor() {
                                   {shortStock && (allowNegative ? ' · negative stock allowed' : ' · short')}
                                 </p>
                               )}
+                              <LinePricingNote line={pricing.byRow.get(index)} />
                             </td>
                             <td className="py-2 px-2 align-top">
                               <Input
@@ -749,7 +789,11 @@ export default function OrderEditor() {
                                 min="0"
                                 step="0.01"
                                 placeholder={product ? String(product.sellingPrice ?? '') : 'Auto'}
-                                {...register(`items.${index}.unitPrice`)}
+                                {...register(`items.${index}.unitPrice`, {
+                                  onChange: (e) => setValue(`items.${index}.manualPrice`, e.target.value === '' ? '' : '1'),
+                                })}
+                                readOnly={!canOverride}
+                                title={canOverride ? undefined : 'Set by the price list'}
                                 error={!!errors.items?.[index]?.unitPrice}
                                 aria-label={`Unit price for line ${index + 1}`}
                               />
@@ -765,7 +809,11 @@ export default function OrderEditor() {
                                 min="0"
                                 max="100"
                                 step="0.01"
-                                {...register(`items.${index}.discountPercent`)}
+                                {...register(`items.${index}.discountPercent`, {
+                                  onChange: (e) => setValue(`items.${index}.manualDiscount`, e.target.value === '' ? '' : '1'),
+                                })}
+                                readOnly={!canOverride}
+                                title={canOverride ? undefined : 'Set by discounts and schemes'}
                                 error={!!errors.items?.[index]?.discountPercent}
                                 aria-label={`Discount percent for line ${index + 1}`}
                               />
@@ -800,6 +848,7 @@ export default function OrderEditor() {
                           </tr>
                         );
                       })}
+                      <FreeGoodsRows lines={pricing.freeLines} colSpan={6} />
                     </tbody>
                   </table>
                 </div>
@@ -915,6 +964,8 @@ export default function OrderEditor() {
                 )}
               </CardContent>
             </Card>
+
+            <OffersCard offers={pricing.offers} applied={pricing.applied} />
 
             <div className="flex flex-col gap-2">
               <Button
