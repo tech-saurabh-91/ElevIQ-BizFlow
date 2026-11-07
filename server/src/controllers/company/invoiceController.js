@@ -545,7 +545,20 @@ export const stats = asyncHandler(async (req, res) => {
 
 export const get = asyncHandler(async (req, res) => {
   const invoice = await loadInvoice(req, req.params.id);
-  return success(res, { data: serialize(invoice) });
+  const data = serialize(invoice);
+  // Every order this invoice bills (one, or several of the same customer).
+  const ids = (invoice.orders?.length ? invoice.orders : invoice.order ? [invoice.order._id || invoice.order] : []).map(String);
+  if (ids.length) {
+    const found = await Order.find({ _id: { $in: ids } }).select('orderNo orderDate status total').lean();
+    const byId = new Map(found.map((o) => [String(o._id), o]));
+    data.sourceOrders = ids
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((o) => ({ id: String(o._id), orderNo: o.orderNo, orderDate: o.orderDate, status: o.status, total: Number(o.total || 0) }));
+  } else {
+    data.sourceOrders = [];
+  }
+  return success(res, { data });
 });
 
 export const create = asyncHandler(async (req, res) => {
@@ -1225,8 +1238,13 @@ export const pdf = asyncHandler(async (req, res) => {
     88,
     { width: 220, align: 'right' }
   );
-  if (invoice.orderNo) {
-    doc.text(`Order: ${invoice.orderNo}`, right - 220, 101, { width: 220, align: 'right' });
+  // Order no. of each billed order (an invoice may bill several of one customer).
+  const orderNos = invoice.orderNos?.length ? invoice.orderNos.filter(Boolean) : invoice.orderNo ? [invoice.orderNo] : [];
+  const multiOrder = orderNos.length > 1;
+  const orderNoOf = new Map((invoice.orders || []).map((id, i) => [String(id), invoice.orderNos?.[i] || '']));
+  if (orderNos.length) {
+    const label = orderNos.length > 2 ? `Orders: ${orderNos.slice(0, 2).join(', ')} +${orderNos.length - 2} more` : `Order${multiOrder ? 's' : ''}: ${orderNos.join(', ')}`;
+    doc.text(label, right - 260, 101, { width: 260, align: 'right', lineBreak: false, ellipsis: true });
   }
 
   doc.moveTo(left, 118).lineTo(right, 118).strokeColor('#cbd5e1').stroke();
@@ -1280,12 +1298,18 @@ export const pdf = asyncHandler(async (req, res) => {
     }
     doc.text(String(index + 1), cols[0].x, y, { width: cols[0].w });
     doc.text(item.name || '—', cols[1].x, y, { width: cols[1].w });
+    const lineOrderNo = multiOrder ? orderNoOf.get(String(item.order || '')) : '';
     doc.text(item.hsnCode || '—', cols[2].x, y, { width: cols[2].w });
     doc.text(String(item.qty), cols[3].x, y, { width: cols[3].w, align: 'right' });
     doc.text(money2(item.unitPrice), cols[4].x, y, { width: cols[4].w, align: 'right' });
     doc.text(`${Number(item.discountPercent || 0)}%`, cols[5].x, y, { width: cols[5].w, align: 'right' });
     doc.text(`${Number(item.taxRate || 0)}%`, cols[6].x, y, { width: cols[6].w, align: 'right' });
     doc.text(money2(item.lineTotal), cols[7].x, y, { width: cols[7].w, align: 'right' });
+    if (lineOrderNo) {
+      doc.fontSize(7).fillColor('#666').text(`Order ${lineOrderNo}`, cols[1].x, y + 10, { width: cols[1].w });
+      doc.fontSize(8).fillColor('#000');
+      y += 9;
+    }
     y += 16;
   });
 

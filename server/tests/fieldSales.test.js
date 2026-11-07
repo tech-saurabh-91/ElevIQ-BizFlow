@@ -261,6 +261,11 @@ describe('Van invoice at the shop against booked orders', () => {
     expect(await onVan(state.chips)).toBe(before - 5);
     expect((await orderOf(a.body.data.id)).status).toBe('DELIVERED');
     expect((await orderOf(b.body.data.id)).status).toBe('DELIVERED');
+    // The invoice shows both orders; the PDF prints them.
+    const detail = (await sam.get(`/api/v1/invoices/${inv.body.data.id}`)).body.data;
+    expect(detail.sourceOrders.map((o) => o.id).sort()).toEqual([a.body.data.id, b.body.data.id].sort());
+    const pdf = await request.get(`/api/v1/invoices/${inv.body.data.id}/pdf`).set({ Authorization: `Bearer ${state.sam}` });
+    expect(pdf.status).toBe(200);
     // Nothing left to dispatch from the godown.
     expect((await call(state.admin).post(`/api/v1/orders/${a.body.data.id}/dispatch`, {})).status).toBeGreaterThanOrEqual(400);
 

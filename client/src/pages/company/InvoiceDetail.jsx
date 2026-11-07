@@ -136,6 +136,10 @@ export default function InvoiceDetail() {
 
   const customer = invoice.customerId && typeof invoice.customerId === 'object' ? invoice.customerId : {};
   const order = invoice.order && typeof invoice.order === 'object' ? invoice.order : null;
+  // Every billed order (an invoice may bill several orders of one customer).
+  const sourceOrders = invoice.sourceOrders?.length ? invoice.sourceOrders : order?.id ? [order] : [];
+  const orderNoOf = new Map(sourceOrders.map((o) => [String(o.id), o.orderNo]));
+  const multiOrder = sourceOrders.length > 1;
   const available = invoiceActionsFor(invoice, can);
   const isDraft = invoice.status === 'DRAFT';
   const cancellable =
@@ -218,7 +222,7 @@ export default function InvoiceDetail() {
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge status={invoice.status} />
         {invoice.orderNo && (
-          <span className="text-xs text-muted-foreground">Order {invoice.orderNo}</span>
+          <span className="text-xs text-muted-foreground">{multiOrder ? 'Orders' : 'Order'} {invoice.orderNo}</span>
         )}
         {invoice.direct && <span className="text-xs text-muted-foreground">Direct invoice</span>}
         {invoice.poReference && (
@@ -322,6 +326,7 @@ export default function InvoiceDetail() {
                         <td className="px-3 py-3">
                           <p className="font-medium">{item.name || '—'}</p>
                           <p className="text-xs text-muted-foreground">
+                            {multiOrder && orderNoOf.get(String(item.order?.id || item.order || '')) ? `${orderNoOf.get(String(item.order?.id || item.order))} · ` : ''}
                             {item.sku || '—'}
                             {item.unit ? ` · ${item.unit}` : ''}
                           </p>
@@ -623,22 +628,26 @@ export default function InvoiceDetail() {
             </CardContent>
           </Card>
 
-          {order?.id && (
+          {sourceOrders.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle>Source order</CardTitle>
+                <CardTitle>{multiOrder ? `Source orders (${sourceOrders.length})` : 'Source order'}</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <InfoRow label="Order" value={order.orderNo || '—'} />
-                <InfoRow label="Order date" value={formatDate(order.orderDate)} />
-                <InfoRow label="Order status" value={titleCase(order.status)} />
-                <InfoRow label="Order total" value={money(order.total)} />
-                <Link
-                  to={`/app/orders/${order.id}`}
-                  className="inline-block text-xs font-medium text-brand-600 hover:underline dark:text-brand-300"
-                >
-                  View sales order
-                </Link>
+              <CardContent className="space-y-4 text-sm">
+                {sourceOrders.map((o) => (
+                  <div key={o.id} className={multiOrder ? 'space-y-2 border-b pb-3 last:border-0 last:pb-0' : 'space-y-2'}>
+                    <InfoRow label="Order" value={o.orderNo || '—'} />
+                    <InfoRow label="Order date" value={formatDate(o.orderDate)} />
+                    <InfoRow label="Order status" value={titleCase(o.status)} />
+                    <InfoRow label="Order total" value={money(o.total)} />
+                    <Link
+                      to={`/app/orders/${o.id}`}
+                      className="inline-block text-xs font-medium text-brand-600 hover:underline dark:text-brand-300"
+                    >
+                      View sales order
+                    </Link>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
