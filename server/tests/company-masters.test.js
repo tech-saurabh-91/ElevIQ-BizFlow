@@ -631,6 +631,49 @@ describe('Phase 3 - Price lists', () => {
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('INVALID_REFERENCE');
   });
+
+  test('code and currency come from the system; valid from cannot be in the past', async () => {
+    const dayOffset = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+
+    const created = await request
+      .post('/api/v1/price-lists')
+      .set(as(state.adminToken))
+      .send({ name: 'Locked Fields List', code: 'MYCODE', currency: 'USD', validFrom: dayOffset(2) });
+    expect(created.status).toBe(201);
+    expect(created.body.data.code).toMatch(/^PL-\d{4}$/);
+    expect(created.body.data.currency).not.toBe('USD');
+    const id = created.body.data.id;
+
+    const patched = await request
+      .patch(`/api/v1/price-lists/${id}`)
+      .set(as(state.adminToken))
+      .send({ code: 'CHANGED', currency: 'USD', name: 'Locked Fields List 2' });
+    expect(patched.status).toBe(200);
+    expect(patched.body.data.code).toBe(created.body.data.code);
+    expect(patched.body.data.currency).toBe(created.body.data.currency);
+
+    const pastCreate = await request
+      .post('/api/v1/price-lists')
+      .set(as(state.adminToken))
+      .send({ name: 'Backdated List', validFrom: dayOffset(-3) });
+    expect(pastCreate.status).toBe(400);
+
+    const pastUpdate = await request
+      .patch(`/api/v1/price-lists/${id}`)
+      .set(as(state.adminToken))
+      .send({ validFrom: dayOffset(-3) });
+    expect(pastUpdate.status).toBe(400);
+
+    // A list whose start date has since passed can still be edited as it is.
+    await runWithContext({ scope: 'company', companyId: state.companyId }, () =>
+      PriceList.updateOne({ _id: id }, { $set: { validFrom: new Date(`${dayOffset(-10)}T00:00:00Z`) } })
+    );
+    const keep = await request
+      .patch(`/api/v1/price-lists/${id}`)
+      .set(as(state.adminToken))
+      .send({ validFrom: dayOffset(-10), name: 'Still Editable' });
+    expect(keep.status).toBe(200);
+  });
 });
 
 // ---------------------------------------------------------------------------

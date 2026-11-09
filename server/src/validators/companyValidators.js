@@ -316,11 +316,10 @@ const priceListItemSchema = z.object({
 });
 
 const priceListBaseSchema = z.object({
+  // code (auto PL-0001...) and currency (the company's) are set by the server.
   name: z.string().trim().min(2, 'Price list name is required').max(120),
-  code: softString(24),
   description: softString(500),
   type: z.enum(PRICE_LIST_TYPES).optional(),
-  currency: softString(8),
   isDefault: z.boolean().optional(),
   isActive: z.boolean().optional(),
   validFrom: optionalDate,

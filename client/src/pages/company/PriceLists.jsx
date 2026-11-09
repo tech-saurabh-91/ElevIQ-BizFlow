@@ -7,7 +7,7 @@ import { Plus, Tags, Trash2 } from 'lucide-react';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
-import { FormActions, FormSection, dateInput, num, numInput, opt } from '@/components/company/form-utils';
+import { FormActions, FormSection, dateInput, num, numInput, todayInput } from '@/components/company/form-utils';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
@@ -38,12 +38,11 @@ const itemSchema = z.object({
   minQty: amount,
 });
 
-const schema = z.object({
+// `keepFrom`: an existing list's start date, which may stay even once past.
+const makeSchema = (keepFrom = '') => z.object({
   name: z.string().trim().min(2, 'Price list name is required').max(120),
-  code: text(24),
   description: text(500),
   type: z.enum(TYPES),
-  currency: text(8),
   isDefault: z.boolean(),
   isActive: z.boolean(),
   validFrom: text(40),
@@ -51,17 +50,18 @@ const schema = z.object({
   notes: text(500),
   items: z.array(itemSchema).max(5000),
 }).superRefine((v, ctx) => {
+  if (v.validFrom && v.validFrom !== keepFrom && v.validFrom < todayInput()) {
+    ctx.addIssue({ code: 'custom', path: ['validFrom'], message: 'Valid from cannot be a past date' });
+  }
   if (v.validFrom && v.validTo && v.validTo < v.validFrom) {
     ctx.addIssue({ code: 'custom', path: ['validTo'], message: 'Valid to cannot be before valid from' });
   }
 });
 
-const toDefaults = (initial, currency = 'INR') => ({
+const toDefaults = (initial) => ({
   name: initial?.name || '',
-  code: initial?.code || '',
   description: initial?.description || '',
   type: initial?.type || 'RETAIL',
-  currency: initial?.currency || currency,
   isDefault: initial?.isDefault ?? false,
   isActive: initial?.isActive ?? true,
   validFrom: dateInput(initial?.validFrom),
@@ -80,6 +80,8 @@ function PriceListForm({ mode, initial, onClose, onSaved }) {
   const [serverErrors, setServerErrors] = useState([]);
   const { lookups } = useLookups();
   const { company } = useAuth();
+  const keepFrom = dateInput(initial?.validFrom);
+  const today = todayInput();
 
   const {
     register,
@@ -90,8 +92,8 @@ function PriceListForm({ mode, initial, onClose, onSaved }) {
     watch,
     formState: { errors, isSubmitting },
   } = useForm({
-    resolver: zodResolver(schema),
-    defaultValues: toDefaults(initial, company?.currency || 'INR'),
+    resolver: zodResolver(makeSchema(keepFrom)),
+    defaultValues: toDefaults(initial),
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
@@ -127,10 +129,8 @@ function PriceListForm({ mode, initial, onClose, onSaved }) {
 
     const payload = {
       name: values.name,
-      code: opt(values.code),
       description: values.description,
       type: values.type,
-      currency: opt(values.currency),
       isDefault: values.isDefault,
       isActive: values.isActive,
       validFrom: values.validFrom || '',
@@ -182,8 +182,11 @@ function PriceListForm({ mode, initial, onClose, onSaved }) {
         <Field label="Name" required error={errors.name?.message}>
           <Input {...register('name')} error={!!errors.name} placeholder="Retail price list 2026" />
         </Field>
-        <Field label="Code" error={errors.code?.message} hint="Leave blank to auto-generate">
-          <Input {...register('code')} placeholder="PL-0001" className="uppercase" />
+        <Field
+          label="Code"
+          hint={mode === 'create' ? 'Given automatically when the price list is created.' : 'Set by the system; it cannot be changed.'}
+        >
+          <Input value={mode === 'create' ? 'Auto (PL-…)' : initial?.code || '—'} readOnly disabled />
         </Field>
         <Field label="Type" error={errors.type?.message}>
           <Select {...register('type')}>
@@ -194,11 +197,11 @@ function PriceListForm({ mode, initial, onClose, onSaved }) {
             ))}
           </Select>
         </Field>
-        <Field label="Currency" error={errors.currency?.message}>
-          <Input {...register('currency')} placeholder="INR" className="uppercase" />
+        <Field label="Currency" hint="Your company's currency.">
+          <Input value={(mode === 'create' ? company?.currency : initial?.currency || company?.currency) || 'INR'} readOnly disabled />
         </Field>
-        <Field label="Valid from" error={errors.validFrom?.message}>
-          <Input type="date" {...register('validFrom')} />
+        <Field label="Valid from" error={errors.validFrom?.message} hint="Today or a later date.">
+          <Input type="date" min={keepFrom && keepFrom < today ? keepFrom : today} {...register('validFrom')} />
         </Field>
         <Field label="Valid to" error={errors.validTo?.message}>
           <Input type="date" min={watch('validFrom') || undefined} {...register('validTo')} />
