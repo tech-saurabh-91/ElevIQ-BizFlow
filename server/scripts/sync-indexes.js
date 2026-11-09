@@ -28,6 +28,9 @@ const keyOf = (spec) => JSON.stringify(spec);
 
 const run = async () => {
   await connectDB(1, 1000);
+  // A development .env turns autoIndex on, which would build indexes the
+  // moment each model loads - even with --check. This script decides itself.
+  mongoose.connection.config.autoIndex = false;
 
   for (const file of fs.readdirSync(modelsDir).sort()) {
     if (!file.endsWith('.js') || SKIP.has(file)) continue;
