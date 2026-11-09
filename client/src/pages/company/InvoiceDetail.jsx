@@ -17,7 +17,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { SavedLineTag } from '@/components/company/sale-pricing';
+import { SavedLineTag, LineItemsPhone } from '@/components/company/sale-pricing';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
@@ -174,7 +174,7 @@ export default function InvoiceDetail() {
         ]}
         actions={
           <>
-            <Button variant="outline" onClick={() => navigate('/app/invoices')}>
+            <Button variant="outline" className="max-sm:hidden" onClick={() => navigate('/app/invoices')}>
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
             <Button variant="outline" onClick={() => openInvoicePdf(invoice)}>
@@ -295,7 +295,7 @@ export default function InvoiceDetail() {
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <Card>
             <CardHeader className="pb-3">
@@ -306,7 +306,8 @@ export default function InvoiceDetail() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
+              <LineItemsPhone items={invoice.items || []} money={money} extra={(item) => (multiOrder && orderNoOf.get(String(item.order?.id || item.order || '')) ? `${orderNoOf.get(String(item.order?.id || item.order))} · ` : '')} />
+              <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="border-y bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -363,7 +364,7 @@ export default function InvoiceDetail() {
                 </table>
               </div>
 
-              <div className="flex justify-end border-t px-6 py-4">
+              <div className="flex justify-end border-t px-4 py-4 sm:px-6">
                 <dl className="w-full max-w-xs space-y-1.5 text-sm">
                   <TotalRow label="Subtotal" value={money(invoice.subtotal)} />
                   <TotalRow label="Discount" value={`− ${money(invoice.discountTotal)}`} />
@@ -460,7 +461,7 @@ export default function InvoiceDetail() {
                 </p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-sm">
+                  <table className="table-cards w-full sm:min-w-[560px] text-sm">
                     <thead>
                       <tr className="border-y bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                         <th className="px-6 py-2 font-medium">Credit note</th>
@@ -477,7 +478,7 @@ export default function InvoiceDetail() {
                         const noteAvailable = creditNoteActionsFor(note, can);
                         return (
                           <tr key={note.id}>
-                            <td className="px-6 py-3">
+                            <td className="px-4 py-3 sm:px-6">
                               <Link
                                 to={`/app/credit-notes/${note.id}`}
                                 className="font-semibold text-brand-600 hover:underline dark:text-brand-300"
@@ -504,7 +505,7 @@ export default function InvoiceDetail() {
                             <td className="px-3 py-3">
                               <StatusBadge status={note.status} />
                             </td>
-                            <td className="px-6 py-3 text-right">
+                            <td className="px-4 py-3 text-right sm:px-6">
                               <div className="inline-flex items-center gap-1">
                                 <Button
                                   variant="ghost"

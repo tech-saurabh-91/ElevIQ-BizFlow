@@ -218,7 +218,7 @@ function StockTab() {
         </Card>
       ) : (
         <Card className={isFetching ? 'opacity-80 transition-opacity' : 'transition-opacity'}>
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 <TableHead>Product</TableHead>
@@ -402,7 +402,7 @@ function MovementsTab() {
         </Card>
       ) : (
         <Card className={isFetching ? 'opacity-80 transition-opacity' : 'transition-opacity'}>
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
@@ -608,7 +608,7 @@ function AdjustmentsTab() {
         </Card>
       ) : (
         <Card className={isFetching ? 'opacity-80 transition-opacity' : 'transition-opacity'}>
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 <TableHead>Adjustment</TableHead>
@@ -1006,7 +1006,7 @@ function TransfersTab() {
         </Card>
       ) : (
         <Card className={isFetching ? 'opacity-80 transition-opacity' : 'transition-opacity'}>
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 <TableHead>Transfer</TableHead>
@@ -1478,7 +1478,7 @@ function PurchaseOrdersTab() {
         </Card>
       ) : (
         <Card className={isFetching ? 'opacity-80 transition-opacity' : 'transition-opacity'}>
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 <TableHead>PO number</TableHead>
@@ -2025,7 +2025,7 @@ function GoodsReceiptsTab() {
         </Card>
       ) : (
         <Card className={isFetching ? 'opacity-80 transition-opacity' : 'transition-opacity'}>
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 <TableHead>GRN number</TableHead>

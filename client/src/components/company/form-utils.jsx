@@ -259,6 +259,14 @@ export const shiftDateInput = (value, n) => {
 export const notFutureDate = (v) => !v || v <= todayInput();
 export const notPastDate = (v) => !v || v >= todayInput();
 
+/**
+ * Editor submit buttons: a column in the summary from `sm` up; on phones a
+ * bar fixed to the bottom edge (the tab bar hides on new / edit screens),
+ * buttons side by side, the hint text left out.
+ */
+export const STICKY_ACTIONS =
+  'flex flex-col gap-2 max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-30 max-sm:flex-row max-sm:border-t max-sm:bg-background/95 max-sm:px-3 max-sm:pt-2.5 max-sm:pb-[calc(0.625rem+env(safe-area-inset-bottom))] max-sm:shadow-[0_-4px_16px_rgb(0_0_0/0.06)] max-sm:backdrop-blur max-sm:[&>button]:h-11 max-sm:[&>button]:flex-1 max-sm:[&>p]:hidden';
+
 export default FormSection;
 
 const MONTH_NAMES = [

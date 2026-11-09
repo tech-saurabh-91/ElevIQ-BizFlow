@@ -703,7 +703,7 @@ export default function Attendance() {
               description="Widen the date range to see the per-rep rollup."
             />
           ) : (
-            <Table>
+            <Table cards>
               <TableHeader>
                 <TableRow>
                   <TableHead>Rep</TableHead>

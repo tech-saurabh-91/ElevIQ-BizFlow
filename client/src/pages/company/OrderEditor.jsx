@@ -23,7 +23,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription, ErrorAlert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useLookups } from '@/hooks/useLookups';
-import { dateInput, num, opt, todayInput, notFutureDate } from '@/components/company/form-utils';
+import { dateInput, num, opt, todayInput, notFutureDate, STICKY_ACTIONS } from '@/components/company/form-utils';
 import { formatMoney } from '@/utils/format';
 import {
   PAYMENT_MODES,
@@ -971,7 +971,7 @@ export default function OrderEditor() {
 
             <OffersCard offers={pricing.offers} applied={pricing.applied} />
 
-            <div className="flex flex-col gap-2">
+            <div className={STICKY_ACTIONS}>
               <Button
                 type="submit"
                 variant="outline"

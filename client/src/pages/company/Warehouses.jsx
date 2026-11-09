@@ -538,7 +538,7 @@ function VanHistoryDialog({ van, onClose }) {
           No assignments yet. Use <strong>Assign van</strong> to put a driver on this van.
         </p>
       ) : (
-        <Table>
+        <Table cards>
           <TableHeader>
             <TableRow>
               <TableHead>Executive</TableHead>

@@ -195,7 +195,7 @@ export default function Companies() {
         </Card>
       ) : (
         <Card>
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 <TableHead>Company</TableHead>

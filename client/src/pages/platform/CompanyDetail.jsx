@@ -443,7 +443,7 @@ export default function CompanyDetail() {
           {users.length === 0 ? (
             <EmptyState icon="empty" title="No users" description="This tenant has no team members yet." />
           ) : (
-            <Table>
+            <Table cards>
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
@@ -490,7 +490,7 @@ export default function CompanyDetail() {
           {subscriptions.length === 0 ? (
             <EmptyState icon="empty" title="No subscriptions" />
           ) : (
-            <Table>
+            <Table cards>
               <TableHeader>
                 <TableRow>
                   <TableHead>Plan</TableHead>
@@ -529,7 +529,7 @@ export default function CompanyDetail() {
           {activity.length === 0 ? (
             <EmptyState icon="empty" title="No recorded activity" />
           ) : (
-            <Table>
+            <Table cards>
               <TableHeader>
                 <TableRow>
                   <TableHead>When</TableHead>

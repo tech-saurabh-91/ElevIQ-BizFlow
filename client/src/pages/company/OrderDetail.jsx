@@ -16,7 +16,7 @@ import {
   Truck,
   XCircle,
 } from 'lucide-react';
-import { SavedLineTag } from '@/components/company/sale-pricing';
+import { SavedLineTag, LineItemsPhone } from '@/components/company/sale-pricing';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
@@ -138,7 +138,7 @@ export default function OrderDetail() {
         breadcrumbs={[{ label: 'Orders', to: '/app/orders' }, { label: order.orderNo || 'Order' }]}
         actions={
           <>
-            <Button variant="outline" onClick={() => navigate('/app/orders')}>
+            <Button variant="outline" className="max-sm:hidden" onClick={() => navigate('/app/orders')}>
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
             <Button variant="outline" onClick={() => openOrderPdf(order)}>
@@ -228,7 +228,7 @@ export default function OrderDetail() {
         </Alert>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <Card>
             <CardHeader className="pb-3">
@@ -239,7 +239,8 @@ export default function OrderDetail() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
+              <LineItemsPhone items={order.items || []} money={money} />
+              <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="border-y bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -292,7 +293,7 @@ export default function OrderDetail() {
                 </table>
               </div>
 
-              <div className="flex justify-end border-t px-6 py-4">
+              <div className="flex justify-end border-t px-4 py-4 sm:px-6">
                 <dl className="w-full max-w-xs space-y-1.5 text-sm">
                   <TotalRow label="Subtotal" value={money(order.subtotal)} />
                   <TotalRow label="Discount" value={`− ${money(order.discountTotal)}`} />

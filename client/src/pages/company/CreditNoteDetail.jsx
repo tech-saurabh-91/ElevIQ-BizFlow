@@ -17,6 +17,7 @@ import {
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
+import { LineItemsPhone } from '@/components/company/sale-pricing';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -135,7 +136,7 @@ export default function CreditNoteDetail() {
         ]}
         actions={
           <>
-            <Button variant="outline" onClick={() => navigate('/app/credit-notes')}>
+            <Button variant="outline" className="max-sm:hidden" onClick={() => navigate('/app/credit-notes')}>
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
             <Button variant="outline" onClick={() => openCreditNotePdf(note)}>
@@ -244,7 +245,7 @@ export default function CreditNoteDetail() {
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <Card>
             <CardHeader className="pb-3">
@@ -255,7 +256,8 @@ export default function CreditNoteDetail() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
+              <LineItemsPhone items={note.items || []} money={money} showTag={false} />
+              <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="border-y bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -307,7 +309,7 @@ export default function CreditNoteDetail() {
                 </table>
               </div>
 
-              <div className="flex justify-end border-t px-6 py-4">
+              <div className="flex justify-end border-t px-4 py-4 sm:px-6">
                 <dl className="w-full max-w-xs space-y-1.5 text-sm">
                   <TotalRow label="Subtotal" value={money(note.subtotal)} />
                   <TotalRow label="Discount" value={`− ${money(note.discountTotal)}`} />

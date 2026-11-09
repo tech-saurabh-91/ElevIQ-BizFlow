@@ -313,7 +313,7 @@ export default function PlatformReports() {
                 />
               ) : (
                 <div className="overflow-x-auto">
-                  <Table>
+                  <Table cards>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-10">#</TableHead>
@@ -398,7 +398,7 @@ export default function PlatformReports() {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="overflow-x-auto">
-                <Table>
+                <Table cards>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Status</TableHead>

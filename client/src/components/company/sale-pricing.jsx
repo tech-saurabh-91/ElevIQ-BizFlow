@@ -171,3 +171,45 @@ export function SavedLineTag({ item }) {
   }
   return <LinePricingNote line={item} />;
 }
+
+/**
+ * Saved order / invoice / credit note lines on phones: one compact row per
+ * product instead of the wide table (which shows from `sm` up).
+ * `extra(item)` can return a short prefix for the sub line (e.g. order no).
+ */
+export function LineItemsPhone({ items = [], money, showTag = true, extra }) {
+  return (
+    <ul className="divide-y border-t sm:hidden">
+      {items.map((item, index) => {
+        const disc = Number(item.discountPercent) > 0 ? `${item.discountPercent}% off` : '';
+        return (
+          <li key={item.id || index} className="px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium [overflow-wrap:anywhere]">
+                  {item.name || '—'}
+                  {showTag && item.isFree && <SavedLineTag item={item} />}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {extra?.(item) || ''}
+                  {item.sku || '—'}
+                  {item.unit ? ` · ${item.unit}` : ''}
+                  {item.hsnCode ? ` · HSN ${item.hsnCode}` : ''}
+                </p>
+              </div>
+              <p className="shrink-0 text-sm font-semibold tabular-nums">{money(item.lineTotal)}</p>
+            </div>
+            <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+              {formatNumber(item.qty)} × {money(item.unitPrice)}
+              {disc && ` · ${disc}`}
+              {item.taxRate != null && ` · Tax ${item.taxRate}%`}
+              {Number(item.freeQty) > 0 && <span className="text-success"> · +{item.freeQty} free</span>}
+            </p>
+            {showTag && !item.isFree && <SavedLineTag item={item} />}
+            {item.note && <p className="mt-1 text-xs italic text-muted-foreground">{item.note}</p>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

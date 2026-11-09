@@ -128,7 +128,7 @@ export default function PaymentDetail() {
         ]}
         actions={
           <>
-            <Button variant="outline" onClick={() => navigate('/app/payments')}>
+            <Button variant="outline" className="max-sm:hidden" onClick={() => navigate('/app/payments')}>
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
             <Button variant="outline" onClick={() => openPaymentPdf(payment)}>
@@ -249,7 +249,7 @@ export default function PaymentDetail() {
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <Card>
             <CardHeader className="pb-3">
@@ -263,7 +263,7 @@ export default function PaymentDetail() {
             <CardContent className="p-0">
               {allocations.length ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-sm">
+                  <table className="w-full text-sm sm:min-w-[560px]">
                     <thead>
                       <tr className="border-y bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                         <th className="px-6 py-2 font-medium">Invoice</th>
@@ -274,13 +274,13 @@ export default function PaymentDetail() {
                     <tbody className="divide-y">
                       {allocations.map((alloc, index) => (
                         <tr key={alloc.id || index}>
-                          <td className="px-6 py-3">
+                          <td className="px-4 py-3 sm:px-6">
                             <p className="font-medium">{alloc.invoiceNo || '—'}</p>
                           </td>
                           <td className="px-3 py-3 text-right font-medium tabular-nums">
                             {money(alloc.amount)}
                           </td>
-                          <td className="px-6 py-3 text-right">
+                          <td className="px-4 py-3 text-right sm:px-6">
                             {alloc.invoice && (alloc.invoice.id || alloc.invoice) && (
                               <Link
                                 to={`/app/invoices/${alloc.invoice.id || alloc.invoice}`}
@@ -295,11 +295,11 @@ export default function PaymentDetail() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t bg-muted/40">
-                        <td className="px-6 py-3 text-sm font-medium">Total applied</td>
+                        <td className="px-4 py-3 text-sm font-medium sm:px-6">Total applied</td>
                         <td className="px-3 py-3 text-right font-semibold tabular-nums">
                           {money(payment.amountApplied)}
                         </td>
-                        <td className="px-6 py-3" />
+                        <td className="px-4 py-3 sm:px-6" />
                       </tr>
                     </tfoot>
                   </table>

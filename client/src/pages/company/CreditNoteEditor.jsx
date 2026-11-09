@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription, ErrorAlert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
-import { dateInput, num, todayInput, notFutureDate } from '@/components/company/form-utils';
+import { dateInput, num, todayInput, notFutureDate, STICKY_ACTIONS } from '@/components/company/form-utils';
 import { formatDate, formatMoney, formatNumber } from '@/utils/format';
 import {
   CREDIT_NOTE_REASONS,
@@ -689,7 +689,7 @@ export default function CreditNoteEditor() {
               </CardContent>
             </Card>
 
-            <div className="flex flex-col gap-2">
+            <div className={STICKY_ACTIONS}>
               <Button type="submit" variant="outline" disabled={saving || !hasLines}>
                 <Save className="h-4 w-4" />
                 {saving && intent === 'draft' ? 'Saving…' : 'Save draft'}

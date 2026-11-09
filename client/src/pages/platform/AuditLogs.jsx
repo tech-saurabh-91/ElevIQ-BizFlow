@@ -243,7 +243,7 @@ export default function AuditLogs() {
         </Card>
       ) : (
         <Card>
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 <TableHead>When</TableHead>

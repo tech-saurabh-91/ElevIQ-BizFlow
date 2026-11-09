@@ -286,7 +286,7 @@ export default function StockRequests() {
         ) : !rows.length ? (
           <EmptyState icon="empty" title="No stock requests" description={me.data ? 'Ask for stock before you head out.' : 'Requests raised by van executives appear here.'} />
         ) : (
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 <TableHead>Request</TableHead>

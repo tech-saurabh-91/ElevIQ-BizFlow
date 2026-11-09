@@ -256,7 +256,7 @@ export default function AuditTrail() {
         </Card>
       ) : (
         <Card className={isFetching ? 'opacity-80 transition-opacity' : 'transition-opacity'}>
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 <TableHead>When</TableHead>

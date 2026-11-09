@@ -80,7 +80,7 @@ export default function StockQuery() {
           <EmptyState icon="package" title="No products found" description="Try a different search." />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-sm">
+            <table className="table-cards w-full sm:min-w-[520px] text-sm">
               <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 font-medium">Product</th>

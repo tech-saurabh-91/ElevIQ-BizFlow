@@ -335,7 +335,7 @@ function ReceivablesTab({ params, money }) {
             <EmptyState icon="empty" title="Nothing outstanding" description="Every invoice in this company is settled." compact />
           ) : (
             <div className="overflow-x-auto">
-              <Table>
+              <Table cards>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Invoice</TableHead>
@@ -453,7 +453,7 @@ function InventoryTab({ params, money }) {
             <EmptyState icon="empty" title="All stocked up" description="No product is at or below its reorder level." compact />
           ) : (
             <div className="overflow-x-auto">
-              <Table>
+              <Table cards>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Product</TableHead>
@@ -552,7 +552,7 @@ function FieldForceTab({ params, money }) {
               <EmptyState icon="empty" title="No attendance yet" description="No check-ins recorded in this window." compact />
             ) : (
               <div className="overflow-x-auto">
-                <Table>
+                <Table cards>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Rep</TableHead>
@@ -589,7 +589,7 @@ function FieldForceTab({ params, money }) {
               <EmptyState icon="empty" title="No targets set" description="Create targets to track achievement here." compact />
             ) : (
               <div className="overflow-x-auto">
-                <Table>
+                <Table cards>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Target</TableHead>
@@ -720,10 +720,11 @@ export default function Reports() {
 
       <Tabs items={TABS} value={tab} onChange={(v) => setParam({ tab: v })} />
 
-      <Card>
-        <CardContent className="flex flex-col gap-3 py-4 xl:flex-row xl:items-center">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <Card className="max-sm:border-0 max-sm:bg-transparent max-sm:shadow-none">
+        <CardContent className="flex flex-col gap-3 py-4 max-sm:p-0 xl:flex-row xl:items-center">
+          {/* Phones: a segmented control. */}
+          <div className="flex flex-wrap items-center gap-2 max-sm:grid max-sm:grid-cols-4 max-sm:gap-1 max-sm:rounded-xl max-sm:bg-muted max-sm:p-1">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground max-sm:hidden">
               Range
             </span>
             <Button size="sm" variant={isSet ? 'ghost' : 'outline'} onClick={() => setParam({ dateFrom: '', dateTo: '' })}>
@@ -740,13 +741,13 @@ export default function Reports() {
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 xl:ml-auto">
+          <div className="flex flex-wrap items-center gap-2 max-sm:grid max-sm:grid-cols-2 xl:ml-auto">
             <Input
               type="date"
               value={dateFrom}
               max={dateTo || todayInput()}
               onChange={(e) => setParam({ dateFrom: e.target.value })}
-              className="w-40"
+              className="w-full sm:w-40"
               aria-label="From date"
             />
             <Input
@@ -755,14 +756,14 @@ export default function Reports() {
               min={dateFrom || undefined}
               max={todayInput()}
               onChange={(e) => setParam({ dateTo: e.target.value })}
-              className="w-40"
+              className="w-full sm:w-40"
               aria-label="To date"
             />
             {activeGranularity && (
               <Select
                 value={granularity}
                 onChange={(e) => setParam({ granularity: e.target.value })}
-                className="w-32"
+                className="w-full sm:w-32"
                 aria-label="Granularity"
               >
                 <option value="day">Daily</option>

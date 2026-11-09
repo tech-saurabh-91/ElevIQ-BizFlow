@@ -58,6 +58,9 @@ export default function BottomNav({ sections = [], primary = [], homeTo, footer 
       active ? 'text-primary' : 'text-muted-foreground'
     );
 
+  // Form screens (new / edit) use the bottom edge for their own Save bar.
+  if (/\/(new|edit)$/.test(pathname)) return null;
+
   return (
     <>
       {moreOpen && (

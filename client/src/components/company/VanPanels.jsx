@@ -292,7 +292,7 @@ export function DayCloseDialog({ van, onClose }) {
             <LoadingState label="Loading history…" />
           ) : (
             <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full min-w-[560px] text-sm">
+              <table className="table-cards w-full sm:min-w-[560px] text-sm">
                 <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2 font-medium">Day</th>
@@ -367,7 +367,7 @@ export function DayCloseDialog({ van, onClose }) {
             ) : (
               <>
                 <div className="overflow-x-auto rounded-lg border">
-                  <table className="w-full min-w-[720px] text-sm">
+                  <table className="table-cards w-full sm:min-w-[720px] text-sm">
                     <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2 font-medium">Product</th>

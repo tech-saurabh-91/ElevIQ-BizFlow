@@ -6,10 +6,13 @@ import { Toaster } from 'react-hot-toast';
 import App from './App.jsx';
 import PwaPrompts from './components/shell/PwaPrompts';
 import { useUIStore } from './store/uiStore';
+import { watchCardTables } from './utils/tableCards';
 import './index.css';
 
 // Theme before first paint (avoids flash on reload).
 useUIStore.getState().initTheme();
+// Phone card tables: label each value with its column header.
+watchCardTables();
 
 const queryClient = new QueryClient({
   defaultOptions: {

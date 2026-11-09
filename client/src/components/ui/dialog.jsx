@@ -113,7 +113,8 @@ export function Dialog({
           className
         )}
       >
-        <div className="flex items-start gap-4 border-b px-5 py-4 sm:px-6">
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/25 sm:hidden" aria-hidden="true" />
+        <div className="flex items-start gap-4 border-b px-5 pb-3.5 pt-2.5 sm:px-6 sm:py-4">
           <div className="min-w-0 flex-1">
             {title && <h2 className="text-base font-semibold leading-tight">{title}</h2>}
             {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
@@ -133,7 +134,7 @@ export function Dialog({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6">{children}</div>
 
         {footer && (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t bg-muted/30 px-5 py-3.5 sm:px-6">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t bg-muted/30 px-5 py-3.5 max-sm:pb-[calc(0.875rem+env(safe-area-inset-bottom))] max-sm:[&>button]:h-11 max-sm:[&>button]:flex-1 sm:px-6">
             {footer}
           </div>
         )}

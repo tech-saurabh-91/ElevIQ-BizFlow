@@ -28,14 +28,38 @@ export function Pagination({ meta, onPageChange, onLimitChange, limits = [10, 20
   const to = Math.min(page * limit, total);
 
   return (
-    <div className={cn('flex flex-col items-center justify-between gap-3 border-t px-4 py-3 sm:flex-row', className)}>
-      <p className="text-xs text-muted-foreground">
+    <div className={cn('flex items-center justify-between gap-3 border-t px-4 py-3 max-sm:border-0 max-sm:px-0', className)}>
+      {/* Phones: just Prev / page x of y / Next, thumb-sized. */}
+      <div className="flex w-full items-center justify-between gap-2 sm:hidden">
+        <button
+          type="button"
+          onClick={() => go(page - 1)}
+          disabled={page === 1}
+          className="inline-flex h-10 items-center gap-1 rounded-xl border bg-card px-3 text-sm font-medium shadow-sm focus-ring disabled:opacity-40"
+        >
+          <ChevronLeft className="h-4 w-4" /> Prev
+        </button>
+        <p className="text-center text-xs text-muted-foreground">
+          Page <span className="font-semibold text-foreground">{page}</span> of {pages}
+          <span className="block">{total} total</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => go(page + 1)}
+          disabled={page === pages}
+          className="inline-flex h-10 items-center gap-1 rounded-xl border bg-card px-3 text-sm font-medium shadow-sm focus-ring disabled:opacity-40"
+        >
+          Next <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+
+      <p className="hidden text-xs text-muted-foreground sm:block">
         Showing <span className="font-medium text-foreground">{from}</span>–
         <span className="font-medium text-foreground">{to}</span> of{' '}
         <span className="font-medium text-foreground">{total}</span>
       </p>
 
-      <div className="flex items-center gap-2">
+      <div className="hidden items-center gap-2 sm:flex">
         {onLimitChange && (
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             Per page
