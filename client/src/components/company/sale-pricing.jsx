@@ -102,8 +102,8 @@ export function LinePricingNote({ line }) {
 export function FreeGoodsRows({ lines, colSpan = 6 }) {
   if (!lines?.length) return null;
   return lines.map((l, i) => (
-    <tr key={`free-${i}`} className="border-b bg-emerald-500/5 last:border-0">
-      <td className="py-2 pr-2" colSpan={colSpan}>
+    <tr key={`free-${i}`} className="mb-3 block rounded-lg border bg-emerald-500/5 sm:mb-0 sm:table-row sm:rounded-none sm:border-x-0 sm:border-t-0 sm:last:border-0">
+      <td className="block p-3 sm:table-cell sm:px-0 sm:py-2 sm:pr-2" colSpan={colSpan}>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Gift className="h-4 w-4 text-emerald-600" />
           <span className="font-medium">{l.name}</span>

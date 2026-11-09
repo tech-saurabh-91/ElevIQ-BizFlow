@@ -697,8 +697,8 @@ export default function OrderEditor() {
                 )}
 
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[640px] text-sm">
-                    <thead>
+                  <table className="w-full text-sm sm:min-w-[640px]">
+                    <thead className="hidden sm:table-header-group">
                       <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                         <th className="pb-2 pr-2 font-medium">Product</th>
                         <th className="w-20 pb-2 px-2 font-medium">Qty</th>
@@ -719,8 +719,8 @@ export default function OrderEditor() {
                           Number(row.qty) * unitOf(product, row.unit).factor > Number(product.stock || 0);
                         const units = unitOptions(product);
                         return (
-                          <tr key={field.id} className="border-b last:border-0">
-                            <td className="py-2 pr-2 align-top">
+                          <tr key={field.id} className="mb-3 grid grid-cols-3 gap-x-3 rounded-lg border p-3 sm:mb-0 sm:table-row sm:rounded-none sm:border-x-0 sm:border-t-0 sm:p-0 sm:last:border-0">
+                            <td className="col-span-3 py-1 pr-2 align-top sm:py-2">
                               <Select
                                 {...register(`items.${index}.product`, {
                                   onChange: (e) => changeProduct(index, e.target.value),
@@ -753,7 +753,8 @@ export default function OrderEditor() {
                               )}
                               <LinePricingNote line={pricing.byRow.get(index)} />
                             </td>
-                            <td className="py-2 px-2 align-top">
+                            <td className="py-1 align-top sm:px-2 sm:py-2">
+                              <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:hidden">Qty</span>
                               <Input
                                 type="number"
                                 min="0.0001"
@@ -783,7 +784,8 @@ export default function OrderEditor() {
                                 </p>
                               )}
                             </td>
-                            <td className="py-2 px-2 align-top">
+                            <td className="py-1 align-top sm:px-2 sm:py-2">
+                              <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:hidden">Price</span>
                               <Input
                                 type="number"
                                 min="0"
@@ -803,7 +805,8 @@ export default function OrderEditor() {
                                 </p>
                               )}
                             </td>
-                            <td className="py-2 px-2 align-top">
+                            <td className="py-1 align-top sm:px-2 sm:py-2">
+                              <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:hidden">Disc %</span>
                               <Input
                                 type="number"
                                 min="0"
@@ -823,13 +826,14 @@ export default function OrderEditor() {
                                 </p>
                               )}
                             </td>
-                            <td className="py-2 px-2 text-right align-top">
+                            <td className="col-span-2 py-1 align-top sm:px-2 sm:py-2 sm:text-right">
+                              <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:hidden">Amount</span>
                               <span className="font-medium tabular-nums">
                                 {line ? money(line.lineTotal) : '—'}
                               </span>
                               {line && <p className="text-xs text-muted-foreground">{line.taxRate}% GST</p>}
                             </td>
-                            <td className="py-2 pl-2 align-top">
+                            <td className="flex items-end justify-end py-1 align-top sm:table-cell sm:py-2 sm:pl-2">
                               <button
                                 type="button"
                                 onClick={() => {

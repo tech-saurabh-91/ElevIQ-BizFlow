@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/api/client';
+import { InstallButton } from '@/components/shell/PwaPrompts';
 import { Bell, LogOut, Menu, Moon, Sun, UserRound, KeyRound, ChevronDown, Eye, LogIn } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -89,6 +90,7 @@ export default function Topbar({ onMenuClick }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
+        <InstallButton />
         {/* Notifications */}
         <button
           type="button"
