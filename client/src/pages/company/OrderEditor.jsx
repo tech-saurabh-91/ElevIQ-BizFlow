@@ -327,6 +327,8 @@ export default function OrderEditor() {
   const showStock = options?.settings?.order?.showStockOnOrder !== false;
   const allowNegative = Boolean(options?.settings?.order?.allowNegativeStock);
 
+  // A shortage never stops the order (stock is enforced at invoice / dispatch);
+  // it is listed as a heads-up wherever live stock is shown.
   const stockIssues = useMemo(() => {
     if (!showStock) return [];
     const out = [];
@@ -748,7 +750,7 @@ export default function OrderEditor() {
                                   }`}
                                 >
                                   Stock {stockLabel(product)}
-                                  {shortStock && (allowNegative ? ' · negative stock allowed' : ' · short')}
+                                  {shortStock && ' · short'}
                                 </p>
                               )}
                               <LinePricingNote line={pricing.byRow.get(index)} />
@@ -955,14 +957,19 @@ export default function OrderEditor() {
                 )}
 
                 {stockIssues.length > 0 && (
-                  <Alert tone={allowNegative ? 'warning' : 'destructive'}>
-                    <AlertTitle>{allowNegative ? 'Stock warning' : 'Not enough stock'}</AlertTitle>
+                  <Alert tone="warning">
+                    <AlertTitle>Short on stock</AlertTitle>
                     <AlertDescription>
                       <ul className="list-inside list-disc space-y-0.5">
                         {stockIssues.map((message) => (
                           <li key={message}>{message}</li>
                         ))}
                       </ul>
+                      <p className="mt-1">
+                        {allowNegative
+                          ? 'The order can be saved. Stock will go below zero when it is invoiced.'
+                          : 'The order can be saved, but it can only be invoiced or dispatched once stock arrives.'}
+                      </p>
                     </AlertDescription>
                   </Alert>
                 )}

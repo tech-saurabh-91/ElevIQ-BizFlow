@@ -33,7 +33,7 @@ import {
   markSetup,
 } from './_helpers.js';
 import {
-  assertStockAvailable,
+  stockWarnings,
   assertCreditLimit,
   nextOrderNumber,
   submittedStatus,
@@ -248,7 +248,7 @@ const priceOrder = async (req, customer, priceList, rawItems, settings, date = n
     sellerState: sellerStateOf(settings, req.company),
     buyerState: buyerStateOf(customer),
   });
-  const stock = assertStockAvailable(priced.lines, products, settings);
+  const stock = stockWarnings(priced.lines, products, settings);
   const credit = assertCreditLimit(customer, priced.totals.total, settings);
 
   return {
@@ -326,7 +326,7 @@ const submitDraft = async (req, order, settings, note = '') => {
 
   const rawItems = normalizeItems(order.items);
   const products = await loadProducts(rawItems);
-  const stock = assertStockAvailable(
+  const stock = stockWarnings(
     rawItems.map((i) => ({ product: i.product, qty: i.qty })),
     products,
     settings

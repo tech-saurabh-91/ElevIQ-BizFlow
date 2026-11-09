@@ -202,8 +202,11 @@ describe('Selling and buying in packs', () => {
       customerId: state.customerId,
       items: [{ product: state.productId, qty: 4, unit: 'CTN' }], // 480 > 477
     });
-    expect(res.status).toBe(422);
-    expect(res.body.code).toBe('INSUFFICIENT_STOCK');
+    // Orders are not refused for stock; the base-unit shortage is reported.
+    expect(res.status).toBe(201);
+    expect(res.body.meta.warnings.join(' ')).toMatch(/only 477 .* in stock, 480 ordered/);
+    const Order = (await import('../src/models/Order.js')).default;
+    await Order.deleteOne({ _id: res.body.data.id }).skipTenant();
   });
 
   test('buying in cartons adds base units to stock at the per-unit cost', async () => {

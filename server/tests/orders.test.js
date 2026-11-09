@@ -387,15 +387,17 @@ describe('Phase 4 - validation and business rules', () => {
     expect(badCustomer.body.code).toBe('INVALID_REFERENCE');
   });
 
-  test('blocks orders that exceed available stock', async () => {
+  test('books an order beyond available stock, with a warning', async () => {
     const res = await createOrder({
       customerId: state.customerId,
       items: [item('ALPHA', 20)],
     });
 
-    expect(res.status).toBe(422);
-    expect(res.body.code).toBe('INSUFFICIENT_STOCK');
-    expect(res.body.errors?.[0]?.message).toMatch(/only 10/);
+    expect(res.status).toBe(201);
+    expect(res.body.meta.warnings.join(' ')).toMatch(/only 10 .* in stock, 20 ordered/);
+    // Leave stock and order counts as the later tests expect them.
+    const Order = (await import('../src/models/Order.js')).default;
+    await Order.deleteOne({ _id: res.body.data.id }).skipTenant();
   });
 
   test('warns (and can block) when the credit limit would be exceeded', async () => {
@@ -727,5 +729,18 @@ describe('Phase 4 - stats, export and print', () => {
   test('enforces export permission for salesmen', async () => {
     const res = await request.get('/api/v1/orders/export').set(as(state.salesmanToken));
     expect(res.status).toBe(403);
+  });
+});
+
+describe('Stock check setting', () => {
+  const lines = [{ product: 'p1', qty: 5 }];
+  const products = new Map([['p1', { name: 'Biscuit', stock: 2, unit: 'PCS' }]]);
+
+  test('an order is never refused for stock; the shortage is a warning', async () => {
+    const { stockWarnings } = await import('../src/services/orderService.js');
+    const blocked = stockWarnings(lines, products, { order: { allowNegativeStock: false } }).warnings;
+    expect(blocked[0]).toMatch(/only 2 PCS\(s\) in stock, 5 ordered - add stock before it can be invoiced/);
+    const allowed = stockWarnings(lines, products, { order: { allowNegativeStock: true } }).warnings;
+    expect(allowed[0]).toMatch(/stock will go below zero when it is invoiced/);
   });
 });

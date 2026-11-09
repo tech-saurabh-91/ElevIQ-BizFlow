@@ -219,11 +219,14 @@ export const buildOrderLines = (items, { products, priceList, settings }) => {
   return { lines, totals, taxBreakup, meta };
 };
 
-/** Fail when booked quantity exceeds available stock (unless the tenant allows it). */
-export const assertStockAvailable = (lines, products, settings) => {
+/**
+ * An order only books goods - stock leaves at dispatch / invoice, and that is
+ * where a shortage is enforced (order.allowNegativeStock). So an order is never
+ * refused for stock: a shortage or a product falling to its low-stock level
+ * comes back as a warning.
+ */
+export const stockWarnings = (lines, products, settings) => {
   const allowNegative = Boolean(settings?.order?.allowNegativeStock);
-  const checkStock = settings?.order?.showStockOnOrder !== false;
-  if (allowNegative || !checkStock) return { warnings: [] };
 
   // Stock is counted in base units, whatever pack each line is in.
   const wanted = new Map();
@@ -232,28 +235,19 @@ export const assertStockAvailable = (lines, products, settings) => {
     wanted.set(key, (wanted.get(key) || 0) + baseQtyOf(l));
   });
 
-  const errors = [];
   const warnings = [];
   for (const [productId, qty] of wanted.entries()) {
     const product = products.get(productId);
     if (!product) continue;
     const available = Number(product.stock || 0);
     if (qty > available) {
-      errors.push({
-        field: 'items',
-        message: `${product.name}: only ${available} ${product.unit || 'unit'}(s) in stock, ${qty} requested`,
-      });
+      warnings.push(
+        `${product.name}: only ${available} ${product.unit || 'unit'}(s) in stock, ${qty} ordered` +
+          (allowNegative ? ' - stock will go below zero when it is invoiced' : ' - add stock before it can be invoiced')
+      );
     } else if (available - qty <= Number(product.lowStockLevel || 0)) {
       warnings.push(`${product.name} will drop to ${round2(available - qty)} in stock`);
     }
-  }
-
-  if (errors.length) {
-    throw new AppError('Not enough stock to book this order', {
-      status: 422,
-      code: ErrorCodes.INSUFFICIENT_STOCK,
-      errors,
-    });
   }
   return { warnings };
 };
@@ -316,7 +310,7 @@ export default {
   priceLineValues,
   computeTotals,
   buildOrderLines,
-  assertStockAvailable,
+  stockWarnings,
   assertCreditLimit,
   requiresApproval,
   nextOrderNumber,

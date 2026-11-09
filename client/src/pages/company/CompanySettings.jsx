@@ -822,8 +822,18 @@ function SettingsForm({ data, canUpdate, tab }) {
               </Field>
               <div className="space-y-2 sm:col-span-2">
                 <Checkbox label="Reserve stock when an order is confirmed" {...register('order.reserveStockOnConfirm')} disabled={disabled} />
-                <Checkbox label="Allow negative stock" {...register('order.allowNegativeStock')} disabled={disabled} />
-                <Checkbox label="Show live stock while taking an order" {...register('order.showStockOnOrder')} disabled={disabled} />
+                <Checkbox
+                  label="Allow invoice / dispatch without enough stock"
+                  description="Orders are always taken, with a warning when stock is short. On: invoices and dispatches go through and stock can go below zero until goods arrive. Off: an invoice or dispatch needing more than is in stock is blocked."
+                  {...register('order.allowNegativeStock')}
+                  disabled={disabled}
+                />
+                <Checkbox
+                  label="Show live stock while taking an order"
+                  description="Only shows the stock next to each product; it does not block or allow anything."
+                  {...register('order.showStockOnOrder')}
+                  disabled={disabled}
+                />
               </div>
             </FormSection>
           </CardContent>
