@@ -23,6 +23,8 @@ import {
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
+import { FilterPanel, FILTER_CARD, FILTER_ROW } from '@/components/ui/filter-panel';
+import StatCard from '@/components/company/stat-card';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
@@ -52,32 +54,6 @@ import { todayInput } from '@/components/company/form-utils';
 
 const STATUS_OPTIONS = ['', ...ORDER_STATUSES];
 
-function StatCard({ label, value, hint, icon: Icon, tone = 'brand', loading }) {
-  const tones = {
-    brand: 'text-brand-600 dark:text-brand-300 bg-brand-500/12',
-    success: 'text-success bg-success/12',
-    warning: 'text-warning bg-warning/15',
-    muted: 'text-muted-foreground bg-muted',
-  };
-  return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-          <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${tones[tone]}`}>
-            <Icon className="h-4 w-4" aria-hidden="true" />
-          </span>
-        </div>
-        {loading ? (
-          <Skeleton className="mt-3 h-8 w-24" />
-        ) : (
-          <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>
-        )}
-        {hint && !loading && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function Orders() {
   const [params, setParams] = useSearchParams();
@@ -278,7 +254,7 @@ export default function Orders() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           icon={ShoppingCart}
           label="Total orders"
@@ -315,9 +291,9 @@ export default function Orders() {
         />
       </div>
 
-      <Card>
-        <CardContent className="flex flex-col gap-3 py-4 xl:flex-row xl:items-center">
-          <div className="relative flex-1">
+      <Card className={FILTER_CARD}>
+        <CardContent className={FILTER_ROW}>
+          <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchDraft}
@@ -338,7 +314,10 @@ export default function Orders() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <FilterPanel
+            active={[status, dateFrom, dateTo].filter(Boolean).length}
+            onReset={hasActiveFilters ? resetAll : undefined}
+          >
             <Select
               value={status}
               onChange={(e) => setParam({ status: e.target.value, page: 1 })}
@@ -369,13 +348,7 @@ export default function Orders() {
               className="w-40"
               aria-label="To date"
             />
-
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={resetAll}>
-                Reset
-              </Button>
-            )}
-          </div>
+          </FilterPanel>
         </CardContent>
       </Card>
 

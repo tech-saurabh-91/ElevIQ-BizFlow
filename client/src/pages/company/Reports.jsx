@@ -119,7 +119,7 @@ function ChartCard({ title, hint, children, className }) {
 function LoadingGrid({ cols = 4 }) {
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {Array.from({ length: cols }).map((_, i) => (
           <Skeleton key={i} className="h-28 rounded-lg" />
         ))}
@@ -181,7 +181,7 @@ function OverviewTab({ params, money }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           icon={IndianRupee}
           label="Sales invoiced"
@@ -263,7 +263,7 @@ function SalesTab({ params, money }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard icon={IndianRupee} label="Invoiced" value={money(s.total)} hint="Excl. drafts & cancellations" tone="brand" />
         <StatCard icon={Receipt} label="Invoices" value={formatNumber(s.count)} hint={`Avg ${money(s.average)} each`} tone="info" />
         <StatCard icon={Banknote} label="Collected" value={money(s.collected)} hint={`${s.total > 0 ? Math.round((s.collected / s.total) * 100) : 0}% of invoiced`} tone="success" />
@@ -309,7 +309,7 @@ function ReceivablesTab({ params, money }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard icon={Wallet} label="Total outstanding" value={money(s.total)} hint={`${formatNumber(s.invoiceCount)} open invoices`} tone="brand" />
         <StatCard icon={AlertTriangle} label="Overdue" value={money(s.overdueValue)} hint={`${formatNumber(s.overdueCount)} past due`} tone="warning" />
         <StatCard icon={Percent} label="Overdue share" value={`${s.overduePercent || 0}%`} hint="Of total receivables" tone={s.overduePercent > 50 ? 'destructive' : 'info'} />
@@ -383,7 +383,7 @@ function CollectionsTab({ params, money }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard icon={Banknote} label="Received" value={money(s.total)} hint={`${formatNumber(s.count)} payments`} tone="success" />
         <StatCard icon={Receipt} label="Applied to invoices" value={money(s.applied)} hint="Settled against dues" tone="brand" />
         <StatCard icon={Wallet} label="Advance / on-account" value={money(s.advance)} hint="Unallocated balance" tone="info" />
@@ -423,7 +423,7 @@ function InventoryTab({ params, money }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard icon={IndianRupee} label="Stock value" value={money(s.stockValue)} hint={`${formatNumber(s.lines)} stock lines`} tone="brand" />
         <StatCard icon={Boxes} label="Units on hand" value={formatNumber(s.qty)} hint={`${formatNumber(s.reserved)} reserved · ${formatNumber(s.available)} available`} tone="info" />
         <StatCard icon={AlertTriangle} label="Low stock" value={formatNumber(s.lowStockCount)} hint="At or below reorder level" tone={s.lowStockCount > 0 ? 'destructive' : 'muted'} />
@@ -516,7 +516,7 @@ function FieldForceTab({ params, money }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard icon={Footprints} label="Visits" value={formatNumber(visitCount)} hint={`${formatNumber(visits.bySalesman?.length || 0)} reps active`} tone="brand" />
         <StatCard icon={CalendarCheck} label="Hours worked" value={`${formatNumber(workedHours)}`} hint={`${formatNumber(attendance.length)} reps attendance`} tone="info" />
         <StatCard icon={Receipt} label="Field expenses" value={money(expenseTotal)} hint={`${money(expenseApproved)} approved`} tone="warning" />

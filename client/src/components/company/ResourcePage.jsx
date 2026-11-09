@@ -16,6 +16,7 @@ import {
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
+import { FilterPanel, FILTER_CARD, FILTER_ROW } from '@/components/ui/filter-panel';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -173,6 +174,7 @@ export default function ResourcePage({
   const hasRowMenu = Boolean(canView || canEdit || canDelete || rowActions);
   const hasActiveFilters =
     Boolean(searchParam) || filterKeys.some((key) => Boolean(params.get(key))) || Boolean(sort);
+  const activeFilterCount = filterKeys.filter((key) => Boolean(params.get(key))).length;
 
   const resetAll = () => {
     const next = new URLSearchParams();
@@ -212,9 +214,9 @@ export default function ResourcePage({
 
       {header}
 
-      <Card>
-        <CardContent className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center">
-          <div className="relative flex-1">
+      <Card className={FILTER_CARD}>
+        <CardContent className={FILTER_ROW}>
+          <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchDraft}
@@ -235,16 +237,16 @@ export default function ResourcePage({
             )}
           </div>
 
-          {filters && (
-            <div className="flex flex-wrap items-center gap-2">
+          {filters ? (
+            <FilterPanel active={activeFilterCount} onReset={hasActiveFilters ? resetAll : undefined}>
               {filters({ values: filterValues, setParam, resetAll })}
-            </div>
-          )}
-
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={resetAll}>
-              Reset
-            </Button>
+            </FilterPanel>
+          ) : (
+            hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={resetAll}>
+                Reset
+              </Button>
+            )
           )}
         </CardContent>
       </Card>

@@ -405,13 +405,13 @@ function ResetPasswordDialog({ target, onClose }) {
 function StatCard({ label, value, icon: Icon, tone }) {
   return (
     <Card>
-      <CardContent className="flex items-center gap-3 py-4">
-        <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${tone}`}>
-          <Icon className="h-5 w-5" />
+      <CardContent className="flex items-center gap-2.5 p-3.5 sm:gap-3 sm:p-6 sm:py-4">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10 ${tone}`}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
         </span>
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-          <p className="text-xl font-semibold leading-tight">{value}</p>
+        <div className="min-w-0">
+          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">{label}</p>
+          <p className="text-lg font-semibold leading-tight sm:text-xl">{value}</p>
         </div>
       </CardContent>
     </Card>
@@ -445,7 +445,7 @@ export default function Users() {
   const stats = statsData || {};
 
   const header = (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
       <StatCard
         label="Total users"
         value={stats.total ?? '—'}

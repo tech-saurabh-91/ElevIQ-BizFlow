@@ -12,6 +12,7 @@ import {
   CalendarCheck,
   Navigation,
   Truck,
+  AlertTriangle,
 } from 'lucide-react';
 import { sellsVia } from '@/utils/salesType';
 import api from '@/api/client';
@@ -20,37 +21,54 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button } from '@/components/ui/button';
+import StatCard, { STAT_GRID } from '@/components/company/stat-card';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatMoney, formatNumber, formatDate } from '@/utils/format';
 
-function Kpi({ label, value, hint, icon: Icon, loading, tone = 'brand' }) {
-  const tones = {
-    brand: 'text-brand-600 dark:text-brand-300 bg-brand-500/12',
-    success: 'text-success bg-success/12',
-    warning: 'text-warning bg-warning/15',
-    muted: 'text-muted-foreground bg-muted',
-  };
+/** "Good morning" etc. by the device clock. */
+const greeting = () => {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+};
+
+/** Phone-only home header: greeting plus today's headline numbers. */
+function PhoneHero({ name, company, loading, today, todayHint, month, collections }) {
   return (
-    <Card>
-      <CardContent className="p-3.5 sm:p-5">
-        <div className="flex items-start justify-between gap-2">
-          <p className="min-w-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
-            {label}
-          </p>
-          <span className={`flex h-7 w-7 shrink-0 items-center sm:h-8 sm:w-8 justify-center rounded-lg ${tones[tone]}`}>
-            <Icon className="h-4 w-4" aria-hidden="true" />
-          </span>
-        </div>
+    <div className="relative mb-4 overflow-hidden rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-4 text-white shadow-lg sm:hidden">
+      <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/10" aria-hidden="true" />
+      <div className="pointer-events-none absolute -bottom-16 right-10 h-32 w-32 rounded-full bg-white/5" aria-hidden="true" />
+      <p className="relative text-xs text-white/75">
+        {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
+      </p>
+      <h1 className="relative mt-0.5 text-lg font-bold">
+        {greeting()}, {name} 👋
+      </h1>
+      <p className="relative truncate text-xs text-white/75">{company}</p>
+
+      <div className="relative mt-4">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-white/70">{today.label}</p>
         {loading ? (
-          <Skeleton className="mt-3 h-8 w-24" />
+          <Skeleton className="mt-1 h-8 w-36 bg-white/20" />
         ) : (
-          <p className="mt-2 text-lg font-bold leading-tight tracking-tight [overflow-wrap:anywhere] sm:text-2xl">{value}</p>
+          <p className="text-[28px] font-bold leading-tight tracking-tight tabular-nums">{today.value}</p>
         )}
-        {hint && !loading && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-      </CardContent>
-    </Card>
+        <p className="text-xs text-white/75">{todayHint}</p>
+      </div>
+
+      <div className="relative mt-4 grid grid-cols-2 divide-x divide-white/20 rounded-xl bg-white/10 py-2.5 backdrop-blur-sm">
+        {[month, collections].map((k) => (
+          <div key={k.label} className="min-w-0 px-3">
+            <p className="truncate text-[10px] font-medium uppercase tracking-wide text-white/70">{k.label}</p>
+            {loading ? (
+              <Skeleton className="mt-1 h-5 w-20 bg-white/20" />
+            ) : (
+              <p className="truncate text-sm font-semibold tabular-nums">{k.value}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -68,6 +86,7 @@ export default function WorkspaceHome() {
   });
 
   const summary = data || {};
+  const money = (v) => formatMoney(v ?? 0, company?.currency || 'INR');
   // A salesman's home is their own day: numbers are theirs, and every sale
   // starts from a shop check-in in Sales visit.
   const isSalesman = user?.role === 'SALESMAN';
@@ -123,7 +142,18 @@ export default function WorkspaceHome() {
 
   return (
     <div>
+      <PhoneHero
+        name={user?.name?.split(' ')[0] || ''}
+        company={company?.name}
+        loading={isLoading}
+        today={{ label: my('Sales today'), value: money(summary.salesToday) }}
+        todayHint={`${formatNumber(summary.ordersToday ?? 0)} orders booked today`}
+        month={{ label: my('Sales this month'), value: money(summary.salesMtd) }}
+        collections={{ label: my('Collections (MTD)'), value: money(summary.collectionsMtd) }}
+      />
+
       <PageHeader
+        className="hidden sm:block"
         title={`Welcome, ${user?.name?.split(' ')[0] || ''} 👋`}
         description={`Here’s what’s happening at ${company?.name || 'your workspace'} today.`}
         actions={
@@ -133,9 +163,27 @@ export default function WorkspaceHome() {
         }
       />
 
-      {/* ---- KPIs ---- */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <Kpi
+      {/* ---- KPIs (phones: the hero above carries sales + collections) ---- */}
+      <div className={STAT_GRID + ' sm:hidden'}>
+        <StatCard
+          icon={Users}
+          label={my('Outstanding')}
+          value={money(summary.outstanding)}
+          hint="To be collected"
+          loading={isLoading}
+          tone="muted"
+        />
+        <StatCard
+          icon={AlertTriangle}
+          label="Overdue invoices"
+          value={formatNumber(summary.overdueCount ?? 0)}
+          hint="Past their due date"
+          loading={isLoading}
+          tone="destructive"
+        />
+      </div>
+      <div className={STAT_GRID.replace('grid ', 'hidden sm:grid ')}>
+        <StatCard
           icon={ShoppingCart}
           label={my('Sales today')}
           value={formatMoney(summary.salesToday ?? 0, company?.currency || 'INR')}
@@ -143,7 +191,7 @@ export default function WorkspaceHome() {
           loading={isLoading}
           tone="brand"
         />
-        <Kpi
+        <StatCard
           icon={FileText}
           label={my('Sales this month')}
           value={formatMoney(summary.salesMtd ?? 0, company?.currency || 'INR')}
@@ -151,7 +199,7 @@ export default function WorkspaceHome() {
           loading={isLoading}
           tone="success"
         />
-        <Kpi
+        <StatCard
           icon={Wallet}
           label={my('Collections (MTD)')}
           value={formatMoney(summary.collectionsMtd ?? 0, company?.currency || 'INR')}
@@ -159,7 +207,7 @@ export default function WorkspaceHome() {
           loading={isLoading}
           tone="warning"
         />
-        <Kpi
+        <StatCard
           icon={Users}
           label={my('Outstanding')}
           value={formatMoney(summary.outstanding ?? 0, company?.currency || 'INR')}
@@ -172,11 +220,11 @@ export default function WorkspaceHome() {
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* ---- Quick actions ---- */}
         <Card className={showSetup ? 'lg:col-span-2' : 'lg:col-span-3'}>
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-3 max-sm:p-4 max-sm:pb-2">
             <CardTitle>Quick actions</CardTitle>
-            <CardDescription>Jump straight into your daily workflow</CardDescription>
+            <CardDescription className="hidden sm:block">Jump straight into your daily workflow</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="max-sm:px-2 max-sm:pb-3">
             {quickActions.length === 0 ? (
               <EmptyState
                 compact
@@ -184,18 +232,19 @@ export default function WorkspaceHome() {
                 description="Ask your administrator to update your permissions."
               />
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
+              // Phones: app-style icon tiles, four per row. Wider: a list of buttons.
+              <div className="grid grid-cols-4 gap-1 sm:grid-cols-2 sm:gap-3">
                 {quickActions.map((a) => (
                   <Link
                     key={a.to}
                     to={a.to}
-                    className="group flex items-center gap-3 rounded-lg border bg-card p-3.5 transition-colors hover:border-brand-500/50 hover:bg-brand-500/5 focus-ring"
+                    className="group flex flex-col items-center gap-1.5 rounded-xl p-2 text-center transition-colors active:bg-accent focus-ring sm:flex-row sm:gap-3 sm:rounded-lg sm:border sm:bg-card sm:p-3.5 sm:text-left sm:hover:border-brand-500/50 sm:hover:bg-brand-500/5"
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500/12 text-brand-600 dark:text-brand-300">
-                      <a.icon className="h-4 w-4" aria-hidden="true" />
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-500/12 text-brand-600 dark:text-brand-300 sm:h-9 sm:w-9 sm:rounded-lg">
+                      <a.icon className="h-5 w-5 sm:h-4 sm:w-4" aria-hidden="true" />
                     </span>
-                    <span className="flex-1 text-sm font-medium">{a.label}</span>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                    <span className="line-clamp-2 text-[11px] font-medium leading-tight sm:flex-1 sm:text-sm">{a.label}</span>
+                    <ArrowRight className="hidden h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 sm:block" />
                   </Link>
                 ))}
               </div>

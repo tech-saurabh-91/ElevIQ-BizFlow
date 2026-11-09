@@ -21,6 +21,7 @@ import {
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
+import { FilterPanel, FILTER_CARD, FILTER_ROW } from '@/components/ui/filter-panel';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
@@ -514,7 +515,7 @@ export default function Targets() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           icon={TargetIcon}
           label="Overall achievement"
@@ -549,9 +550,9 @@ export default function Targets() {
         />
       </div>
 
-      <Card>
-        <CardContent className="flex flex-col gap-3 py-4 xl:flex-row xl:items-center">
-          <div className="relative flex-1">
+      <Card className={FILTER_CARD}>
+        <CardContent className={FILTER_ROW}>
+          <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchDraft}
@@ -572,7 +573,10 @@ export default function Targets() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <FilterPanel
+            active={[periodType, status].filter(Boolean).length}
+            onReset={hasActiveFilters ? resetAll : undefined}
+          >
             <Select
               value={periodType}
               onChange={(e) => setParam({ periodType: e.target.value, page: 1 })}
@@ -598,13 +602,7 @@ export default function Targets() {
                 </option>
               ))}
             </Select>
-
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={resetAll}>
-                Reset
-              </Button>
-            )}
-          </div>
+          </FilterPanel>
         </CardContent>
       </Card>
 
