@@ -7,32 +7,20 @@ import { ChevronLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 /**
  * Sidebar navigation.
  * - Sections + items from the nav registry (already permission-filtered)
- * - Collapsible to icons on desktop, slide-over on mobile
+ * - Desktop only (lg and up), collapsible to icons; phones use BottomNav
  * - Brand block at the top always shows "ElevIQ SFA"
  */
 export default function Sidebar({ sections = [], footer, onNavigate, variant = 'company' }) {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggle = useUIStore((s) => s.toggleSidebar);
-  const mobileNavOpen = useUIStore((s) => s.mobileNavOpen);
-  const setMobileNav = useUIStore((s) => s.setMobileNav);
 
   const width = collapsed ? 'lg:w-[68px]' : 'lg:w-64';
 
   return (
     <>
-      {/* Mobile scrim */}
-      {mobileNavOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileNav(false)}
-          aria-hidden="true"
-        />
-      )}
-
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-card transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0',
-          mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
+          'sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r bg-card lg:flex',
           width
         )}
         aria-label="Main navigation"

@@ -109,7 +109,7 @@ function InstallSheet() {
   };
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-[60] p-3 sm:bottom-4 sm:left-auto sm:right-4 sm:max-w-sm" role="dialog" aria-label="Install the app">
+    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-[60] p-3 lg:bottom-4 sm:left-auto sm:right-4 sm:max-w-sm" role="dialog" aria-label="Install the app">
       <div className="rounded-xl border bg-popover p-4 text-popover-foreground shadow-2xl">
         <div className="flex items-start gap-3">
           <img src="/pwa-192x192.png" alt="" className="h-12 w-12 shrink-0 rounded-xl" />

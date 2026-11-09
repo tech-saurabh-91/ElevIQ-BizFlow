@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/api/client';
 import { InstallButton } from '@/components/shell/PwaPrompts';
-import { Bell, LogOut, Menu, Moon, Sun, UserRound, KeyRound, ChevronDown, Eye, LogIn } from 'lucide-react';
+import { Bell, LogOut, Moon, Sun, UserRound, KeyRound, ChevronDown, Eye, LogIn } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useUIStore } from '@/store/uiStore';
@@ -23,7 +23,7 @@ import { APP_NAME } from '@/utils/format';
  * While a platform admin is impersonating a tenant, a persistent amber banner
  * sits above the bar with a one-click "Exit workspace".
  */
-export default function Topbar({ onMenuClick }) {
+export default function Topbar() {
   const { user, company, scope, logout, impersonation, exitImpersonation } = useAuth();
   // Unread badge for workspace users (same key as the Notifications page, so
   // reading there clears it here).
@@ -74,16 +74,7 @@ export default function Topbar({ onMenuClick }) {
           </Button>
         </div>
       )}
-    <header className="sticky z-30 flex h-16 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70 sm:px-6" style={impersonation ? { top: 38 } : { top: 0 }}>
-      <button
-        type="button"
-        onClick={onMenuClick}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent focus-ring lg:hidden"
-        aria-label="Open navigation"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
+    <header className="sticky z-30 flex h-14 items-center gap-2 border-b bg-background/85 px-3 sm:h-16 sm:gap-3 sm:px-6 backdrop-blur supports-[backdrop-filter]:bg-background/70 sm:px-6" style={impersonation ? { top: 38 } : { top: 0 }}>
       {/* Identity: company + product */}
       <div className="min-w-0 flex-1">
         <WorkspaceBadge appName={appName} companyName={companyName} logo={company?.logo} />

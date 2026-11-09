@@ -151,6 +151,16 @@ export const companyNav = [
 ];
 
 /**
+ * Phone tab bar: after Home, the first three of these the user can open
+ * (everything else sits under "More").
+ */
+export const mobileTabs = (role) =>
+  role === 'SALESMAN'
+    ? ['/app/sales', '/app/attendance', '/app/orders', '/app/invoices', '/app/payments']
+    : ['/app/orders', '/app/invoices', '/app/customers', '/app/payments', '/app/reports'];
+export const platformMobileTabs = ['/platform/companies', '/platform/plans', '/platform/reports'];
+
+/**
  * Filter a nav tree by the current user's permissions.
  * Platform users see everything (platform guards are separate).
  */

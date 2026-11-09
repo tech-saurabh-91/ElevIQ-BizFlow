@@ -2,10 +2,10 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Suspense } from 'react';
 import Sidebar from '@/components/shell/Sidebar';
 import Topbar from '@/components/shell/Topbar';
+import BottomNav from '@/components/shell/BottomNav';
 import { LoadingState } from '@/components/ui/misc';
 import { useAuth } from '@/hooks/useAuth';
-import { platformNav } from '@/routes/navigation';
-import { useUIStore } from '@/store/uiStore';
+import { platformNav, platformMobileTabs } from '@/routes/navigation';
 
 /**
  * Platform (Service Provider) shell: /platform/*
@@ -13,8 +13,6 @@ import { useUIStore } from '@/store/uiStore';
  */
 export default function PlatformLayout() {
   const { user, logout, bootstrapping } = useAuth();
-  const setMobileNav = useUIStore((s) => s.setMobileNav);
-  const mobileNavOpen = useUIStore((s) => s.mobileNavOpen);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -31,7 +29,6 @@ export default function PlatformLayout() {
       <Sidebar
         sections={platformNav}
         variant="platform"
-        onNavigate={() => setMobileNav(false)}
         footer={
           <div className="px-2 py-1.5">
             <p className="truncate text-xs font-medium">{user?.name}</p>
@@ -42,9 +39,9 @@ export default function PlatformLayout() {
         }
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar onMenuClick={() => setMobileNav(!mobileNavOpen)} />
-        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <Topbar />
+        <main className="mx-auto w-full max-w-[1600px] flex-1 px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
           <Suspense fallback={<LoadingState />}>
             <Outlet key={location.pathname} />
           </Suspense>
@@ -53,6 +50,7 @@ export default function PlatformLayout() {
           ElevIQ SFA · Service Provider Console · v1.0.0
         </footer>
       </div>
+      <BottomNav sections={platformNav} primary={platformMobileTabs} homeTo="/platform" />
     </div>
   );
 }

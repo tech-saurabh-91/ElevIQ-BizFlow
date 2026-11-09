@@ -34,19 +34,19 @@ function Kpi({ label, value, hint, icon: Icon, loading, tone = 'brand' }) {
   };
   return (
     <Card>
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <CardContent className="p-3.5 sm:p-5">
+        <div className="flex items-start justify-between gap-2">
+          <p className="min-w-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">
             {label}
           </p>
-          <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${tones[tone]}`}>
+          <span className={`flex h-7 w-7 shrink-0 items-center sm:h-8 sm:w-8 justify-center rounded-lg ${tones[tone]}`}>
             <Icon className="h-4 w-4" aria-hidden="true" />
           </span>
         </div>
         {loading ? (
           <Skeleton className="mt-3 h-8 w-24" />
         ) : (
-          <p className="mt-2 text-2xl font-bold tracking-tight">{value}</p>
+          <p className="mt-2 text-lg font-bold leading-tight tracking-tight [overflow-wrap:anywhere] sm:text-2xl">{value}</p>
         )}
         {hint && !loading && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
       </CardContent>
@@ -134,7 +134,7 @@ export default function WorkspaceHome() {
       />
 
       {/* ---- KPIs ---- */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Kpi
           icon={ShoppingCart}
           label={my('Sales today')}
@@ -169,7 +169,7 @@ export default function WorkspaceHome() {
         />
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-3">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* ---- Quick actions ---- */}
         <Card className={showSetup ? 'lg:col-span-2' : 'lg:col-span-3'}>
           <CardHeader className="pb-3">
@@ -257,7 +257,7 @@ export default function WorkspaceHome() {
       </div>
 
       {/* ---- Recent activity / notices ---- */}
-      <div className={`mt-5 grid gap-5 ${isSalesman ? '' : 'lg:grid-cols-2'}`}>
+      <div className={`mt-5 grid grid-cols-1 gap-5 ${isSalesman ? '' : 'lg:grid-cols-2'}`}>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle>{isSalesman ? 'My recent orders' : 'Recent orders'}</CardTitle>
@@ -298,10 +298,13 @@ export default function WorkspaceHome() {
                         {o.customerName} · {formatDate(o.date)}
                       </p>
                     </div>
-                    <span className="font-semibold">
-                      {formatMoney(o.total, company?.currency || 'INR')}
-                    </span>
-                    <StatusBadge status={o.status} />
+                    {/* Phones: amount over status, so a long status never widens the page. */}
+                    <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
+                      <span className="font-semibold">
+                        {formatMoney(o.total, company?.currency || 'INR')}
+                      </span>
+                      <StatusBadge status={o.status} />
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -320,7 +323,7 @@ export default function WorkspaceHome() {
                 <Skeleton className="h-24 w-full" />
               ) : (
                 <>
-                  <div className="mb-3 flex gap-3">
+                  <div className="mb-3 flex flex-wrap gap-2">
                     <Badge tone="warning">
                       {formatNumber(summary.lowStockCount ?? 0)} low stock
                     </Badge>

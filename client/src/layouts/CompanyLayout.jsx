@@ -3,11 +3,11 @@ import { Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import Sidebar from '@/components/shell/Sidebar';
 import Topbar from '@/components/shell/Topbar';
+import BottomNav from '@/components/shell/BottomNav';
 import { LoadingState, Progress } from '@/components/ui/misc';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
-import { companyNav, filterNav } from '@/routes/navigation';
-import { useUIStore } from '@/store/uiStore';
+import { companyNav, filterNav, mobileTabs } from '@/routes/navigation';
 import { useCountries, findCountry } from '@/hooks/useLocations';
 import { setFormatDefaults } from '@/utils/format';
 import { FieldDayGate } from '@/components/company/FieldDay';
@@ -21,8 +21,6 @@ import { FieldDayGate } from '@/components/company/FieldDay';
 export default function CompanyLayout() {
   const { user, company, settings, logout, bootstrapping } = useAuth();
   const { can } = usePermissions();
-  const setMobileNav = useUIStore((s) => s.setMobileNav);
-  const mobileNavOpen = useUIStore((s) => s.mobileNavOpen);
   const location = useLocation();
   const { data: countries = [] } = useCountries();
   const countryCode = findCountry(countries, company?.country)?.code;
@@ -54,7 +52,6 @@ export default function CompanyLayout() {
       <Sidebar
         sections={sections}
         variant="company"
-        onNavigate={() => setMobileNav(false)}
         footer={
           <div className="space-y-2 px-1 py-1">
             <div className="flex items-center gap-2 px-1.5">
@@ -85,9 +82,9 @@ export default function CompanyLayout() {
         }
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar onMenuClick={() => setMobileNav(!mobileNavOpen)} />
-        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <Topbar />
+        <main className="mx-auto w-full max-w-[1600px] flex-1 px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
           <Suspense fallback={<LoadingState />}>
             <FieldDayGate pathname={location.pathname}>
               <Outlet key={location.pathname} />
@@ -99,6 +96,7 @@ export default function CompanyLayout() {
           v1.0.0
         </footer>
       </div>
+      <BottomNav sections={sections} primary={mobileTabs(user?.role)} homeTo="/app" />
     </div>
   );
 }
