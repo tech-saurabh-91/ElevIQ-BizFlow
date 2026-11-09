@@ -58,8 +58,11 @@ export default function CompanyLogin() {
     if (res.ok) {
       const name = res.data?.company?.name || 'your workspace';
       toast.success(`Welcome back to ${name}`);
+      // Back to the page that asked for sign-in - except the change-password
+      // screen: right after changing it there, that would show it again. If a
+      // change is still required, the route guard sends the user there anyway.
       const from = location.state?.from || '/app';
-      navigate(from, { replace: true });
+      navigate(from.startsWith('/app/change-password') ? '/app' : from, { replace: true });
     } else {
       if (res.error?.errors?.length) {
         Object.entries(toFieldErrors(res.error.errors)).forEach(([f, m]) => setError(f, { message: m }));

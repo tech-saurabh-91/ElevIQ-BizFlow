@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import env from '../config/env.js';
 import tenantPlugin from './plugins/tenantPlugin.js';
+import Counter from './Counter.js';
 import { COMPANY_ROLES, COMPANY_ROLE_LIST, SALES_TYPES } from '../config/constants.js';
 
 /**
@@ -114,6 +115,30 @@ userSchema.pre('validate', function (next) {
     this.loginId = (this.email || this.phone).toLowerCase();
   }
   next();
+});
+
+// Employee code is issued by the system, never typed: EMP-0001, EMP-0002 ...
+// per company. A user saved without one (new, or created before codes were
+// automatic) gets the next free code; codes already in use are skipped.
+userSchema.pre('save', async function (next) {
+  if (this.employeeCode || !this.companyId) return next();
+  try {
+    const key = `${this.companyId}:EMPLOYEE`;
+    for (;;) {
+      const seq = await Counter.next(key);
+      const code = `EMP-${String(seq).padStart(4, '0')}`;
+      const taken = await this.constructor
+        .exists({ companyId: this.companyId, employeeCode: code, _id: { $ne: this._id } })
+        .skipTenant();
+      if (!taken) {
+        this.employeeCode = code;
+        break;
+      }
+    }
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 });
 
 userSchema.pre('save', async function (next) {

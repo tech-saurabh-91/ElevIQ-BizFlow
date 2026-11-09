@@ -167,6 +167,25 @@ describe('Phase 2 - Company provisioning', () => {
     expect(data.branding.company).toBe('Alpha Logistics Pvt Ltd');
   });
 
+  test('after changing the first password, the next sign-in does not ask again', async () => {
+    const login = await request.post('/api/auth/login').send(alphaAdmin);
+    const token = login.body.data.accessToken;
+    const newPassword = 'Fresh#Pass456';
+    const changed = await request
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword: alphaAdmin.password, newPassword });
+    expect(changed.status).toBe(200);
+
+    const again = await request.post('/api/auth/login').send({ ...alphaAdmin, password: newPassword });
+    expect(again.status).toBe(200);
+    expect(again.body.data.user.mustChangePassword).toBe(false);
+    const me = await request.get('/api/v1/auth/me').set('Authorization', `Bearer ${again.body.data.accessToken}`);
+    expect(me.body.data.user.mustChangePassword).toBe(false);
+
+    alphaAdmin.password = newPassword; // later tests sign in with it
+  });
+
   test('rejects duplicate company code, slug and admin email', async () => {
     const token = await asSuper();
 

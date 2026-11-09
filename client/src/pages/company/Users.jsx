@@ -67,14 +67,12 @@ const schema = z
     salesType: z.enum(['PRESALE', 'VAN_SALE', 'BOTH']),
     password: z.string().optional().or(z.literal('')),
     title: text(80),
-    employeeCode: text(30),
     designation: text(80),
     territory: text(80),
     reportingManager: text(40),
     warehouse: text(40),
     routes: z.array(z.string()),
     isActive: z.boolean(),
-    mustChangePassword: z.boolean(),
   })
   .refine((v) => Boolean(v.email) || Boolean(v.phone), {
     message: 'Enter an email or a phone number',
@@ -93,14 +91,12 @@ const toDefaults = (initial) => ({
   salesType: initial?.salesType || 'PRESALE',
   password: '',
   title: initial?.title || '',
-  employeeCode: initial?.employeeCode || '',
   designation: initial?.designation || '',
   territory: initial?.territory || '',
   reportingManager: initial?.reportingManager?.id || initial?.reportingManager || '',
   warehouse: initial?.warehouse?.id || initial?.warehouse || '',
   routes: (initial?.routes || []).map((r) => r.id || r._id || r),
   isActive: initial?.isActive ?? true,
-  mustChangePassword: initial?.mustChangePassword ?? false,
 });
 
 function UserForm({ mode, initial, onClose, onSaved }) {
@@ -127,14 +123,12 @@ function UserForm({ mode, initial, onClose, onSaved }) {
       role: values.role,
       salesType: values.salesType,
       title: values.title,
-      employeeCode: values.employeeCode,
       designation: values.designation,
       territory: values.territory,
       reportingManager: opt(values.reportingManager),
       warehouse: opt(values.warehouse),
       routes: values.routes,
       isActive: values.isActive,
-      mustChangePassword: values.mustChangePassword,
     };
     if (mode === 'create' && values.password) payload.password = values.password;
 
@@ -212,8 +206,11 @@ function UserForm({ mode, initial, onClose, onSaved }) {
         <Field label="Designation" error={errors.designation?.message}>
           <Input {...register('designation')} placeholder="Territory Sales Officer" />
         </Field>
-        <Field label="Employee code" error={errors.employeeCode?.message}>
-          <Input {...register('employeeCode')} placeholder="EMP-014" />
+        <Field
+          label="Employee code"
+          hint={mode === 'create' ? 'Given automatically when the user is created.' : 'Set by the system; it cannot be changed.'}
+        >
+          <Input value={mode === 'create' ? 'Auto (EMP-…)' : initial?.employeeCode || '—'} readOnly disabled />
         </Field>
         <Field label="Job title" error={errors.title?.message}>
           <Input {...register('title')} placeholder="Key accounts" />
@@ -225,7 +222,7 @@ function UserForm({ mode, initial, onClose, onSaved }) {
           <Field
             label="Initial password"
             error={errors.password?.message}
-            hint={`Leave blank to generate a temporary password automatically. ${PASSWORD_MESSAGE}`}
+            hint={`Leave blank to generate a temporary password automatically. The user sets their own password at first sign-in. ${PASSWORD_MESSAGE}`}
             className="sm:col-span-2"
           >
             <Input
@@ -305,11 +302,6 @@ function UserForm({ mode, initial, onClose, onSaved }) {
           description="Deactivating a user revokes their sessions immediately."
           {...register('isActive')}
         />
-        <Checkbox
-          label="Require password change at next sign-in"
-          description="The user must set a new password on their next sign-in."
-          {...register('mustChangePassword')}
-        />
       </FormSection>
 
       <FormActions
@@ -325,7 +317,6 @@ const resetSchema = z
   .object({
     newPassword: z.string().refine(strongPassword, PASSWORD_MESSAGE),
     confirmPassword: z.string(),
-    mustChangePassword: z.boolean(),
   })
   .refine((v) => v.newPassword === v.confirmPassword, {
     message: 'Passwords do not match',
@@ -341,7 +332,7 @@ function ResetPasswordDialog({ target, onClose }) {
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(resetSchema),
-    defaultValues: { newPassword: '', confirmPassword: '', mustChangePassword: true },
+    defaultValues: { newPassword: '', confirmPassword: '' },
   });
 
   const onSubmit = async (values) => {
@@ -349,7 +340,6 @@ function ResetPasswordDialog({ target, onClose }) {
     try {
       await api.post(`/v1/users/${target.id}/reset-password`, {
         newPassword: values.newPassword,
-        mustChangePassword: values.mustChangePassword,
       });
       toast.success(`Password reset for ${target.name}`);
       queryClient.invalidateQueries({ queryKey: ['company', 'users'] });
@@ -384,11 +374,9 @@ function ResetPasswordDialog({ target, onClose }) {
             autoComplete="new-password"
           />
         </Field>
-        <Checkbox
-          label="Require change at next sign-in"
-          description="Recommended when sharing the password over chat or email."
-          {...register('mustChangePassword')}
-        />
+        <p className="text-xs text-muted-foreground">
+          The user will be asked to set their own password at their next sign-in.
+        </p>
         <div className="flex justify-end gap-2 border-t pt-4">
           <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancel

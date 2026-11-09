@@ -356,7 +356,6 @@ export const userCreateSchema = z
     role: z.enum(COMPANY_ROLE_LIST),
     salesType: z.enum(SALES_TYPES).optional(),
     title: softString(80),
-    employeeCode: softString(30),
     designation: softString(80),
     territory: softString(80),
     reportingManager: refId,
@@ -364,7 +363,6 @@ export const userCreateSchema = z
     routes: z.array(objectIdSchema).max(50).optional(),
     warehouse: refId,
     isActive: z.boolean().optional(),
-    mustChangePassword: z.boolean().optional(),
   })
   .refine((v) => Boolean(v.email) || Boolean(v.phone), {
     message: 'Email or phone is required',
@@ -383,7 +381,6 @@ export const userUpdateSchema = z.object({
   role: z.enum(COMPANY_ROLE_LIST).optional(),
   salesType: z.enum(SALES_TYPES).optional(),
   title: softString(80),
-  employeeCode: softString(30),
   designation: softString(80),
   territory: softString(80),
   reportingManager: refId,
@@ -391,7 +388,6 @@ export const userUpdateSchema = z.object({
   routes: z.array(objectIdSchema).max(50).optional(),
   warehouse: refId,
   isActive: z.boolean().optional(),
-  mustChangePassword: z.boolean().optional(),
 });
 
 export const userListQuerySchema = paginationSchema.extend({
@@ -404,7 +400,6 @@ export const userListQuerySchema = paginationSchema.extend({
 
 export const userResetPasswordSchema = z.object({
   newPassword: PASSWORD_RULES,
-  mustChangePassword: z.boolean().optional(),
 });
 
 // ---------------------------------------------------------------------------

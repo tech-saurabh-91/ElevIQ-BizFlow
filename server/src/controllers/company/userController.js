@@ -161,8 +161,10 @@ export const create = asyncHandler(async (req, res) => {
   if (!payload.password) {
     temporaryPassword = generatePassword();
     payload.password = temporaryPassword;
-    payload.mustChangePassword = true;
   }
+  // Whoever set it, the admin shares this password: the user replaces it on
+  // first sign-in, and is not asked again after that.
+  payload.mustChangePassword = true;
 
   const doc = await User.create(payload);
 
@@ -260,7 +262,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
   const doc = await loadDoc(User, req.params.id, { label: 'User' });
 
   doc.password = req.body.newPassword;
-  doc.mustChangePassword = req.body.mustChangePassword ?? true;
+  doc.mustChangePassword = true; // an admin-set password is replaced on next sign-in
   await doc.save();
 
   await revokeSessions(req, doc._id, 'PASSWORD_RESET');

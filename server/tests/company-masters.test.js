@@ -661,6 +661,39 @@ describe('Phase 3 - Users & teams', () => {
     expect(manager.body.data.teamMembers.some((m) => m.id === state.fieldRepId)).toBe(true);
   });
 
+  test('employee code is issued by the system and cannot be set or changed', async () => {
+    const created = await request
+      .post('/api/v1/users')
+      .set(as(state.adminToken))
+      .send({
+        name: 'Code Check',
+        email: 'codecheck@phase3.test',
+        role: 'SALESMAN',
+        password: 'Code#Check123',
+        employeeCode: 'MY-OWN-1',
+        mustChangePassword: false,
+      });
+    expect(created.status).toBe(201);
+    expect(created.body.data.employeeCode).toMatch(/^EMP-\d{4}$/);
+    expect(created.body.data.employeeCode).not.toBe('MY-OWN-1');
+
+    const fieldRep = await request.get(`/api/v1/users/${state.fieldRepId}`).set(as(state.adminToken));
+    expect(fieldRep.body.data.employeeCode).toMatch(/^EMP-\d{4}$/);
+    expect(fieldRep.body.data.employeeCode).not.toBe(created.body.data.employeeCode);
+
+    const patched = await request
+      .patch(`/api/v1/users/${created.body.data.id}`)
+      .set(as(state.adminToken))
+      .send({ employeeCode: 'CHANGED-9', title: 'Rep' });
+    expect(patched.status).toBe(200);
+    expect(patched.body.data.employeeCode).toBe(created.body.data.employeeCode);
+
+    // Even with a password chosen by the admin, the user sets their own on first sign-in.
+    const User = (await import('../src/models/User.js')).default;
+    const doc = await User.findById(created.body.data.id).skipTenant().lean();
+    expect(doc.mustChangePassword).toBe(true);
+  });
+
   test('new user can sign in with the temporary password', async () => {
     const token = await login('fieldrep@phase3.test', state.fieldRepPassword);
     expect(token).toBeTruthy();
