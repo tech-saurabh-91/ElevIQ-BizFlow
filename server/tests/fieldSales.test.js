@@ -92,19 +92,16 @@ describe('Van stock request', () => {
     expect(chips).toMatchObject({ requestedQty: 20, approvedQty: 15 });
     expect(await stockOf(state.admin, state.chips)).toBe(85); // left the godown (in transit)
 
-    // Short receipt needs a note; the shortfall goes back to the godown.
-    const noNote = await call(state.sam).post(`/api/v1/stock-requests/${id}/receive`, { items: [{ product: state.soda, qty: 8 }] });
-    expect(noNote.status).toBe(400);
+    // The van takes exactly what was issued; a different quantity sent is ignored.
     const got = await call(state.sam).post(`/api/v1/stock-requests/${id}/receive`, {
       items: [{ product: state.soda, qty: 8 }],
-      notes: '2 bottles broken in loading',
     });
     expect(got.status).toBe(200);
     expect(got.body.data.status).toBe('RECEIVED');
     const vanStock = (await call(state.sam).get(`/api/v1/vans/${state.van}/stock`)).body.data;
     expect(vanStock.find((r) => r.product === state.chips).qty).toBe(15);
-    expect(vanStock.find((r) => r.product === state.soda).qty).toBe(8);
-    expect(await stockOf(state.admin, state.soda)).toBe(100); // 92 in godown + 8 on van
+    expect(vanStock.find((r) => r.product === state.soda).qty).toBe(10);
+    expect(await stockOf(state.admin, state.soda)).toBe(100); // 90 in godown + 10 on van
   });
 });
 

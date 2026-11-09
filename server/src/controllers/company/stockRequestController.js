@@ -189,11 +189,12 @@ export const receive = asyncHandler(async (req, res) => {
   const doc = await loadRequest(req);
   if (String(doc.executive) !== String(req.user.id)) throw new ForbiddenError('Only the requesting executive can receive it', 'FORBIDDEN');
   if (doc.status !== S.APPROVED) throw new ConflictError('Only an approved request can be received', 'REQUEST_LOCKED');
-  const received = new Map((req.body.items || []).map((i) => [String(i.product), Number(i.qty)]));
-  const short = doc.items.filter((i) => i.approvedQty > 0 && received.has(String(i.product)) && received.get(String(i.product)) < i.approvedQty);
-  if (short.length && !String(req.body.notes || '').trim()) {
-    throw new BadRequestError('Explain why less was received', 'VALIDATION_ERROR');
-  }
+  // The van takes exactly what was approved and issued - the executive only
+  // confirms it; quantities sent by the client are ignored. Damage found later
+  // is booked as a stock adjustment.
+  const received = new Map(
+    doc.items.filter((i) => i.approvedQty > 0).map((i) => [String(i.product), Number(i.approvedQty)])
+  );
   const transfer = await StockTransfer.findOne({ _id: doc.transfer });
   if (!transfer) throw new NotFoundError('Issue transfer not found');
   const settings = await Setting.forCompany(req.companyId);

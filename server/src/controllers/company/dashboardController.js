@@ -23,6 +23,8 @@ export const summary = asyncHandler(async (req, res) => {
   const own = user.role === 'SALESMAN';
   const me = own ? new mongoose.Types.ObjectId(String(user.id)) : null;
   const bySalesman = own ? { salesman: me } : {};
+  // Invoices a salesman raised count as theirs too (van billing of another rep's order).
+  const byInvoiceOwner = own ? { $and: [{ $or: [{ salesman: me }, { createdBy: me }] }] } : {};
   const byCollector = own ? { collectedBy: me } : {};
 
   const base = {
@@ -170,7 +172,7 @@ export const summary = asyncHandler(async (req, res) => {
             $match: {
               companyId: tenantId,
               isDeleted: { $ne: true },
-              ...bySalesman,
+              ...byInvoiceOwner,
               invoiceDate: { $gte: startOfMonth },
               status: { $nin: ['DRAFT', 'CANCELLED'] },
             },
@@ -182,14 +184,14 @@ export const summary = asyncHandler(async (req, res) => {
             $match: {
               companyId: tenantId,
               isDeleted: { $ne: true },
-              ...bySalesman,
+              ...byInvoiceOwner,
               status: { $nin: ['DRAFT', 'CANCELLED'] },
             },
           },
           { $group: { _id: null, total: { $sum: '$balanceDue' } } },
         ]),
         Invoice.countDocuments({
-          ...bySalesman,
+          ...byInvoiceOwner,
           status: { $in: ['OVERDUE', 'PARTIALLY_PAID'] },
           balanceDue: { $gt: 0 },
         }),

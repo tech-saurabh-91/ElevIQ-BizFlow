@@ -597,6 +597,22 @@ describe('Phase 5 - invoicing a sales order', () => {
     expect(missingCustomer.status).toBe(422);
   });
 
+  test('an order with a draft invoice cannot get a second invoice', async () => {
+    const order = await createOrder({ customerId: state.customerId, items: [item('ALPHA', 1)], submit: true });
+    expect(order.status).toBe(201);
+    const draft = await createInvoice({ orderId: order.body.data.id });
+    expect(draft.status).toBe(201);
+
+    const second = await createInvoice({ orderId: order.body.data.id, issue: true });
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe('INVOICE_DRAFT_EXISTS');
+    expect(second.body.message).toContain(draft.body.data.invoiceNo);
+
+    // Issuing the draft itself still works.
+    const issued = await request.post(`/api/v1/invoices/${draft.body.data.id}/issue`).set(as(state.adminToken)).send({});
+    expect(issued.status).toBe(200);
+  });
+
   test('returns invoice form options with remaining order quantity', async () => {
     const res = await request
       .get(`/api/v1/invoices/form-options?orderId=${state.orderId}`)
@@ -904,11 +920,23 @@ describe('Phase 5 - permissions and data scope', () => {
     const salesman = await request.get('/api/v1/invoices?limit=50').set(as(state.salesmanToken));
     expect(salesman.status).toBe(200);
     expect(salesman.body.meta.total).toBeLessThanOrEqual(adminTotal);
+    const mine = String(state.salesman._id);
     expect(
-      salesman.body.data.every((inv) =>
-        String(inv.salesman?._id || inv.salesman) === String(state.salesman._id)
+      salesman.body.data.every(
+        (inv) =>
+          String(inv.salesman?._id || inv.salesman) === mine || String(inv.createdBy?._id || inv.createdBy) === mine
       )
     ).toBe(true);
+
+    // An invoice the salesman raised for another rep's order is theirs to see too.
+    const raised = await createInvoice({ customerId: state.outsiderCustomerId, items: [item('ALPHA', 1)] });
+    expect(raised.status).toBe(201);
+    await inTenant(state.companyId, () =>
+      mongoose.model('Invoice').updateOne({ _id: raised.body.data.id }, { $set: { createdBy: state.salesman._id } })
+    );
+    const withRaised = await request.get('/api/v1/invoices?limit=50').set(as(state.salesmanToken));
+    expect(withRaised.body.data.some((inv) => inv.id === raised.body.data.id)).toBe(true);
+    await inTenant(state.companyId, () => mongoose.model('Invoice').deleteOne({ _id: raised.body.data.id }).hardDelete());
 
     const outsider = await request.get('/api/v1/invoices?limit=50').set(as(state.outsiderToken));
     expect(outsider.status).toBe(200);

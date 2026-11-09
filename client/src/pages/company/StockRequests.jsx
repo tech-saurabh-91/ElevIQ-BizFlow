@@ -113,10 +113,8 @@ function RequestDialog({ request, canApprove, myId, onClose }) {
       if (kind === 'reject') await api.post(`/v1/stock-requests/${request.id}/reject`, { reason });
       if (kind === 'cancel') await api.post(`/v1/stock-requests/${request.id}/cancel`, {});
       if (kind === 'receive') {
-        await api.post(`/v1/stock-requests/${request.id}/receive`, {
-          items: lines.map((l) => ({ product: l.product, qty: Number(l.qty || 0) })),
-          notes,
-        });
+        // The van takes exactly what was issued; nothing to edit here.
+        await api.post(`/v1/stock-requests/${request.id}/receive`, {});
       }
       toast.success({ create: 'Request sent', approve: 'Approved and issued', reject: 'Rejected', cancel: 'Cancelled', receive: 'Van stock updated' }[kind]);
       queryClient.invalidateQueries({ queryKey: ['company', 'stock-requests'] });
@@ -177,23 +175,22 @@ function RequestDialog({ request, canApprove, myId, onClose }) {
           <LineEditor lines={lines} setLines={setLines} products={products} label={creating ? 'Qty' : 'Approve'} />
         ) : receiving ? (
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Count what reached the van. Anything less goes back to the godown.</p>
-            {lines.map((l, i) => {
-              const item = request.items.find((x) => x.product === l.product);
-              return (
-                <div key={l.product} className="grid grid-cols-[minmax(0,1fr)_7rem] items-center gap-2 text-sm">
-                  <span>
-                    {item.name} <span className="text-muted-foreground">· issued {formatNumber(item.approvedQty)} {item.unit}</span>
-                  </span>
-                  <Input
-                    inputMode="decimal"
-                    value={l.qty}
-                    onChange={(e) => setLines((all) => all.map((x, j) => (j === i ? { ...x, qty: e.target.value.replace(/[^\d.]/g, '') } : x)))}
-                    aria-label={`Received ${item.name}`}
-                  />
-                </div>
-              );
-            })}
+            <p className="text-sm text-muted-foreground">
+              This stock was issued to your van. Confirm to add it to van stock - the quantities cannot be changed.
+            </p>
+            <ul className="divide-y rounded-lg border text-sm">
+              {lines.map((l) => {
+                const item = request.items.find((x) => x.product === l.product);
+                return (
+                  <li key={l.product} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <span className="min-w-0 [overflow-wrap:anywhere]">{item.name}</span>
+                    <span className="shrink-0 font-medium tabular-nums">
+                      {formatNumber(item.approvedQty)} {item.unit}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
@@ -222,8 +219,8 @@ function RequestDialog({ request, canApprove, myId, onClose }) {
           </div>
         )}
 
-        {(creating || editing || receiving) && (
-          <Field label={receiving ? 'Notes (required if less was received)' : creating ? 'Notes' : 'Note to the executive'}>
+        {(creating || editing) && (
+          <Field label={creating ? 'Notes' : 'Note to the executive'}>
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
           </Field>
         )}

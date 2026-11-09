@@ -87,23 +87,29 @@ const INVOICEABLE_ORDER_STATUSES = ['CONFIRMED', 'PARTIALLY_INVOICED', 'DISPATCH
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * A salesman sees the invoices credited to them AND the ones they raised
+ * themselves - a van salesman billing another rep's order at the shop is the
+ * order's salesman on paper, but the invoice is still theirs to see. A manager
+ * sees the same for their team. Wrapped in $and so a search / order $or can
+ * sit next to it.
+ */
+const ownInvoices = (ids) => ({
+  $and: [{ $or: [{ salesman: { $in: ids } }, { createdBy: { $in: ids } }] }],
+});
+
 const scopeFilter = (req) => {
   const role = req.user?.role;
-  if (role === 'SALESMAN') return { salesman: req.user.id };
-  if (role === 'MANAGER') {
-    const ids = [req.user.id, ...(req.dataScope?.teamIds || [])];
-    return { salesman: { $in: ids } };
-  }
+  if (role === 'SALESMAN') return ownInvoices([req.user.id]);
+  if (role === 'MANAGER') return ownInvoices([req.user.id, ...(req.dataScope?.teamIds || [])]);
   return {};
 };
 
 const aggregateScope = (req) => {
   const role = req.user?.role;
-  const oid = (id) => new mongoose.Types.ObjectId(id);
-  if (role === 'SALESMAN') return { salesman: oid(req.user.id) };
-  if (role === 'MANAGER') {
-    return { salesman: { $in: [req.user.id, ...(req.dataScope?.teamIds || [])].map(oid) } };
-  }
+  const oid = (id) => new mongoose.Types.ObjectId(String(id));
+  if (role === 'SALESMAN') return ownInvoices([oid(req.user.id)]);
+  if (role === 'MANAGER') return ownInvoices([req.user.id, ...(req.dataScope?.teamIds || [])].map(oid));
   return {};
 };
 
@@ -586,6 +592,20 @@ export const create = asyncHandler(async (req, res) => {
   let billed = [];
   const orderIds = orderIdsOf(payload);
   if (orderIds.length) {
+    // One open draft per order: a second invoice would bill the same goods
+    // again (drafts do not count as billed until they are issued).
+    const draft = await Invoice.findOne({
+      $or: [{ order: { $in: orderIds } }, { orders: { $in: orderIds } }],
+      status: INVOICE_STATUS.DRAFT,
+    })
+      .select('invoiceNo orderNo')
+      .lean();
+    if (draft) {
+      throw new AppError(
+        `Draft invoice ${draft.invoiceNo || ''} already exists for this order. Open it to issue it, or delete it first.`,
+        { status: 409, code: 'INVOICE_DRAFT_EXISTS', details: { id: String(draft._id), invoiceNo: draft.invoiceNo } }
+      );
+    }
     const orders = await loadOrdersForInvoice(orderIds);
     order = orders[0];
     customer = await getCustomer(order.customerId);
