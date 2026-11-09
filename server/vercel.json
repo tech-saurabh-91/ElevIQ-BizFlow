@@ -1,4 +1,5 @@
 {
+  "regions": ["bom1"],
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
   "crons": [
     { "path": "/api/cron?job=subscription-expiry", "schedule": "30 19 * * *" },

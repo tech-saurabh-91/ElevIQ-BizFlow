@@ -163,6 +163,7 @@ orderSchema.index({ companyId: 1, customerId: 1 });
 orderSchema.index({ companyId: 1, status: 1, orderDate: -1 });
 orderSchema.index({ companyId: 1, salesman: 1, status: 1 });
 orderSchema.index({ companyId: 1, orderDate: -1 });
+orderSchema.index({ companyId: 1, createdAt: -1 }); // dashboard: today / this month, recent orders
 
 /** Recompute derived counters before validation. */
 orderSchema.pre('validate', function syncCounters(next) {

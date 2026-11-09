@@ -15,7 +15,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { sellsVia } from '@/utils/salesType';
-import api from '@/api/client';
+import { DASHBOARD_KEY, fetchDashboardSummary } from '@/api/dashboard';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge, StatusBadge } from '@/components/ui/badge';
@@ -77,11 +77,8 @@ export default function WorkspaceHome() {
   const { can } = usePermissions();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['company', 'dashboard'],
-    queryFn: async () => {
-      const { data } = await api.get('/v1/dashboard/summary');
-      return data?.data;
-    },
+    queryKey: DASHBOARD_KEY,
+    queryFn: fetchDashboardSummary,
     retry: 1,
   });
 

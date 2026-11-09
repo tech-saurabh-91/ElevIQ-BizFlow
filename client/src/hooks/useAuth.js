@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
 import api, { apiError, refreshSession } from '@/api/client';
+import { DASHBOARD_KEY, fetchDashboardSummary } from '@/api/dashboard';
+
+// Several components mount useAuth() at once; they share one /auth/me call.
+let meInFlight = null;
 
 /**
  * Authentication hook.
@@ -13,6 +18,7 @@ import api, { apiError, refreshSession } from '@/api/client';
  */
 export const useAuth = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const store = useAuthStore();
   const [bootstrapping, setBootstrapping] = useState(!store.hydrated);
   const [error, setError] = useState(null);
@@ -36,8 +42,12 @@ export const useAuth = () => {
         user: payload.user,
         company: payload.company,
       });
-      // Load permissions + settings for the workspace.
+      // Load permissions + settings for the workspace. Opening on the home
+      // screen, fetch its numbers at the same time instead of after.
       if (payload.scope === 'company') {
+        if (/^\/app\/?$/.test(window.location.pathname)) {
+          queryClient.prefetchQuery({ queryKey: DASHBOARD_KEY, queryFn: fetchDashboardSummary });
+        }
         await loadCompanyContext();
       }
     } catch {
@@ -49,7 +59,10 @@ export const useAuth = () => {
 
   const loadCompanyContext = useCallback(async () => {
     try {
-      const { data } = await api.get('/v1/auth/me');
+      meInFlight ??= api.get('/v1/auth/me').finally(() => {
+        meInFlight = null;
+      });
+      const { data } = await meInFlight;
       const me = data?.data?.user || null;
       const state = useAuthStore.getState();
       useAuthStore.setState({

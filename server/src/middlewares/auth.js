@@ -91,9 +91,17 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
   const companyId = decoded.companyId;
   if (!companyId) throw new UnauthorizedError('Invalid token payload', 'TOKEN_INVALID');
 
-  const user = await User.findOne({ _id: decoded.sub, companyId })
-    .select('+refreshTokens')
-    .lean();
+  // One round trip instead of four: user, session, company and settings are
+  // independent lookups, so fetch them together and check them in order below.
+  const [user, session, company, savedSettings] = await Promise.all([
+    User.findOne({ _id: decoded.sub, companyId }).select('+refreshTokens').lean(),
+    decoded.sid ? Session.findOne({ jti: decoded.sid }).lean() : null,
+    Company.findById(companyId).lean(),
+    Setting.findOne({ companyId }).catch((e) => {
+      logger.warn(`Failed to load settings for company ${companyId}: ${e.message}`);
+      return null;
+    }),
+  ]);
   if (!user || user.isDeleted) throw new UnauthorizedError('Session invalid', 'TOKEN_INVALID');
   if (!user.isActive) throw new ForbiddenError('Your account has been deactivated', 'FORBIDDEN');
   if (user.isLocked?.()) {
@@ -104,11 +112,8 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
   }
 
   // Session revocation check (logout-all / revoked refresh).
-  if (decoded.sid) {
-    const session = await Session.findOne({ jti: decoded.sid }).lean();
-    if (session && session.revokedAt) {
-      throw new UnauthorizedError('Session has been revoked', 'REFRESH_REUSE');
-    }
+  if (session && session.revokedAt) {
+    throw new UnauthorizedError('Session has been revoked', 'REFRESH_REUSE');
   }
 
   // Password changed after token issued -> force re-auth.
@@ -120,7 +125,6 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
   }
 
   // ---- Company status gate (SUSPENDED / EXPIRED / CANCELLED) ------------
-  const company = await Company.findById(companyId).lean();
   if (!company || company.isDeleted) {
     throw new ForbiddenError('Company not found', 'NOT_FOUND');
   }
@@ -155,12 +159,15 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
     });
   }
 
-  // Load tenant settings once so RBAC/feature checks are cheap downstream.
-  let settings = null;
-  try {
-    settings = await Setting.forCompany(companyId);
-  } catch (e) {
-    logger.warn(`Failed to load settings for company ${companyId}: ${e.message}`);
+  // Tenant settings (loaded above) so RBAC/feature checks are cheap downstream;
+  // a company without a settings doc yet gets one created (rare, first use).
+  let settings = savedSettings;
+  if (!settings) {
+    try {
+      settings = await Setting.forCompany(companyId);
+    } catch (e) {
+      logger.warn(`Failed to load settings for company ${companyId}: ${e.message}`);
+    }
   }
 
   // Maintenance window: only company admins keep working.

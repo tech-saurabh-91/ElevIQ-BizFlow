@@ -28,11 +28,21 @@ export const readyRouter = Router();
 readyRouter.get('/', async (_req, res) => {
   const dbState = mongoose.connection.readyState; // 0=disconnected 1=connected 2=connecting 3=disconnecting
   const ready = dbState === 1;
+  // Round trip to the database from this server: shows whether the function
+  // region sits next to the database (a few ms) or across the world (100+ ms).
+  let dbPingMs = null;
+  if (ready) {
+    const t = Date.now();
+    await mongoose.connection.db.admin().ping().catch(() => null);
+    dbPingMs = Date.now() - t;
+  }
   res.status(ready ? 200 : 503).json({
     success: ready,
     message: ready ? 'Ready' : 'Database not ready',
     data: {
       db: ['disconnected', 'connected', 'connecting', 'disconnecting'][dbState],
+      dbPingMs,
+      region: process.env.VERCEL_REGION || null,
       timestamp: new Date().toISOString(),
     },
   });
