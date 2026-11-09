@@ -1,9 +1,18 @@
 import * as React from 'react';
 import { cn } from '@/utils/cn';
 
-export const Table = React.forwardRef(({ className, ...props }, ref) => (
+/**
+ * `cards`: on phones every row becomes a card (see .table-cards in index.css).
+ * Cells carry `data-label` (shown as the field name) and the row menu cell
+ * `data-actions` (pinned top-right); the first cell is the card's title.
+ */
+export const Table = React.forwardRef(({ className, cards = false, ...props }, ref) => (
   <div className="relative w-full overflow-auto">
-    <table ref={ref} className={cn('w-full caption-bottom border-collapse text-sm', className)} {...props} />
+    <table
+      ref={ref}
+      className={cn('w-full caption-bottom border-collapse text-sm', cards && 'table-cards', className)}
+      {...props}
+    />
   </div>
 ));
 Table.displayName = 'Table';

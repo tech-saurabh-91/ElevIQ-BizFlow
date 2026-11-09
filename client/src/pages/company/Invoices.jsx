@@ -445,7 +445,7 @@ export default function Invoices() {
         </Card>
       ) : (
         <Card className={isFetching ? 'opacity-80 transition-opacity' : 'transition-opacity'}>
-          <Table>
+          <Table cards>
             <TableHeader>
               <TableRow>
                 {columns.map((col) => (
@@ -482,11 +482,15 @@ export default function Invoices() {
                 return (
                   <TableRow key={row.id}>
                     {columns.map((col) => (
-                      <TableCell key={col.key} className={col.className}>
+                      <TableCell
+                        key={col.key}
+                        className={col.className}
+                        data-label={typeof col.header === 'string' ? col.header : undefined}
+                      >
                         {col.render ? col.render(row) : row[col.key] ?? '—'}
                       </TableCell>
                     ))}
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" data-actions>
                       <DropdownMenu
                         align="end"
                         width="w-56"
