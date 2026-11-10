@@ -2,49 +2,98 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
+  AlertTriangle,
   Bell,
-  BellOff,
+  BellRing,
   CheckCheck,
-  ExternalLink,
-  Inbox,
+  CheckCircle2,
+  ChevronRight,
+  CreditCard,
+  FileWarning,
+  Info,
+  Megaphone,
+  MoreVertical,
+  PackageX,
+  Receipt,
   RefreshCw,
+  ShieldCheck,
   Trash2,
+  Trophy,
+  Truck,
+  Wallet,
+  XCircle,
 } from 'lucide-react';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
-import { Badge } from '@/components/ui/badge';
+import { DropdownMenu, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { cn } from '@/utils/cn';
-import { formatDateTime, timeAgo, titleCase } from '@/utils/format';
+import { formatDateTime, timeAgo } from '@/utils/format';
 
 /**
- * Phase 8 - Notification inbox.
- *
- * Shows every notification addressed to the signed-in user plus company-wide
- * broadcasts. Clicking one marks it read and follows its deep link; unread
- * items are visually emphasised and counted in the header.
+ * Notification inbox: every notification addressed to the signed-in user plus
+ * company-wide broadcasts, grouped by day. Tapping one marks it read and
+ * follows its link; read / delete sit in each row's menu.
  */
 
-const TYPE_TONE = {
-  OVERDUE_INVOICE: 'warning',
-  LOW_STOCK: 'destructive',
-  APPROVAL_REQUIRED: 'info',
-  ORDER_REJECTED: 'destructive',
-  ORDER_APPROVED: 'success',
-  PAYMENT_RECEIVED: 'success',
-  EXPENSE_APPROVED: 'success',
-  TARGET_ACHIEVED: 'success',
-  CREDIT_LIMIT: 'warning',
-  ANNOUNCEMENT: 'info',
-  SYSTEM: 'muted',
+// Icon + colour per type. Classes are written out in full for Tailwind.
+const KIND = {
+  APPROVAL_REQUIRED: { icon: ShieldCheck, label: 'Approval', tint: 'bg-blue-500/12 text-blue-600 dark:text-blue-400' },
+  ORDER_APPROVED: { icon: CheckCircle2, label: 'Order', tint: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400' },
+  ORDER_REJECTED: { icon: XCircle, label: 'Order', tint: 'bg-red-500/12 text-red-600 dark:text-red-400' },
+  OVERDUE_INVOICE: { icon: FileWarning, label: 'Overdue', tint: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+  PAYMENT_RECEIVED: { icon: Wallet, label: 'Payment', tint: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400' },
+  LOW_STOCK: { icon: PackageX, label: 'Stock', tint: 'bg-red-500/12 text-red-600 dark:text-red-400' },
+  STOCK_REQUEST: { icon: Truck, label: 'Van stock', tint: 'bg-indigo-500/12 text-indigo-600 dark:text-indigo-400' },
+  EXPENSE_APPROVED: { icon: Receipt, label: 'Expense', tint: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400' },
+  EXPENSE_REJECTED: { icon: Receipt, label: 'Expense', tint: 'bg-red-500/12 text-red-600 dark:text-red-400' },
+  LEAVE_REQUEST: { icon: Bell, label: 'Leave', tint: 'bg-sky-500/12 text-sky-600 dark:text-sky-400' },
+  TARGET_ACHIEVED: { icon: Trophy, label: 'Target', tint: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400' },
+  CREDIT_LIMIT: { icon: CreditCard, label: 'Credit', tint: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+  ANNOUNCEMENT: { icon: Megaphone, label: 'Announcement', tint: 'bg-violet-500/12 text-violet-600 dark:text-violet-400' },
+  SYSTEM: { icon: Info, label: 'System', tint: 'bg-muted text-muted-foreground' },
+};
+const kindOf = (type) => KIND[type] || KIND.SYSTEM;
+
+const FILTERS = [
+  { value: '', label: 'All types' },
+  { value: 'APPROVAL_REQUIRED', label: 'Approvals' },
+  { value: 'ORDER_APPROVED', label: 'Orders' },
+  { value: 'OVERDUE_INVOICE', label: 'Overdue' },
+  { value: 'PAYMENT_RECEIVED', label: 'Payments' },
+  { value: 'LOW_STOCK', label: 'Low stock' },
+  { value: 'STOCK_REQUEST', label: 'Van stock' },
+  { value: 'EXPENSE_APPROVED', label: 'Expenses' },
+  { value: 'ANNOUNCEMENT', label: 'Announcements' },
+  { value: 'SYSTEM', label: 'System' },
+];
+
+/** "Today", "Yesterday", "Earlier this week", else the month. */
+const dayGroup = (value) => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return 'Earlier';
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const days = Math.floor((start.getTime() - new Date(d).setHours(0, 0, 0, 0)) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return 'Earlier this week';
+  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 };
 
-const PRIORITY_TONE = { HIGH: 'destructive', NORMAL: 'muted', LOW: 'muted' };
+const groupByDay = (rows) => {
+  const groups = [];
+  rows.forEach((n) => {
+    const label = dayGroup(n.createdAt);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(n);
+    else groups.push({ label, items: [n] });
+  });
+  return groups;
+};
 
 export default function Notifications() {
   const [params, setParams] = useSearchParams();
@@ -81,9 +130,7 @@ export default function Notifications() {
     refetchInterval: 60_000,
   });
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['company', 'notifications'] });
-  };
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['company', 'notifications'] });
 
   const markRead = useMutation({
     mutationFn: (id) => api.patch(`/v1/notifications/${id}/read`),
@@ -94,7 +141,7 @@ export default function Notifications() {
   const markAll = useMutation({
     mutationFn: () => api.post('/v1/notifications/read-all'),
     onSuccess: () => {
-      toast.success('All notifications marked read');
+      toast.success('All caught up');
       invalidate();
     },
     onError: (err) => toast.error(apiError(err).message),
@@ -112,36 +159,42 @@ export default function Notifications() {
   const rows = data?.data || [];
   const meta = data?.meta || {};
   const unread = unreadData?.unread ?? meta.unread ?? 0;
+  const filtered = unreadOnly || Boolean(type);
 
-  /** Mark read (if needed) then follow the deep link. */
+  /** Mark read (if needed) then follow the link. */
   const openItem = (n) => {
     if (!n.isRead) markRead.mutate(n.id);
     if (n.link) navigate(n.link);
   };
 
-  const isLoadingAll = isLoading || isFetching;
-
   return (
-    <div className="space-y-5">
+    <div className="mx-auto max-w-3xl space-y-4">
       <PageHeader
-        title="Notifications"
-        description="Approvals, overdue invoices, stock alerts and announcements for your workspace."
+        title={
+          <span className="inline-flex items-center gap-2">
+            Notifications
+            {unread > 0 && (
+              <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground tabular-nums">
+                {unread} new
+              </span>
+            )}
+          </span>
+        }
+        description="Approvals, overdue invoices, stock alerts and announcements."
         breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Notifications' }]}
         actions={
           <>
             <Button
               variant="outline"
+              size="icon"
               onClick={() => refetch()}
               disabled={isFetching}
               aria-label="Refresh notifications"
+              title="Refresh"
             >
               <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
-              Refresh
             </Button>
-            <Button
-              onClick={() => markAll.mutate()}
-              disabled={unread === 0 || markAll.isPending}
-            >
+            <Button onClick={() => markAll.mutate()} disabled={unread === 0 || markAll.isPending}>
               <CheckCheck className="h-4 w-4" />
               Mark all read
             </Button>
@@ -149,70 +202,53 @@ export default function Notifications() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Unread
-            </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums">{unread}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              On this page
-            </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums">{rows.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Total
-            </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums">{meta.total ?? rows.length}</p>
-          </CardContent>
-        </Card>
+      {/* All / Unread, then the type chips (a swipeable row on phones). */}
+      <div className="space-y-3">
+        <div className="inline-flex rounded-xl bg-muted p-1" role="tablist" aria-label="Show">
+          {[
+            { on: false, label: 'All' },
+            { on: true, label: 'Unread', count: unread },
+          ].map((t) => (
+            <button
+              key={t.label}
+              type="button"
+              role="tab"
+              aria-selected={unreadOnly === t.on}
+              onClick={() => setParam({ unreadOnly: t.on ? 'true' : '', page: 1 })}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors focus-ring',
+                unreadOnly === t.on ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {t.label}
+              {t.count > 0 && (
+                <span className="rounded-full bg-primary/15 px-1.5 text-[11px] font-semibold text-primary tabular-nums">
+                  {t.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="no-scrollbar -mx-3 flex gap-2 overflow-x-auto px-3 sm:mx-0 sm:flex-wrap sm:px-0">
+          {FILTERS.map((f) => (
+            <button
+              key={f.value || 'all'}
+              type="button"
+              onClick={() => setParam({ type: f.value, page: 1 })}
+              aria-pressed={type === f.value}
+              className={cn(
+                'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-ring',
+                type === f.value
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground'
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
-
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 py-4">
-          <Button
-            size="sm"
-            variant={!unreadOnly ? 'secondary' : 'ghost'}
-            onClick={() => setParam({ unreadOnly: '', page: 1 })}
-          >
-            <Inbox className="h-4 w-4" />
-            All
-          </Button>
-          <Button
-            size="sm"
-            variant={unreadOnly ? 'secondary' : 'ghost'}
-            onClick={() => setParam({ unreadOnly: 'true', page: 1 })}
-          >
-            <Bell className="h-4 w-4" />
-            Unread only
-          </Button>
-
-          <Select
-            value={type}
-            onChange={(e) => setParam({ type: e.target.value, page: 1 })}
-            className="w-52"
-            aria-label="Filter by type"
-          >
-            <option value="">All types</option>
-            <option value="APPROVAL_REQUIRED">Approvals</option>
-            <option value="OVERDUE_INVOICE">Overdue invoices</option>
-            <option value="LOW_STOCK">Low stock</option>
-            <option value="PAYMENT_RECEIVED">Payments</option>
-            <option value="ORDER_APPROVED">Orders</option>
-            <option value="EXPENSE_APPROVED">Expenses</option>
-            <option value="ANNOUNCEMENT">Announcements</option>
-            <option value="SYSTEM">System</option>
-          </Select>
-        </CardContent>
-      </Card>
 
       {isError ? (
         <EmptyState
@@ -226,118 +262,56 @@ export default function Notifications() {
             </Button>
           }
         />
-      ) : isLoadingAll && rows.length === 0 ? (
-        <div className="space-y-3">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-lg bg-muted" />
+      ) : isLoading && rows.length === 0 ? (
+        <div className="overflow-hidden rounded-xl border bg-card">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex gap-3 border-b p-4 last:border-0">
+              <div className="skeleton h-10 w-10 shrink-0 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <div className="skeleton h-4 w-2/3" />
+                <div className="skeleton h-3 w-full" />
+              </div>
+            </div>
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <EmptyState
-          icon="empty"
-          title={unreadOnly ? 'You are all caught up' : 'No notifications yet'}
-          description={
-            unreadOnly
-              ? 'There are no unread notifications left.'
-              : 'Approvals, alerts and announcements will show up here.'
-          }
-          action={
-            unreadOnly || type ? (
-              <Button variant="outline" onClick={() => setParams(new URLSearchParams(), { replace: true })}>
-                Clear filters
-              </Button>
-            ) : null
-          }
-        />
+        <div className="flex flex-col items-center rounded-xl border bg-card px-6 py-14 text-center">
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+            {unreadOnly ? <CheckCheck className="h-7 w-7" /> : <BellRing className="h-7 w-7" />}
+          </span>
+          <h2 className="mt-4 text-base font-semibold">{unreadOnly ? 'You are all caught up' : 'No notifications yet'}</h2>
+          <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+            {unreadOnly
+              ? 'There is nothing new. We will let you know when something needs you.'
+              : 'Approvals, alerts and announcements will show up here.'}
+          </p>
+          {filtered && (
+            <Button variant="outline" className="mt-4" onClick={() => setParams(new URLSearchParams(), { replace: true })}>
+              Show everything
+            </Button>
+          )}
+        </div>
       ) : (
-        <ul className="divide-y divide-border rounded-lg border bg-card">
-          {rows.map((n) => (
-            <li
-              key={n.id}
-              className={cn(
-                'flex gap-3 p-4 transition-colors hover:bg-accent/40',
-                !n.isRead && 'bg-primary/[0.04]'
-              )}
-            >
-              <span
-                className={cn(
-                  'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-                  n.isRead ? 'bg-muted text-muted-foreground' : 'bg-primary/12 text-primary'
-                )}
-                aria-hidden="true"
-              >
-                <Bell className="h-4 w-4" />
-              </span>
-
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openItem(n)}
-                    className={cn(
-                      'truncate text-left text-sm font-semibold hover:underline focus-ring rounded',
-                      !n.isRead && 'text-foreground'
-                    )}
-                  >
-                    {n.title}
-                  </button>
-                  {!n.isRead && (
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />
-                  )}
-                  <Badge tone={TYPE_TONE[n.type] || 'muted'}>{titleCase(n.type)}</Badge>
-                  {n.priority === 'HIGH' && (
-                    <Badge tone={PRIORITY_TONE[n.priority]}>{n.priority}</Badge>
-                  )}
-                </div>
-
-                {n.body && (
-                  <p className="mt-1 text-sm text-muted-foreground">{n.body}</p>
-                )}
-
-                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  <time dateTime={n.createdAt} title={formatDateTime(n.createdAt)}>
-                    {timeAgo(n.createdAt)}
-                  </time>
-                  {n.broadcast && <Badge tone="outline">Company-wide</Badge>}
-                  {n.link && (
-                    <button
-                      type="button"
-                      onClick={() => openItem(n)}
-                      className="inline-flex items-center gap-1 text-primary hover:underline focus-ring rounded"
-                    >
-                      Open
-                      <ExternalLink className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex shrink-0 items-start gap-1">
-                {!n.isRead && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => markRead.mutate(n.id)}
-                    aria-label="Mark as read"
-                    title="Mark as read"
-                  >
-                    <BellOff className="h-4 w-4" />
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => remove.mutate(n.id)}
-                  aria-label="Delete notification"
-                  title="Delete"
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </li>
+        <div className={cn('space-y-5 transition-opacity', isFetching && 'opacity-70')}>
+          {groupByDay(rows).map((group) => (
+            <section key={group.label} aria-label={group.label}>
+              <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {group.label}
+              </h2>
+              <ul className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                {group.items.map((n) => (
+                  <NotificationRow
+                    key={n.id}
+                    n={n}
+                    onOpen={() => openItem(n)}
+                    onRead={() => markRead.mutate(n.id)}
+                    onDelete={() => remove.mutate(n.id)}
+                  />
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
       {(meta.pages || 0) > 1 && (
@@ -345,8 +319,117 @@ export default function Notifications() {
           meta={meta}
           onPageChange={(p) => setParam({ page: p })}
           onLimitChange={(l) => setParam({ limit: l, page: 1 })}
+          className="rounded-xl border bg-card"
         />
       )}
     </div>
+  );
+}
+
+function NotificationRow({ n, onOpen, onRead, onDelete }) {
+  const kind = kindOf(n.type);
+  const Icon = kind.icon;
+  const high = n.priority === 'HIGH';
+
+  return (
+    <li
+      className={cn(
+        'group relative flex gap-3 border-b px-3 py-3.5 transition-colors last:border-0 hover:bg-accent/40 sm:px-4',
+        !n.isRead && 'bg-primary/[0.035]'
+      )}
+    >
+      {/* Unread marker on the left edge. */}
+      {!n.isRead && <span className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-primary" aria-hidden="true" />}
+
+      <span
+        className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-full', kind.tint)}
+        aria-hidden="true"
+      >
+        <Icon className="h-[18px] w-[18px]" />
+      </span>
+
+      {/* The whole text block opens the notification. */}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="min-w-0 flex-1 rounded-md text-left focus-ring"
+        aria-label={`${n.isRead ? '' : 'Unread: '}${n.title}`}
+      >
+        <div className="flex items-start gap-2">
+          <p
+            className={cn(
+              'min-w-0 flex-1 text-sm leading-snug [overflow-wrap:anywhere]',
+              n.isRead ? 'font-medium text-foreground/80' : 'font-semibold text-foreground'
+            )}
+          >
+            {n.title}
+          </p>
+          <time
+            dateTime={n.createdAt}
+            title={formatDateTime(n.createdAt)}
+            className={cn(
+              'hidden shrink-0 pt-0.5 text-[11px] tabular-nums sm:block',
+              n.isRead ? 'text-muted-foreground' : 'font-medium text-primary'
+            )}
+          >
+            {timeAgo(n.createdAt)}
+          </time>
+        </div>
+        {n.body && <p className="mt-0.5 line-clamp-2 text-[13px] text-muted-foreground">{n.body}</p>}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          {/* Phones: the time sits here so the title keeps the full width. */}
+          <span className={cn('tabular-nums sm:hidden', !n.isRead && 'font-medium text-primary')}>{timeAgo(n.createdAt)} ·</span>
+          <span className="font-medium">{kind.label}</span>
+          {high && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-red-500/12 px-1.5 py-0.5 font-semibold text-red-600 dark:text-red-400">
+              <AlertTriangle className="h-3 w-3" /> Urgent
+            </span>
+          )}
+          {n.broadcast && <span className="rounded-full border px-1.5 py-0.5">Company-wide</span>}
+          {n.link && (
+            <span className="ml-auto inline-flex items-center gap-0.5 font-medium text-primary">
+              Open <ChevronRight className="h-3 w-3" />
+            </span>
+          )}
+        </div>
+      </button>
+
+      <div className="-mr-1 shrink-0 self-start">
+        <DropdownMenu
+          align="end"
+          width="w-48"
+          trigger={
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+              <MoreVertical className="h-4 w-4" />
+              <span className="sr-only">Actions for {n.title}</span>
+            </span>
+          }
+        >
+          {({ close }) => (
+            <>
+              {!n.isRead && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    close();
+                    onRead();
+                  }}
+                >
+                  <CheckCheck className="h-4 w-4" /> Mark as read
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => {
+                  close();
+                  onDelete();
+                }}
+              >
+                <Trash2 className="h-4 w-4" /> Delete
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenu>
+      </div>
+    </li>
   );
 }
