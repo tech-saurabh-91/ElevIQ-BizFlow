@@ -4,7 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw, Save, ShieldCheck } from 'lucide-react';
+import { Building2, FileText, Globe2, RotateCcw, Save, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { SectionCards, SectionBar } from '@/components/ui/section-cards';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
@@ -12,7 +14,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { ErrorAlert } from '@/components/ui/alert';
@@ -84,11 +85,11 @@ const SERIES_FIELDS = [
 ];
 
 const TABS = [
-  { value: 'profile', label: 'Business profile' },
-  { value: 'localisation', label: 'Localisation & numbering' },
-  { value: 'documents', label: 'Tax & documents' },
-  { value: 'operations', label: 'Operations' },
-  { value: 'permissions', label: 'Permissions', icon: ShieldCheck },
+  { value: 'profile', label: 'Business profile', icon: Building2, description: 'Name, logo, address, GSTIN and bank details' },
+  { value: 'localisation', label: 'Localisation & numbering', icon: Globe2, description: 'Currency, timezone, financial year and document numbers' },
+  { value: 'documents', label: 'Tax & documents', icon: FileText, description: 'GST, invoice terms, rounding and printing' },
+  { value: 'operations', label: 'Operations', icon: SlidersHorizontal, description: 'Orders, stock, pricing, field force and collections' },
+  { value: 'permissions', label: 'Permissions', icon: ShieldCheck, description: 'What each role can see and do' },
 ];
 
 const str = (max = 500) => z.string().trim().max(max).optional().or(z.literal(''));
@@ -1023,6 +1024,9 @@ const MODULE_LABELS = {
   audit: 'Audit trail',
 };
 const AREA_LABELS = {
+  register: 'Register reports',
+  mis: 'MIS reports',
+  listing: 'Listing reports',
   cost: 'Cost & margin',
   adjustments: 'Stock adjustments',
   transfers: 'Stock transfers',
@@ -1272,7 +1276,10 @@ function ComingSoon({ title, text, className }) {
 
 export default function CompanySettings() {
   const { can } = usePermissions();
-  const [tab, setTab] = useState('profile');
+  // Sections as cards; the open one is kept in the URL.
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('section') || '';
+  const setTab = (value) => setParams(value ? { section: value } : {}, { replace: true });
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['company', 'settings'],
@@ -1311,8 +1318,12 @@ export default function CompanySettings() {
         </Card>
       ) : (
         <>
-          <Tabs items={TABS} value={tab} onChange={setTab} />
-          <div hidden={tab === 'permissions'}>
+          {tab ? (
+            <SectionBar backLabel="All settings" onBack={() => setTab('')} item={TABS.find((t) => t.value === tab)} />
+          ) : (
+            <SectionCards items={TABS} onPick={setTab} />
+          )}
+          <div hidden={!tab || tab === 'permissions'}>
             <SettingsForm data={data} canUpdate={canUpdate} tab={tab} />
           </div>
           {tab === 'permissions' && <PermissionsEditor data={data} canUpdate={canUpdate} />}

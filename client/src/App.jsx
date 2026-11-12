@@ -81,6 +81,8 @@ const Expenses = lazy(() => import('@/pages/company/Expenses'));
 
 // ---- Phase 8: reports + notifications -------------------------------------
 const Reports = lazy(() => import('@/pages/company/Reports'));
+const ReportsHub = lazy(() => import('@/pages/company/ReportsHub'));
+const ReportViewer = lazy(() => import('@/pages/company/ReportViewer'));
 const Notifications = lazy(() => import('@/pages/company/Notifications'));
 
 // ---- guards ---------------------------------------------------------------
@@ -278,10 +280,10 @@ export default function App() {
           <Route path="expenses" element={guard('fieldforce.expenses.view', <Expenses />)} />
 
           {/* Insights */}
-          <Route
-            path="reports"
-            element={guard('reports.view', <Reports />)}
-          />
+          {/* Reports hub (cards) -> one report; the old tabbed charts are the analytics dashboards. */}
+          <Route path="reports" element={<ReportsHub />} />
+          <Route path="reports/analytics" element={guard('reports.view', <Reports />)} />
+          <Route path="reports/:code" element={<ReportViewer />} />
           <Route path="inventory" element={guard('inventory.view', <Inventory />)} />
 
           {/* Admin */}

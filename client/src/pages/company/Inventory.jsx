@@ -15,7 +15,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Badge, StatusBadge } from '@/components/ui/badge';
-import { Tabs, TabPanel } from '@/components/ui/tabs';
+import { TabPanel } from '@/components/ui/tabs';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -46,14 +46,15 @@ import {
 } from '@/components/company/inventory-shared';
 import BulkImport from '@/components/company/BulkImport';
 import { todayInput } from '@/components/company/form-utils';
+import { SectionCards, SectionBar } from '@/components/ui/section-cards';
 
 const TABS = [
-  { value: 'stock', label: 'Stock on hand', icon: Boxes },
-  { value: 'movements', label: 'Movements', icon: Layers },
-  { value: 'adjustments', label: 'Adjustments', icon: ClipboardList },
-  { value: 'transfers', label: 'Transfers', icon: Truck },
-  { value: 'purchases', label: 'Purchase orders', icon: ShoppingCart },
-  { value: 'receipts', label: 'Goods receipts', icon: PackagePlus },
+  { value: 'stock', label: 'Stock on hand', icon: Boxes, description: 'What each warehouse and van holds right now' },
+  { value: 'movements', label: 'Movements', icon: Layers, description: 'Every stock in and out, with cost' },
+  { value: 'adjustments', label: 'Adjustments', icon: ClipboardList, description: 'Counts, damages, corrections and opening stock' },
+  { value: 'transfers', label: 'Transfers', icon: Truck, description: 'Move stock between warehouses and vans' },
+  { value: 'purchases', label: 'Purchase orders', icon: ShoppingCart, description: 'What you have ordered from suppliers' },
+  { value: 'receipts', label: 'Goods receipts', icon: PackagePlus, description: 'Goods received into stock (GRN)' },
 ];
 
 const money = (value, currency) => formatMoney(value, currency, undefined, { decimals: 0 });
@@ -2338,11 +2339,12 @@ export default function Inventory() {
   const [params, setParams] = useSearchParams();
   const { company } = useAuth();
 
-  // The tab lives in the URL so a refresh (or deep link) keeps the user put.
-  const tab = params.get('tab') || 'stock';
+  // The section lives in the URL so a refresh (or deep link) keeps the user
+  // put; without one the page shows its sections as cards.
+  const tab = params.get('tab') || '';
   const setTab = (value) => {
     const next = new URLSearchParams(params);
-    if (value === 'stock') next.delete('tab');
+    if (!value) next.delete('tab');
     else next.set('tab', value);
     // Reset paging whenever the tab changes.
     next.delete('page');
@@ -2373,6 +2375,7 @@ export default function Inventory() {
       />
       <OpeningStockImport open={openingOpen} onClose={() => setOpeningOpen(false)} />
 
+      {!tab && (
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           icon={Warehouse}
@@ -2410,7 +2413,13 @@ export default function Inventory() {
         />
       </div>
 
-      <Tabs items={TABS} value={tab} onChange={setTab} />
+      )}
+
+      {tab ? (
+        <SectionBar backLabel="All inventory" onBack={() => setTab('')} item={TABS.find((t) => t.value === tab)} />
+      ) : (
+        <SectionCards items={TABS} onPick={setTab} />
+      )}
 
       <TabPanel value="stock" active={tab}>
         <StockTab />

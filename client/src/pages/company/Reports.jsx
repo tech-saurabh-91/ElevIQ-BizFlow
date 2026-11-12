@@ -703,9 +703,9 @@ export default function Reports() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Reports"
-        description="Sales, receivables, collections, inventory and field-force analytics in one place."
-        breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Reports' }]}
+        title="Dashboards"
+        description="Sales, receivables, collections, inventory and field-force charts."
+        breadcrumbs={[{ label: 'Reports', to: '/app/reports' }, { label: 'Dashboards' }]}
         actions={
           <>
             {can('reports.export') && (

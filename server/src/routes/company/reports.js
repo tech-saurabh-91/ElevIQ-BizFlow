@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as ctrl from '../../controllers/company/reportController.js';
+import * as hub from '../../controllers/company/reportHubController.js';
 import { validate } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
 import {
@@ -19,6 +20,13 @@ import {
  * when the client omits dateFrom/dateTo.
  */
 const router = Router();
+
+// Reports hub (Register / MIS / Listing). Each report also checks its own
+// permissions and the business mode in the registry.
+const ANY_REPORT_GROUP = ['reports.register.view', 'reports.mis.view', 'reports.listing.view'];
+router.get('/hub/catalog', authorize(...ANY_REPORT_GROUP), hub.catalog);
+router.get('/hub/run/:code', authorize(...ANY_REPORT_GROUP), hub.run);
+router.get('/hub/run/:code/export', authorize(...ANY_REPORT_GROUP), hub.exportXlsx);
 
 router.get('/overview', authorize('reports.view'), validate({ query: reportOverviewQuerySchema }), ctrl.overview);
 router.get('/sales', authorize('reports.view'), validate({ query: reportWindowQuerySchema }), ctrl.sales);

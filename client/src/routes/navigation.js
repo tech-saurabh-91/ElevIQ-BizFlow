@@ -155,7 +155,7 @@ export const companyNav = [
   {
     section: 'Insights',
     items: [
-      { to: '/app/reports', label: 'Reports', icon: BarChart3, permission: 'reports.view' },
+      { to: '/app/reports', label: 'Reports', icon: BarChart3, anyPermission: ['reports.view', 'reports.register.view', 'reports.mis.view', 'reports.listing.view'] },
       { to: '/app/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.view', stock: true },
     ],
   },
@@ -197,6 +197,7 @@ export const filterNav = (sections, { can, scope, role, user, salesOnly = false 
         if (item.stock && salesOnly) return false;
         if (role === 'COMPANY_ADMIN') return true;
         if (item.alsoPermission && typeof can === 'function' && !can(item.alsoPermission)) return false;
+        if (item.anyPermission) return typeof can === 'function' ? item.anyPermission.some((p) => can(p)) : true;
         if (role === 'SALESMAN' && item.salesmanPermission && typeof can === 'function' && !can(item.salesmanPermission)) return false;
         if (!item.permission) return true;
         return typeof can === 'function' ? can(item.permission) : true;

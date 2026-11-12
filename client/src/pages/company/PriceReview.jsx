@@ -118,7 +118,7 @@ export default function PriceReview() {
           ) : (
             <>
               No default markup set -{' '}
-              <Link to="/app/settings" className="inline-flex items-center gap-1 text-primary hover:underline">
+              <Link to="/app/settings?section=operations" className="inline-flex items-center gap-1 text-primary hover:underline">
                 <Settings className="h-3.5 w-3.5" /> set one
               </Link>{' '}
               to get suggested prices.
