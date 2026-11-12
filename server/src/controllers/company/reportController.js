@@ -1,3 +1,4 @@
+import { tzOf } from '../../utils/companyTime.js';
 import dayjs from 'dayjs';
 import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
@@ -26,16 +27,16 @@ const toOid = (id) => {
 };
 
 /** Build the shared window + knobs from a validated query. */
-const windowFrom = (query) => reportService.resolveWindow(query);
+const windowFrom = (query, req) => reportService.resolveWindow(query, { tz: tzOf(req) });
 
 export const overview = asyncHandler(async (req, res) => {
-  const window = windowFrom(req.query);
+  const window = windowFrom(req.query, req);
   const data = await reportService.overviewReport({ companyId: req.companyId, window });
   return success(res, { data });
 });
 
 export const sales = asyncHandler(async (req, res) => {
-  const window = windowFrom(req.query);
+  const window = windowFrom(req.query, req);
   const scope = {};
   const salesman = req.user?.role === 'SALESMAN' ? req.user.id : req.query.salesman;
   const salesmanOid = salesman ? toOid(salesman) : null;
@@ -54,6 +55,7 @@ export const sales = asyncHandler(async (req, res) => {
 export const receivables = asyncHandler(async (req, res) => {
   const data = await reportService.receivablesReport({
     companyId: req.companyId,
+    tz: tzOf(req),
     buckets: Number(req.query.buckets || 30),
     top: Number(req.query.top || 10),
     customerId: req.query.customerId || null,
@@ -62,7 +64,7 @@ export const receivables = asyncHandler(async (req, res) => {
 });
 
 export const collections = asyncHandler(async (req, res) => {
-  const window = windowFrom(req.query);
+  const window = windowFrom(req.query, req);
   const scope = {};
   const collector = req.user?.role === 'SALESMAN' ? req.user.id : req.query.salesman;
   const collectorOid = collector ? toOid(collector) : null;
@@ -79,7 +81,7 @@ export const collections = asyncHandler(async (req, res) => {
 });
 
 export const inventory = asyncHandler(async (req, res) => {
-  const window = windowFrom(req.query);
+  const window = windowFrom(req.query, req);
   const data = await reportService.inventoryReport({
     companyId: req.companyId,
     window,
@@ -91,7 +93,7 @@ export const inventory = asyncHandler(async (req, res) => {
 });
 
 export const fieldForce = asyncHandler(async (req, res) => {
-  const window = windowFrom(req.query);
+  const window = windowFrom(req.query, req);
   const salesman = req.user?.role === 'SALESMAN' ? req.user.id : req.query.salesman || null;
   const data = await reportService.fieldForceReport({
     companyId: req.companyId,
@@ -114,7 +116,7 @@ const styleSheet = (sheet) => {
 
 export const exportXlsx = asyncHandler(async (req, res) => {
   const type = req.query.type;
-  const window = windowFrom(req.query);
+  const window = windowFrom(req.query, req);
   const scope = req.user?.role === 'SALESMAN' ? { salesman: toOid(req.user.id) } : {};
 
   const workbook = new ExcelJS.Workbook();
@@ -143,7 +145,7 @@ export const exportXlsx = asyncHandler(async (req, res) => {
   } else if (type === 'receivables') {
     label = 'Receivables';
     const r = await reportService.receivablesReport({
-      companyId: req.companyId, buckets: Number(req.query.buckets || 30), top: 100,
+      companyId: req.companyId, buckets: Number(req.query.buckets || 30), top: 100, tz: tzOf(req),
     });
     sheet = workbook.addWorksheet('Open invoices', { views: [{ state: 'frozen', ySplit: 1 }] });
     sheet.columns = [

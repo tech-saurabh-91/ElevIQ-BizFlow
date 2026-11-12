@@ -16,6 +16,7 @@ import Target from '../models/Target.js';
 
 import { INVOICE_STATUS, PAYMENT_STATUS } from '../config/constants.js';
 import { withAvgCost } from './inventoryService.js';
+import { startOfDay, dayKey, DEFAULT_TZ } from './fieldForceService.js';
 
 /**
  * Phase 8 - Report aggregations.
@@ -38,23 +39,28 @@ const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
  * Resolve the client's dateFrom/dateTo into an inclusive [from, to] pair.
  * Trend reports default to the last 30 days when no window is supplied.
  */
-export const resolveWindow = (query = {}, { defaultDays = 30 } = {}) => {
-  const { dateFrom, dateTo } = query;
-  let from = dateFrom && !Number.isNaN(Date.parse(dateFrom)) ? dayjs(dateFrom).startOf('day') : null;
-  let to = dateTo && !Number.isNaN(Date.parse(dateTo)) ? dayjs(dateTo).endOf('day') : null;
+export const resolveWindow = (query = {}, { defaultDays = 30, tz = DEFAULT_TZ } = {}) => {
+  // Whole company-local days: a 'YYYY-MM-DD' from the client is that day in
+  // the company's timezone, and "today" is the company's today (servers run on UTC).
+  const keyOf = (v) => (v && !Number.isNaN(Date.parse(v)) ? String(v).slice(0, 10) : null);
+  let fromKey = keyOf(query.dateFrom);
+  let toKey = keyOf(query.dateTo);
+  const shift = (key, days) => dayjs(key).add(days, 'day').format('YYYY-MM-DD');
 
-  if (!from && !to) {
-    to = dayjs().endOf('day');
-    from = to.subtract(defaultDays - 1, 'day').startOf('day');
-  } else if (from && !to) {
-    to = from.add(defaultDays - 1, 'day').endOf('day');
-  } else if (!from && to) {
-    from = to.subtract(defaultDays - 1, 'day').startOf('day');
+  if (!fromKey && !toKey) {
+    toKey = dayKey(new Date(), tz);
+    fromKey = shift(toKey, -(defaultDays - 1));
+  } else if (fromKey && !toKey) {
+    toKey = shift(fromKey, defaultDays - 1);
+  } else if (!fromKey && toKey) {
+    fromKey = shift(toKey, -(defaultDays - 1));
   }
   // Guard against an inverted range.
-  if (from.isAfter(to)) [from, to] = [to, from];
+  if (fromKey > toKey) [fromKey, toKey] = [toKey, fromKey];
 
-  return { from: from.toDate(), to: to.toDate(), fromIso: from.format('YYYY-MM-DD'), toIso: to.format('YYYY-MM-DD') };
+  const from = startOfDay(fromKey, tz);
+  const to = new Date(dayjs(startOfDay(toKey, tz)).add(1, 'day').valueOf() - 1);
+  return { from, to, fromIso: fromKey, toIso: toKey };
 };
 
 /** A Mongo $match fragment restricting `field` to the resolved window. */
@@ -248,7 +254,7 @@ export const salesReport = async ({ companyId, window, granularity = 'day', top 
 // RECEIVABLES — aging of outstanding invoices (live balance, not windowed)
 // ===========================================================================
 
-export const receivablesReport = async ({ companyId, buckets = 30, top = 10, customerId = null }) => {
+export const receivablesReport = async ({ companyId, buckets = 30, top = 10, customerId = null, tz = DEFAULT_TZ }) => {
   const tenant = { companyId: oid(companyId), isDeleted: { $ne: true } };
   const open = { status: { $nin: [INVOICE_STATUS.DRAFT, INVOICE_STATUS.CANCELLED] } };
   const base = { ...tenant, ...open };
@@ -282,7 +288,7 @@ export const receivablesReport = async ({ companyId, buckets = 30, top = 10, cus
     { $sort: { dueDate: 1, invoiceDate: 1 } },
   ]);
 
-  const today = dayjs().startOf('day');
+  const todayKey = dayKey(new Date(), tz); // company-local day
   const edges = [buckets, buckets * 2, buckets * 3];
   const labels = [
     `Current (0-${edges[0]}d)`,
@@ -300,7 +306,7 @@ export const receivablesReport = async ({ companyId, buckets = 30, top = 10, cus
   for (const r of rows) {
     // Overdue is measured from the due date (or invoice date when none set).
     const anchor = r.dueDate || r.invoiceDate;
-    const overdueBy = today.diff(dayjs(anchor).startOf('day'), 'day');
+    const overdueBy = dayjs(todayKey).diff(dayjs(dayKey(new Date(anchor), tz)), 'day');
     const isOverdue = overdueBy > 0;
     const idx = overdueBy <= 0 ? 0 : overdueBy <= edges[0] ? 0 : overdueBy <= edges[1] ? 1 : overdueBy <= edges[2] ? 2 : 3;
 

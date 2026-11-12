@@ -50,6 +50,7 @@ import { activeVanOf, assertDayClosed, assertVanStock } from '../../services/van
 import { buildSaleLines, repriceInput } from '../../services/pricingService.js';
 import { hasPermission } from '../../middlewares/rbac.js';
 import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
+import { companyToday, tzOf } from '../../utils/companyTime.js';
 
 /** Relations returned on every order read so the UI never needs a second call. */
 const POPULATE = [
@@ -401,8 +402,8 @@ export const stats = asyncHandler(async (req, res) => {
     ...aggregateScope(req),
   };
 
-  const startOfDay = dayjs().startOf('day').toDate();
-  const startOfMonth = dayjs().startOf('month').toDate();
+  // Today / this month in the company's timezone (servers run on UTC).
+  const { today: startOfDay, monthStart: startOfMonth } = companyToday(tzOf(req));
   const moneyStatuses = { $nin: [ORDER_STATUS.CANCELLED, ORDER_STATUS.REJECTED] };
 
   const [byStatus, today, month, overall] = await Promise.all([

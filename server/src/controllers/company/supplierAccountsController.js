@@ -20,6 +20,7 @@ import { toPlain, loadDoc, dateOrNull } from './_helpers.js';
 import { taxBreakupFor, sellerStateOf } from '../../services/orderService.js';
 import { recordMovement, assertWarehouseStock } from '../../services/inventoryService.js';
 import { nextSeries, getFinancialYearTag } from '../../utils/numberSeries.js';
+import { companyToday, tzOf } from '../../utils/companyTime.js';
 
 /**
  * Accounts payable: supplier bills, supplier payments and purchase returns.
@@ -178,7 +179,7 @@ export const listBills = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.overdue === 'true') {
     filter.status = { $in: [BILL_STATUS.POSTED, BILL_STATUS.PARTIALLY_PAID] };
-    filter.dueDate = { $lt: dayjs().startOf('day').toDate() };
+    filter.dueDate = { $lt: companyToday(tzOf(req)).today };
   }
   const result = await listDocuments(PurchaseBill, {
     filter,
@@ -405,7 +406,7 @@ export const paymentFormOptions = asyncHandler(async (req, res) => {
   return success(res, {
     data: {
       supplier: { id: String(supplier._id), name: supplier.name, outstanding: supplier.outstanding },
-      bills: bills.map((b) => ({ ...b, id: String(b._id), _id: undefined, overdue: b.dueDate && b.dueDate < dayjs().startOf('day').toDate() })),
+      bills: bills.map((b) => ({ ...b, id: String(b._id), _id: undefined, overdue: b.dueDate && b.dueDate < companyToday(tzOf(req)).today })),
     },
   });
 });
@@ -731,8 +732,7 @@ export const cancelReturn = asyncHandler(async (req, res) => {
 
 export const payablesSummary = asyncHandler(async (req, res) => {
   const companyId = new mongoose.Types.ObjectId(req.companyId);
-  const today = dayjs().startOf('day').toDate();
-  const monthStart = dayjs().startOf('month').toDate();
+  const { today, monthStart } = companyToday(tzOf(req)); // company timezone
   const [open, overdue, billedMonth, paidMonth] = await Promise.all([
     PurchaseBill.aggregate([
       { $match: { companyId, isDeleted: { $ne: true }, status: { $in: [BILL_STATUS.POSTED, BILL_STATUS.PARTIALLY_PAID] } } },

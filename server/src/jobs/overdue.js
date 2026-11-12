@@ -3,6 +3,8 @@ import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import { withoutTenant, withTenant } from '../middlewares/tenant.js';
 import logger from '../utils/logger.js';
+import Company from '../models/Company.js';
+import { companyToday } from '../utils/companyTime.js';
 
 /**
  * Overdue invoice reminders.
@@ -13,7 +15,8 @@ import logger from '../utils/logger.js';
  * settled invoice.
  */
 export const runOverdueReminders = async () => {
-  const startOfToday = dayjs().startOf('day').toDate();
+  // Each company's "today" is in its own timezone (the cron runs on UTC).
+  const now = new Date();
   let notifications = 0;
 
   let Invoice, Setting;
@@ -28,7 +31,7 @@ export const runOverdueReminders = async () => {
   await withoutTenant(async () => {
     const overdue = await Invoice.find({
       status: { $in: ['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'] },
-      dueDate: { $lt: startOfToday },
+      dueDate: { $lt: now }, // narrowed per company below
       balanceDue: { $gt: 0 },
       isDeleted: { $ne: true },
     })
@@ -46,8 +49,16 @@ export const runOverdueReminders = async () => {
       byCompany.get(key).push(inv);
     }
 
-    for (const [companyId, invoices] of byCompany) {
+    const zones = new Map(
+      (await Company.find({ _id: { $in: [...byCompany.keys()] } }).select('timezone').skipTenant().lean()).map((c) => [String(c._id), c.timezone])
+    );
+
+    for (const [companyId, all] of byCompany) {
       try {
+        // Overdue = due before the start of the company's today, never on the due day itself.
+        const startOfToday = companyToday(zones.get(companyId) || undefined).today;
+        const invoices = all.filter((i) => new Date(i.dueDate) < startOfToday);
+        if (!invoices.length) continue;
         const settings = await withTenant(companyId, () => Setting.forCompany(companyId));
         if (settings?.collections?.sendOverdueReminders === false) continue;
 

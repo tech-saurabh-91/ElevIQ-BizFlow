@@ -21,6 +21,7 @@ import { BadRequestError, ConflictError, ErrorCodes } from '../../utils/errors.j
 import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
 import { nextExpenseNumber } from '../../services/fieldForceService.js';
 import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
+import { companyToday, tzOf } from '../../utils/companyTime.js';
 
 /**
  * Phase 7 - Expense claims controller.
@@ -109,7 +110,7 @@ export const stats = asyncHandler(async (req, res) => {
     ...aggregateScope(req),
   };
 
-  const startOfMonth = dayjs().startOf('month').toDate();
+  const { monthStart: startOfMonth } = companyToday(tzOf(req)); // company timezone
 
   // Reimbursable money is the APPROVED amount, not the claimed one — a claim
   // approved for less than asked should reduce the "ready to reimburse" figure.

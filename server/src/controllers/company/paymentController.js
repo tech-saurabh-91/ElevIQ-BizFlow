@@ -30,6 +30,7 @@ import {
   assertAllocationsWithinAmount,
   PAYABLE_INVOICE_STATUSES,
 } from '../../services/paymentService.js';
+import { companyToday, tzOf } from '../../utils/companyTime.js';
 
 /**
  * Phase 6 - Payments & Collections controller.
@@ -251,8 +252,8 @@ export const stats = asyncHandler(async (req, res) => {
     ...aggregateScope(req),
   };
 
-  const startOfDay = dayjs().startOf('day').toDate();
-  const startOfMonth = dayjs().startOf('month').toDate();
+  // Today / this month in the company's timezone (servers run on UTC).
+  const { today: startOfDay, monthStart: startOfMonth } = companyToday(tzOf(req));
 
   const [byStatus, today, month, received, outstandingAgg] = await Promise.all([
     Payment.aggregate([{ $match: base }, { $group: { _id: '$status', count: { $sum: 1 }, value: { $sum: '$amount' } } }]),

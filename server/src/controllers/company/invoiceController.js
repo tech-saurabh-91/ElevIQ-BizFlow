@@ -40,6 +40,7 @@ import { hasPermission } from '../../middlewares/rbac.js';
 import { activeVanOf, assertDayClosed } from '../../services/vanService.js';
 import { recordMovement, resolveDefaultWarehouse, assertWarehouseStock, releaseReservation, reserveStock } from '../../services/inventoryService.js';
 import { baseQtyOf } from '../../services/catalogService.js';
+import { companyToday, tzOf } from '../../utils/companyTime.js';
 
 /** Relations returned on every invoice read so the UI never needs a second call. */
 const POPULATE = [
@@ -507,8 +508,8 @@ export const stats = asyncHandler(async (req, res) => {
     ...aggregateScope(req),
   };
 
-  const startOfDay = dayjs().startOf('day').toDate();
-  const startOfMonth = dayjs().startOf('month').toDate();
+  // Today / this month in the company's timezone (servers run on UTC).
+  const { today: startOfDay, monthStart: startOfMonth } = companyToday(tzOf(req));
   const liveStatuses = ['ISSUED', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'];
   const moneyStatuses = { $in: liveStatuses };
 

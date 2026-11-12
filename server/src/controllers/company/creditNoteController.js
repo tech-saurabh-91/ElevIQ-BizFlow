@@ -28,6 +28,7 @@ import { taxBreakupFor, sellerStateOf, buyerStateOf } from '../../services/order
 import { recordMovement, resolveDefaultWarehouse, damagedWarehouse } from '../../services/inventoryService.js';
 import { baseQtyOf } from '../../services/catalogService.js';
 import { MOVEMENT_TYPES } from '../../config/constants.js';
+import { companyToday, tzOf } from '../../utils/companyTime.js';
 
 /**
  * Where returned goods go. Only when they had actually left stock: a direct
@@ -285,8 +286,8 @@ export const stats = asyncHandler(async (req, res) => {
     ...aggregateScope(req),
   };
 
-  const startOfDay = dayjs().startOf('day').toDate();
-  const startOfMonth = dayjs().startOf('month').toDate();
+  // Today / this month in the company's timezone (servers run on UTC).
+  const { today: startOfDay, monthStart: startOfMonth } = companyToday(tzOf(req));
 
   const [byStatus, today, month, issued] = await Promise.all([
     CreditNote.aggregate([
