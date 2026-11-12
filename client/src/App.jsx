@@ -85,6 +85,7 @@ const Expenses = lazy(() => import('@/pages/company/Expenses'));
 const Reports = lazy(() => import('@/pages/company/Reports'));
 const ReportsHub = lazy(() => import('@/pages/company/ReportsHub'));
 const ReportViewer = lazy(() => import('@/pages/company/ReportViewer'));
+const ReportAccess = lazy(() => import('@/pages/company/ReportAccess'));
 const Notifications = lazy(() => import('@/pages/company/Notifications'));
 
 // ---- guards ---------------------------------------------------------------
@@ -284,6 +285,7 @@ export default function App() {
           {/* Reports hub (cards) -> one report; the old tabbed charts are the analytics dashboards. */}
           <Route path="reports" element={<ReportsHub />} />
           <Route path="reports/analytics" element={guard('reports.view', <Reports />)} />
+          <Route path="reports/access" element={guard('settings.update', <ReportAccess />)} />
           <Route path="reports/:code" element={<ReportViewer />} />
           <Route path="inventory" element={guard('inventory.view', <Inventory />)} />
 

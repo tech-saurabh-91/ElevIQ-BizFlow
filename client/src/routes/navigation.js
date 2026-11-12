@@ -155,7 +155,7 @@ export const companyNav = [
   {
     section: 'Insights',
     items: [
-      { to: '/app/reports', label: 'Reports', icon: BarChart3, anyPermission: ['reports.view', 'reports.register.view', 'reports.mis.view', 'reports.listing.view'] },
+      { to: '/app/reports', label: 'Reports', icon: BarChart3, anyPermission: ['reports.view', 'reports.hub.view'] },
       { to: '/app/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.view' },
     ],
   },

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ChevronDown,
   Search,
+  ShieldCheck,
   FileText,
   Undo2,
   Wallet,
@@ -35,6 +36,7 @@ import {
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -103,6 +105,15 @@ export default function ReportsHub() {
         title="Reports"
         description="Registers, MIS and listings - pick a report to open it, filter it and export to Excel."
         breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Reports' }]}
+        actions={
+          can('settings.update') && (
+            <Link to="/app/reports/access">
+              <Button variant="outline">
+                <ShieldCheck className="h-4 w-4" /> Manage access
+              </Button>
+            </Link>
+          )
+        }
       />
 
       <div className="relative max-w-md">
@@ -119,7 +130,11 @@ export default function ReportsHub() {
       ) : isError && !can('reports.view') ? (
         <EmptyState icon="error" title="No reports for your role" description={apiError(error).message} />
       ) : !groups.length ? (
-        <EmptyState icon="empty" title="No report matches" description="Try another word." />
+        q ? (
+          <EmptyState icon="empty" title="No report matches" description="Try another word." />
+        ) : (
+          <EmptyState icon="empty" title="No reports for your role yet" description="Your admin can give you reports from Reports → Manage access." />
+        )
       ) : (
         <div className="grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {groups.map((g) => {

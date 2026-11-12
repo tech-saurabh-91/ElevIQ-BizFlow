@@ -5,9 +5,11 @@ import Setting from '../../models/Setting.js';
 import { success } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ForbiddenError, NotFoundError } from '../../utils/errors.js';
-import { hasPermission } from '../../middlewares/rbac.js';
+import { hasPermission, roleHasPermission } from '../../middlewares/rbac.js';
 import { COST_FIELDS } from '../../middlewares/costVisibility.js';
-import { REPORTS, REPORT_GROUPS, findReport, canRun, windowOf } from '../../services/reportRegistry.js';
+import { REPORTS, REPORT_GROUPS, findReport, canRun, missingFor, windowOf } from '../../services/reportRegistry.js';
+import { AUDIT_ACTIONS, COMPANY_ROLES } from '../../config/constants.js';
+import { audit } from '../../middlewares/audit.js';
 import { DEFAULT_TZ } from '../../services/fieldForceService.js';
 
 /**
@@ -24,6 +26,7 @@ const contextOf = async (req) => {
     can,
     companyId: req.companyId,
     tz: req.company?.timezone || settings?.timezone || DEFAULT_TZ,
+    role: req.user.role,
     user: { id: req.user.id, role: req.user.role, teamIds: req.dataScope?.teamIds || [] },
   };
 };
@@ -32,7 +35,7 @@ const loadRunnable = async (req) => {
   const report = findReport(req.params.code);
   if (!report) throw new NotFoundError('Report not found');
   const ctx = await contextOf(req);
-  if (!canRun(report, ctx.can, ctx.company)) throw new ForbiddenError('You do not have access to this report', 'FORBIDDEN');
+  if (!canRun(report, ctx)) throw new ForbiddenError('You do not have access to this report', 'FORBIDDEN');
   return { report, ctx };
 };
 
@@ -42,7 +45,7 @@ const visibleColumns = (columns, ctx) =>
 
 export const catalog = asyncHandler(async (req, res) => {
   const ctx = await contextOf(req);
-  const reports = REPORTS.filter((r) => canRun(r, ctx.can, ctx.company)).map((r) => ({
+  const reports = REPORTS.filter((r) => canRun(r, ctx)).map((r) => ({
     code: r.code,
     group: r.group,
     title: r.title,
@@ -121,4 +124,64 @@ export const exportXlsx = asyncHandler(async (req, res) => {
   res.send(Buffer.from(buffer));
 });
 
-export default { catalog, run, exportXlsx };
+// ---------------------------------------------------------------------------
+// Report-wise access (admin): which role may open which report.
+// ---------------------------------------------------------------------------
+const ROLES = Object.values(COMPANY_ROLES).filter((r) => r !== COMPANY_ROLES.COMPANY_ADMIN);
+
+const accessView = (settings, company) => {
+  const reports = REPORTS.filter((r) => !(r.module && company?.featureFlags?.[r.module] === false)).map((r) => {
+    const listed = settings?.reportAccess?.[r.code];
+    const roles = {};
+    ROLES.forEach((role) => {
+      const can = (perm) => roleHasPermission(settings, role, perm);
+      const missing = missingFor(r, can);
+      roles[role] = {
+        allowed: canRun(r, { can, company, settings, role }),
+        // Ticking it would still not open the report without these.
+        missing,
+      };
+    });
+    return { code: r.code, group: r.group, title: r.title, description: r.description, custom: Array.isArray(listed), roles };
+  });
+  return { roles: ROLES, groups: Object.entries(REPORT_GROUPS).map(([key, g]) => ({ key, label: g.label })), reports };
+};
+
+export const getAccess = asyncHandler(async (req, res) => {
+  const settings = await Setting.forCompany(req.companyId);
+  return success(res, { data: accessView(settings, req.company) });
+});
+
+/** PUT { access: { reportCode: [roles] | null } } - null puts a report back on its group permission. */
+export const saveAccess = asyncHandler(async (req, res) => {
+  const settings = await Setting.forCompany(req.companyId);
+  const next = { ...(settings.reportAccess || {}) };
+  Object.entries(req.body.access || {}).forEach(([code, roles]) => {
+    if (!findReport(code)) return;
+    if (roles === null) delete next[code];
+    else next[code] = [...new Set(roles.filter((r) => ROLES.includes(r)))];
+  });
+  settings.reportAccess = next;
+  settings.markModified('reportAccess');
+  await settings.save();
+  audit(req, { action: AUDIT_ACTIONS.UPDATE, entityType: 'Setting', entityLabel: 'Report access', description: 'Report-wise access updated' });
+  return success(res, { message: 'Report access saved', data: accessView(settings, req.company) });
+});
+
+export const resetAccess = asyncHandler(async (req, res) => {
+  const settings = await Setting.forCompany(req.companyId);
+  settings.reportAccess = {};
+  settings.markModified('reportAccess');
+  await settings.save();
+  audit(req, { action: AUDIT_ACTIONS.UPDATE, entityType: 'Setting', entityLabel: 'Report access', description: 'Report access reset to role permissions' });
+  return success(res, { message: 'Report access reset', data: accessView(settings, req.company) });
+});
+
+/** Roles that can open at least one report (drives the Reports menu item). */
+export const rolesWithReports = (settings, company) =>
+  [COMPANY_ROLES.COMPANY_ADMIN, ...ROLES.filter((role) => {
+    const can = (perm) => roleHasPermission(settings, role, perm);
+    return REPORTS.some((r) => canRun(r, { can, company, settings, role }));
+  })];
+
+export default { catalog, run, exportXlsx, getAccess, saveAccess, resetAccess };

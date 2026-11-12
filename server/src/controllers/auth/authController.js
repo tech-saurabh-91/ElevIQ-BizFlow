@@ -1,4 +1,5 @@
 import env from '../../config/env.js';
+import { rolesWithReports } from '../company/reportHubController.js';
 import * as authService from '../../services/authService.js';
 import { success, created } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -91,7 +92,14 @@ export const companyMe = asyncHandler(async (req, res) => {
         : null,
       // Defaults merged under the company's saved matrix, so permissions added
       // after a company customised its matrix still resolve.
-      permissions: req.settings ? { ...buildDefaultPermissions(), ...(req.settings.rolePermissions || {}) } : null,
+      permissions: req.settings
+        ? {
+            ...buildDefaultPermissions(),
+            ...(req.settings.rolePermissions || {}),
+            // Roles that can open at least one report (the Reports menu).
+            'reports.hub.view': rolesWithReports(req.settings, req.company),
+          }
+        : null,
       settings: req.settings
         ? {
             currency: req.settings.currency,

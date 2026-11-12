@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { z } from 'zod';
+import { COMPANY_ROLE_LIST } from '../../config/constants.js';
 import * as ctrl from '../../controllers/company/reportController.js';
 import * as hub from '../../controllers/company/reportHubController.js';
 import { validate } from '../../middlewares/validate.js';
@@ -23,10 +25,19 @@ const router = Router();
 
 // Reports hub (Register / MIS / Listing). Each report also checks its own
 // permissions and the business mode in the registry.
-const ANY_REPORT_GROUP = ['reports.register.view', 'reports.mis.view', 'reports.listing.view'];
-router.get('/hub/catalog', authorize(...ANY_REPORT_GROUP), hub.catalog);
-router.get('/hub/run/:code', authorize(...ANY_REPORT_GROUP), hub.run);
-router.get('/hub/run/:code/export', authorize(...ANY_REPORT_GROUP), hub.exportXlsx);
+// Who may open which report is decided per report (group permission, the
+// admin's report-wise access list and the report's data permissions).
+router.get('/hub/catalog', hub.catalog);
+router.get('/hub/run/:code', hub.run);
+router.get('/hub/run/:code/export', hub.exportXlsx);
+router.get('/hub/access', authorize('settings.update'), hub.getAccess);
+router.put(
+  '/hub/access',
+  authorize('settings.update'),
+  validate({ body: z.object({ access: z.record(z.array(z.enum(COMPANY_ROLE_LIST)).nullable()) }) }),
+  hub.saveAccess
+);
+router.post('/hub/access/reset', authorize('settings.update'), hub.resetAccess);
 
 router.get('/overview', authorize('reports.view'), validate({ query: reportOverviewQuerySchema }), ctrl.overview);
 router.get('/sales', authorize('reports.view'), validate({ query: reportWindowQuerySchema }), ctrl.sales);

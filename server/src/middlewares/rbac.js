@@ -25,6 +25,14 @@ const effectivePermission = (req, permission) => {
   return false;
 };
 
+/** Does a ROLE (not a particular user) have a permission under this company's matrix? */
+export const roleHasPermission = (settings, role, permission) => {
+  if (role === COMPANY_ROLES.COMPANY_ADMIN) return true;
+  const override = settings?.rolePermissions;
+  if (override && Array.isArray(override[permission])) return override[permission].includes(role);
+  return Array.isArray(DEFAULT_PERMISSIONS[permission]) ? DEFAULT_PERMISSIONS[permission].includes(role) : false;
+};
+
 /** In-handler check, e.g. may this user change prices: hasPermission(req, 'pricing.override'). */
 export const hasPermission = (req, permission) => {
   const user = req.user;

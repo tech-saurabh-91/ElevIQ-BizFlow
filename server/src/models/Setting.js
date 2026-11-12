@@ -149,6 +149,9 @@ const settingSchema = new mongoose.Schema(
 
     // Roles the admin has deleted/renamed (extension hook)
     customRoles: { type: [Object], default: [] },
+    // Report-wise access: { reportCode: [roles] }. A report listed here opens
+    // only for those roles (admins always); others follow their group permission.
+    reportAccess: { type: Object, default: () => ({}) },
 
     // Feature toggles for this company (mirrors plan flags, admin can tweak)
     featureFlags: { type: Object, default: () => ({}) },

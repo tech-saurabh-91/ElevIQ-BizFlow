@@ -102,8 +102,11 @@ describe('Catalog', () => {
     expect((await get('/api/v1/reports/hub/run/gross-profit', state.wh)).status).toBe(403);
   });
 
-  test('a salesman has no report groups by default', async () => {
-    expect((await get('/api/v1/reports/hub/catalog', state.sam)).status).toBe(403);
+  test('a salesman has no reports by default', async () => {
+    const res = await get('/api/v1/reports/hub/catalog', state.sam);
+    expect(res.status).toBe(200);
+    expect(res.body.data.reports).toHaveLength(0);
+    expect((await get('/api/v1/reports/hub/run/sales-register', state.sam)).status).toBe(403);
   });
 });
 
@@ -145,6 +148,51 @@ describe('Figures', () => {
     const res = await get('/api/v1/reports/hub/run/sales-register/export');
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/spreadsheetml/);
+  });
+});
+
+describe('Report-wise access', () => {
+  const put = (access) => request.put('/api/v1/reports/hub/access').set(as(state.admin)).send({ access });
+
+  test('the admin can give one report to a role - with that role’s own data only', async () => {
+    const saved = await put({ 'sales-register': ['SALESMAN', 'MANAGER', 'ACCOUNTANT'] });
+    expect(saved.status).toBe(200);
+    expect(saved.body.data.reports.find((r) => r.code === 'sales-register').roles.SALESMAN.allowed).toBe(true);
+
+    const codes = (await get('/api/v1/reports/hub/catalog', state.sam)).body.data.reports.map((r) => r.code);
+    expect(codes).toEqual(['sales-register']);
+    const run = await get('/api/v1/reports/hub/run/sales-register', state.sam);
+    expect(run.status).toBe(200);
+    expect(run.body.data.rows).toHaveLength(0); // the invoice is not Sam's
+
+    const me = await get('/api/v1/auth/me', state.sam);
+    expect(me.body.data.permissions['reports.hub.view']).toContain('SALESMAN');
+  });
+
+  test('ticking a report never gives a role the data it may not see', async () => {
+    await put({ 'gross-profit': ['SALESMAN'] });
+    const view = (await get('/api/v1/reports/hub/access')).body.data;
+    const gp = view.reports.find((r) => r.code === 'gross-profit');
+    expect(gp.roles.SALESMAN.allowed).toBe(false);
+    expect(gp.roles.SALESMAN.missing).toEqual(expect.arrayContaining(['products.cost.view']));
+    expect((await get('/api/v1/reports/hub/run/gross-profit', state.sam)).status).toBe(403);
+  });
+
+  test('a report can be taken away from a role that has its group', async () => {
+    await put({ 'grn-register': [] });
+    const codes = (await get('/api/v1/reports/hub/catalog', state.wh)).body.data.reports.map((r) => r.code);
+    expect(codes).not.toContain('grn-register');
+    expect(codes).toContain('stock-register');
+    expect((await get('/api/v1/reports/hub/run/grn-register')).status).toBe(200); // admin always
+  });
+
+  test('only an admin manages access, and reset brings back the defaults', async () => {
+    expect((await request.put('/api/v1/reports/hub/access').set(as(state.wh)).send({ access: {} })).status).toBe(403);
+    const reset = await request.post('/api/v1/reports/hub/access/reset').set(as(state.admin)).send({});
+    expect(reset.status).toBe(200);
+    expect((await get('/api/v1/reports/hub/catalog', state.sam)).body.data.reports).toHaveLength(0);
+    const codes = (await get('/api/v1/reports/hub/catalog', state.wh)).body.data.reports.map((r) => r.code);
+    expect(codes).toContain('grn-register');
   });
 });
 

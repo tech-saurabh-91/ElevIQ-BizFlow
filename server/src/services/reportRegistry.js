@@ -1098,10 +1098,22 @@ export const REPORTS = [
 
 export const findReport = (code) => REPORTS.find((r) => r.code === code) || null;
 
-/** Can this user open this report? (group permission + the report's own needs + the company's modules) */
-export const canRun = (report, can, company) => {
+/**
+ * Can this user (or role) open this report?
+ *  1. the company's plan includes the report's module;
+ *  2. the admin's report-wise access list, if the report has one, names the
+ *     role - otherwise the role has the report group's permission;
+ *  3. always: the permissions for the data the report shows (so ticking a
+ *     report for a role never leaks costs or purchase data to it).
+ * `can` answers a permission for the user or role being checked.
+ */
+export const canRun = (report, { can, company, settings, role }) => {
   if (!report) return false;
   if (report.module && company?.featureFlags?.[report.module] === false) return false;
-  if (!can(REPORT_GROUPS[report.group].permission)) return false;
-  return (report.requires || []).every((perm) => can(perm));
+  const listed = settings?.reportAccess?.[report.code];
+  const open = Array.isArray(listed) ? role === 'COMPANY_ADMIN' || listed.includes(role) : can(REPORT_GROUPS[report.group].permission);
+  return open && (report.requires || []).every((perm) => can(perm));
 };
+
+/** The report-data permissions a role is missing for a report (why it cannot be ticked). */
+export const missingFor = (report, can) => (report.requires || []).filter((perm) => !can(perm));
