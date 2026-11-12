@@ -53,8 +53,6 @@ const TABS = [
   { value: 'movements', label: 'Movements', icon: Layers, description: 'Every stock in and out, with cost' },
   { value: 'adjustments', label: 'Adjustments', icon: ClipboardList, description: 'Counts, damages, corrections and opening stock' },
   { value: 'transfers', label: 'Transfers', icon: Truck, description: 'Move stock between warehouses and vans' },
-  { value: 'purchases', label: 'Purchase orders', icon: ShoppingCart, description: 'What you have ordered from suppliers' },
-  { value: 'receipts', label: 'Goods receipts', icon: PackagePlus, description: 'Goods received into stock (GRN)' },
 ];
 
 const money = (value, currency) => formatMoney(value, currency, undefined, { decimals: 0 });
@@ -1253,7 +1251,8 @@ function TransfersTab() {
 // ===========================================================================
 // Purchase orders
 // ===========================================================================
-function PurchaseOrdersTab() {
+/** Also the Purchase Orders page (Purchase menu). */
+export function PurchaseOrdersTab() {
   const [params, setParams] = useSearchParams();
   const setParam = useSetParam(params, setParams);
   const queryClient = useQueryClient();
@@ -1769,7 +1768,8 @@ function PurchaseOrdersTab() {
 // ===========================================================================
 // Goods receipt notes
 // ===========================================================================
-function GoodsReceiptsTab() {
+/** Also the Goods Receipts page (Purchase menu). */
+export function GoodsReceiptsTab() {
   const [params, setParams] = useSearchParams();
   const setParam = useSetParam(params, setParams);
   const queryClient = useQueryClient();
@@ -2338,7 +2338,6 @@ export default function Inventory() {
   const [openingOpen, setOpeningOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   const { company } = useAuth();
-  const purchase = company?.featureFlags?.purchase !== false;
 
   // The section lives in the URL so a refresh (or deep link) keeps the user
   // put; without one the page shows its sections as cards.
@@ -2364,7 +2363,7 @@ export default function Inventory() {
     <div className="space-y-5">
       <PageHeader
         title="Inventory"
-        description="Stock ledger, warehouse transfers, adjustments and purchasing."
+        description="Stock on hand, movements, adjustments and transfers. Buying is under Purchase."
         breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Inventory' }]}
         actions={
           can('inventory.adjustments.manage') ? (
@@ -2419,7 +2418,7 @@ export default function Inventory() {
       {tab ? (
         <SectionBar backLabel="All inventory" onBack={() => setTab('')} item={TABS.find((t) => t.value === tab)} />
       ) : (
-        <SectionCards items={TABS.filter((t) => purchase || !['purchases', 'receipts'].includes(t.value))} onPick={setTab} />
+        <SectionCards items={TABS} onPick={setTab} />
       )}
 
       <TabPanel value="stock" active={tab}>
@@ -2434,12 +2433,7 @@ export default function Inventory() {
       <TabPanel value="transfers" active={tab}>
         <TransfersTab />
       </TabPanel>
-      <TabPanel value="purchases" active={tab}>
-        <PurchaseOrdersTab />
-      </TabPanel>
-      <TabPanel value="receipts" active={tab}>
-        <GoodsReceiptsTab />
-      </TabPanel>
+
     </div>
   );
 }
