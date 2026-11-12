@@ -3,8 +3,8 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -26,14 +26,14 @@ import {
 
 /** Palette used for categorical series (pie slices, multi-line keys). */
 export const CHART_COLORS = [
-  'hsl(var(--primary))',
-  '#3287fc', // brand-500 (there is no --brand CSS var)
-  'hsl(var(--success))',
-  'hsl(var(--warning))',
-  'hsl(var(--destructive))',
-  '#8b5cf6',
-  '#06b6d4',
-  '#f97316',
+  '#6366f1', // indigo
+  '#10b981', // emerald
+  '#f59e0b', // amber
+  '#f43f5e', // rose
+  '#8b5cf6', // violet
+  '#0ea5e9', // sky
+  '#f97316', // orange
+  '#14b8a6', // teal
 ];
 
 const AXIS_TICK = { fontSize: 11, fill: 'hsl(var(--muted-foreground))' };
@@ -81,8 +81,8 @@ export function TrendChart({
   valueKey = 'value',
   secondKey = null,
   height = 240,
-  color = 'hsl(var(--primary))',
-  secondColor = 'hsl(var(--warning))',
+  color = '#6366f1',
+  secondColor = '#f59e0b',
   valueLabel = 'Value',
   secondLabel = '',
   formatValue = (v) => v,
@@ -101,7 +101,7 @@ export function TrendChart({
 
   return (
     <ChartFrame height={height} empty={rows.length === 0}>
-      <LineChart data={rows} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+      <AreaChart data={rows} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
         <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} minTickGap={24} />
         <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={54} />
@@ -109,22 +109,24 @@ export function TrendChart({
           {...tooltipStyle}
           formatter={(v, name) => [formatValue(v), name]}
         />
-        <Line
+        <Area
           type="monotone"
           dataKey="a"
           name={valueLabel}
           stroke={color}
-          strokeWidth={2}
+          strokeWidth={2.5}
+          fill={`url(#fill-${id})`}
           dot={false}
           activeDot={{ r: 4 }}
           animationDuration={400}
         />
         {secondKey && (
-          <Line
+          <Area
             type="monotone"
             dataKey="b"
             name={secondLabel}
             stroke={secondColor}
+            fill="none"
             strokeWidth={2}
             strokeDasharray="4 3"
             dot={false}
@@ -134,11 +136,11 @@ export function TrendChart({
         )}
         <defs>
           <linearGradient id={`fill-${id}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+            <stop offset="0%" stopColor={color} stopOpacity={0.4} />
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
-      </LineChart>
+      </AreaChart>
     </ChartFrame>
   );
 }
@@ -190,8 +192,8 @@ export function ColumnChart({
   valueKey = 'value',
   secondKey = null,
   height = 240,
-  color = 'hsl(var(--primary))',
-  secondColor = 'hsl(var(--warning))',
+  color = '#6366f1',
+  secondColor = '#f59e0b',
   valueLabel = 'Value',
   secondLabel = '',
   formatValue = (v) => v,

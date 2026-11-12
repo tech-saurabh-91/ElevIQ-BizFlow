@@ -55,13 +55,14 @@ import { todayInput } from '@/components/company/form-utils';
  * re-runs whichever report is on screen.
  */
 
+// Each section shows only for roles that can see its data.
 const TABS = [
   { value: 'overview', label: 'Overview', icon: BarChart3 },
-  { value: 'sales', label: 'Sales', icon: TrendingUp },
-  { value: 'receivables', label: 'Receivables', icon: Wallet },
-  { value: 'collections', label: 'Collections', icon: Banknote },
-  { value: 'inventory', label: 'Inventory', icon: Boxes },
-  { value: 'field-force', label: 'Field force', icon: Footprints },
+  { value: 'sales', label: 'Sales', icon: TrendingUp, perm: 'invoices.view' },
+  { value: 'receivables', label: 'Receivables', icon: Wallet, perm: 'invoices.view' },
+  { value: 'collections', label: 'Collections', icon: Banknote, perm: 'payments.view' },
+  { value: 'inventory', label: 'Inventory', icon: Boxes, perm: 'inventory.view' },
+  { value: 'field-force', label: 'Field force', icon: Footprints, perm: 'fieldforce.visits.view' },
 ];
 
 /** Tabs that have a matching Excel export type on the server. */
@@ -718,7 +719,7 @@ export default function Reports() {
         }
       />
 
-      <Tabs items={TABS} value={tab} onChange={(v) => setParam({ tab: v })} />
+      <Tabs items={TABS.filter((t) => !t.perm || can(t.perm))} value={tab} onChange={(v) => setParam({ tab: v })} />
 
       <Card className="max-sm:border-0 max-sm:bg-transparent max-sm:shadow-none">
         <CardContent className="flex flex-col gap-3 py-4 max-sm:p-0 xl:flex-row xl:items-center">

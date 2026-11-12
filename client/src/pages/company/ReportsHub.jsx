@@ -69,11 +69,11 @@ const TINTS = [
 // The charts that used to be tabs on the Reports page.
 const DASHBOARDS = [
   { code: 'overview', title: 'Business Overview', description: 'Sales, collections, dues and stock at a glance', icon: 'LayoutDashboard' },
-  { code: 'sales', title: 'Sales Trends', description: 'Sales over time, top products and customers', icon: 'LineChart' },
-  { code: 'receivables', title: 'Receivables', description: 'Outstanding and overdue invoices', icon: 'Wallet' },
-  { code: 'collections', title: 'Collections', description: 'Money collected by mode and person', icon: 'Banknote' },
-  { code: 'inventory', title: 'Inventory Trends', description: 'Stock value and movements', icon: 'Boxes' },
-  { code: 'field-force', title: 'Field Force', description: 'Visits, attendance and productivity', icon: 'Footprints' },
+  { code: 'sales', title: 'Sales Trends', description: 'Sales over time, top products and customers', icon: 'LineChart', perm: 'invoices.view' },
+  { code: 'receivables', title: 'Receivables', description: 'Outstanding and overdue invoices', icon: 'Wallet', perm: 'invoices.view' },
+  { code: 'collections', title: 'Collections', description: 'Money collected by mode and person', icon: 'Banknote', perm: 'payments.view' },
+  { code: 'inventory', title: 'Inventory Trends', description: 'Stock value and movements', icon: 'Boxes', perm: 'inventory.view' },
+  { code: 'field-force', title: 'Field Force', description: 'Visits, attendance and productivity', icon: 'Footprints', perm: 'fieldforce.visits.view' },
 ];
 
 // Icons named by the server's report registry (kept explicit so the bundle stays small).
@@ -95,7 +95,7 @@ export default function ReportsHub() {
   const groups = [
     ...(data?.groups || []).map((g) => ({ ...g, items: (data.reports || []).filter((r) => r.group === g.key && match(r)).map((r) => ({ ...r, to: `/app/reports/${r.code}` })) })),
     ...(can('reports.view')
-      ? [{ key: 'DASHBOARDS', label: 'Dashboards', items: DASHBOARDS.filter(match).map((d) => ({ ...d, to: `/app/reports/analytics?tab=${d.code}` })) }]
+      ? [{ key: 'DASHBOARDS', label: 'Dashboards', items: DASHBOARDS.filter((d) => (!d.perm || can(d.perm)) && match(d)).map((d) => ({ ...d, to: `/app/reports/analytics?tab=${d.code}` })) }]
       : []),
   ].filter((g) => g.items.length);
 

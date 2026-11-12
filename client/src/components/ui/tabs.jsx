@@ -2,14 +2,17 @@ import * as React from 'react';
 import { cn } from '@/utils/cn';
 
 /**
- * Controlled tabs (underline style).
+ * Controlled tabs (pill / segmented style).
  * Usage:
  *   <Tabs value={v} onChange={setV} items={[{ value:'a', label:'A', badge: 3 }]} />
  *   <TabPanel value="a" active={v}>...</TabPanel>
  */
 export function Tabs({ items = [], value, onChange, className, size = 'md' }) {
   return (
-    <div className={cn('flex gap-1 overflow-x-auto border-b no-scrollbar', className)} role="tablist">
+    <div
+      className={cn('no-scrollbar flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border bg-muted/60 p-1', className)}
+      role="tablist"
+    >
       {items.map((item) => {
         const active = item.value === value;
         return (
@@ -20,9 +23,11 @@ export function Tabs({ items = [], value, onChange, className, size = 'md' }) {
             aria-selected={active}
             onClick={() => onChange?.(item.value)}
             className={cn(
-              'relative whitespace-nowrap px-3.5 font-medium transition-colors focus-ring',
-              size === 'sm' ? 'py-2 text-xs' : 'py-3 text-sm',
-              active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+              'relative shrink-0 whitespace-nowrap rounded-lg px-3.5 font-medium transition-all focus-ring',
+              size === 'sm' ? 'py-1.5 text-xs' : 'py-2 text-sm',
+              active
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-500 text-white shadow-sm'
+                : 'text-muted-foreground hover:bg-background hover:text-foreground'
             )}
           >
             <span className="inline-flex items-center gap-2">
@@ -32,16 +37,13 @@ export function Tabs({ items = [], value, onChange, className, size = 'md' }) {
                 <span
                   className={cn(
                     'rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
-                    active ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
+                    active ? 'bg-white/25 text-white' : 'bg-muted text-muted-foreground'
                   )}
                 >
                   {item.badge}
                 </span>
               )}
             </span>
-            {active && (
-              <span className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-primary" aria-hidden="true" />
-            )}
           </button>
         );
       })}
