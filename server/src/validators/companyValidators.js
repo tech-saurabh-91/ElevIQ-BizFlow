@@ -501,6 +501,8 @@ export const settingsUpdateSchema = z.object({
       // Only moving average is implemented; anything sent is stored as AVERAGE.
       valuationMethod: z.enum(['FIFO', 'AVERAGE', 'LIFO']).transform(() => 'AVERAGE').optional(),
       batchExpiry: z.boolean().optional(),
+      mode: z.enum(['STOCK', 'SALES_ONLY']).optional(),
+      defaultMarkupPercent: z.coerce.number().min(0).max(1000).optional(),
     })
     .partial()
     .optional(),

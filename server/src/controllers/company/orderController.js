@@ -856,7 +856,7 @@ export const formOptions = asyncHandler(async (req, res) => {
           approvalThreshold: Number(settings?.order?.approvalThreshold || 0),
           creditLimitAction: settings?.order?.creditLimitAction || 'WARN',
           allowNegativeStock: Boolean(settings?.order?.allowNegativeStock),
-          showStockOnOrder: settings?.order?.showStockOnOrder !== false,
+          showStockOnOrder: settings?.order?.showStockOnOrder !== false && settings?.inventory?.mode !== 'SALES_ONLY',
           defaultPaymentMode: settings?.order?.defaultPaymentMode || 'CREDIT',
         },
         invoice: { rounding: settings?.invoice?.rounding || 'NEAREST' },

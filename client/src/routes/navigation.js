@@ -7,6 +7,7 @@
  */
 import {
   LayoutDashboard,
+  Scale,
   Navigation,
   CalendarRange,
   Building2,
@@ -78,9 +79,9 @@ export const companyNav = [
     items: [
       { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, roles: ['SALESMAN'] },
       { to: '/app/sales', label: 'Sales Visit', icon: Navigation, roles: ['SALESMAN', 'MANAGER'] },
-      { to: '/app/stock-query', label: 'Stock Query', icon: Boxes, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'] },
-      { to: '/app/stock-requests', label: 'Van Stock Requests', icon: ClipboardList, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE', 'COMPANY_ADMIN'], channel: 'VAN_SALE' },
-      { to: '/app/day-cashout', label: 'Day Cashout', icon: Wallet, roles: ['SALESMAN'], channel: 'VAN_SALE' },
+      { to: '/app/stock-query', label: 'Stock Query', icon: Boxes, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'], stock: true },
+      { to: '/app/stock-requests', label: 'Van Stock Requests', icon: ClipboardList, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE', 'COMPANY_ADMIN'], channel: 'VAN_SALE', stock: true },
+      { to: '/app/day-cashout', label: 'Day Cashout', icon: Wallet, roles: ['SALESMAN'], channel: 'VAN_SALE', stock: true },
       // Running offers, so the salesman can pitch them at the shop.
       { to: '/app/schemes', label: 'Schemes', icon: Gift, permission: 'schemes.view', roles: ['SALESMAN'] },
     ],
@@ -115,9 +116,11 @@ export const companyNav = [
       { to: '/app/catalog', label: 'Categories & Units', icon: Layers, permission: 'products.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/suppliers', label: 'Suppliers', icon: Truck, permission: 'products.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/price-lists', label: 'Price Lists', icon: Tags, permission: 'products.view', excludeRoles: ['SALESMAN'] },
+      // Selling prices to look at after purchases move the cost.
+      { to: '/app/price-review', label: 'Price Review', icon: Scale, permission: 'products.update', alsoPermission: 'products.cost.view' },
       { to: '/app/discounts', label: 'Discounts', icon: Percent, permission: 'discounts.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/schemes', label: 'Schemes', icon: Gift, permission: 'schemes.view', excludeRoles: ['SALESMAN'] },
-      { to: '/app/warehouses', label: 'Warehouses', icon: Warehouse, permission: 'inventory.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/warehouses', label: 'Warehouses', icon: Warehouse, permission: 'inventory.view', excludeRoles: ['SALESMAN'], stock: true },
       { to: '/app/routes', label: 'Routes & Beats', icon: RouteIcon, permission: 'customers.view', excludeRoles: ['SALESMAN'] },
     ],
   },
@@ -125,7 +128,7 @@ export const companyNav = [
     section: 'Field Force',
     items: [
       { to: '/app/beat-plan', label: 'Beat Plan', icon: CalendarRange, permission: 'fieldforce.targets.manage' },
-      { to: '/app/day-cashouts', label: 'Day Cashouts', icon: Wallet, permission: 'vans.daycash.approve' },
+      { to: '/app/day-cashouts', label: 'Day Cashouts', icon: Wallet, permission: 'vans.daycash.approve', stock: true },
       // Team views; a salesman works from "My Day".
       { to: '/app/visits', label: 'Visits Report', icon: MapPin, permission: 'fieldforce.visits.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, permission: 'fieldforce.attendance.view', excludeRoles: ['SALESMAN'] },
@@ -137,7 +140,7 @@ export const companyNav = [
     section: 'Insights',
     items: [
       { to: '/app/reports', label: 'Reports', icon: BarChart3, permission: 'reports.view' },
-      { to: '/app/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.view' },
+      { to: '/app/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.view', stock: true },
     ],
   },
   {
@@ -164,7 +167,7 @@ export const platformMobileTabs = ['/platform/companies', '/platform/plans', '/p
  * Filter a nav tree by the current user's permissions.
  * Platform users see everything (platform guards are separate).
  */
-export const filterNav = (sections, { can, scope, role, user }) =>
+export const filterNav = (sections, { can, scope, role, user, salesOnly = false }) =>
   sections
     .map((section) => ({
       ...section,
@@ -174,7 +177,10 @@ export const filterNav = (sections, { can, scope, role, user }) =>
         if (item.excludeRoles && item.excludeRoles.includes(role)) return false;
         // Channel items (van stock, day cashout...) only for salesmen who sell that way.
         if (item.channel && !sellsVia(user || { role }, item.channel)) return false;
+        // A sales-only company keeps no stock: no inventory, warehouse or van screens.
+        if (item.stock && salesOnly) return false;
         if (role === 'COMPANY_ADMIN') return true;
+        if (item.alsoPermission && typeof can === 'function' && !can(item.alsoPermission)) return false;
         if (role === 'SALESMAN' && item.salesmanPermission && typeof can === 'function' && !can(item.salesmanPermission)) return false;
         if (!item.permission) return true;
         return typeof can === 'function' ? can(item.permission) : true;

@@ -23,6 +23,7 @@ import { formatMoney, formatNumber } from '@/utils/format';
 import { useTaxLabels } from '@/hooks/useLocations';
 import { useAuthStore } from '@/store/authStore';
 import { stockLabel } from '@/utils/units';
+import { CostMargin, useInventoryMode } from '@/components/company/cost-margin';
 
 // Mirrors server/src/services/catalogService.js
 const BARCODE = /^(\d{8}|\d{12,14})$/;
@@ -184,6 +185,9 @@ function ProductForm({ mode, initial, onClose, onSaved }) {
   const { lookups } = useLookups();
   const { company } = useAuth();
   const { groups, units } = useCatalog();
+  const { can } = usePermissions();
+  const seeCost = can('products.cost.view');
+  const { salesOnly, markup } = useInventoryMode();
   const viewOnly = mode === 'view';
   const creating = mode === 'create';
   // Opening stock sits in a main or sub warehouse; vans are loaded by transfer.
@@ -527,9 +531,33 @@ function ProductForm({ mode, initial, onClose, onSaved }) {
           <Field label="Dealer price" error={errors.dealerPrice?.message}>
             <Input inputMode="decimal" {...register('dealerPrice')} onInput={onlyNumber} error={!!errors.dealerPrice} placeholder="0.00" />
           </Field>
-          <Field label="Purchase price" error={errors.purchasePrice?.message} hint="Default rate on purchase orders">
-            <Input inputMode="decimal" {...register('purchasePrice')} onInput={onlyNumber} error={!!errors.purchasePrice} placeholder="0.00" />
-          </Field>
+          {seeCost && (
+            <Field
+              label={salesOnly ? 'Standard cost' : 'Purchase price'}
+              error={errors.purchasePrice?.message}
+              hint={
+                salesOnly
+                  ? 'What one unit costs you - used for gross profit'
+                  : 'Last purchase rate (updated by every goods receipt); default rate on purchase orders'
+              }
+            >
+              <Input inputMode="decimal" {...register('purchasePrice')} onInput={onlyNumber} error={!!errors.purchasePrice} placeholder="0.00" />
+            </Field>
+          )}
+          {seeCost && (
+            <CostMargin
+              className="sm:col-span-2"
+              cost={(!salesOnly && Number(initial?.avgCost || 0)) || n(watch('purchasePrice'))}
+              costLabel={!salesOnly && Number(initial?.avgCost || 0) ? 'Avg cost' : 'Cost'}
+              lastPurchase={salesOnly ? 0 : n(watch('purchasePrice'))}
+              price={n(watch('sellingPrice'))}
+              dealerPrice={n(watch('dealerPrice'))}
+              mrp={n(watch('mrp'))}
+              markup={markup}
+              money={(v) => formatMoney(v, currency)}
+              onUseSuggested={viewOnly ? undefined : (v) => setValue('sellingPrice', String(v), { shouldDirty: true, shouldValidate: true })}
+            />
+          )}
         </FormSection>
 
         <FormSection title="Tax">

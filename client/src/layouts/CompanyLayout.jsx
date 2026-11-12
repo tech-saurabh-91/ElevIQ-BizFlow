@@ -11,6 +11,7 @@ import { companyNav, filterNav, mobileTabs } from '@/routes/navigation';
 import { useCountries, findCountry } from '@/hooks/useLocations';
 import { setFormatDefaults } from '@/utils/format';
 import { FieldDayGate } from '@/components/company/FieldDay';
+import { useInventoryMode } from '@/components/company/cost-margin';
 
 /**
  * Company workspace shell: /app/*
@@ -21,6 +22,7 @@ import { FieldDayGate } from '@/components/company/FieldDay';
 export default function CompanyLayout() {
   const { user, company, settings, logout, bootstrapping } = useAuth();
   const { can } = usePermissions();
+  const { salesOnly } = useInventoryMode();
   const location = useLocation();
   const { data: countries = [] } = useCountries();
   const countryCode = findCountry(countries, company?.country)?.code;
@@ -42,7 +44,7 @@ export default function CompanyLayout() {
     );
   }
 
-  const sections = filterNav(companyNav, { can, scope: user?.scope, role: user?.role, user });
+  const sections = filterNav(companyNav, { can, scope: user?.scope, role: user?.role, user, salesOnly });
 
   const limits = user?.limits || {};
   const usage = null; // surfaced once /dashboard/usage exists (Phase 8)

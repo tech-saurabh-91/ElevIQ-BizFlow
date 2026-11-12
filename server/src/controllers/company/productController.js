@@ -166,4 +166,90 @@ export const importFile = asyncHandler(async (req, res) => {
   return success(res, { message, data: result });
 });
 
+// ---------------------------------------------------------------------------
+// Price review: products whose cost moved since their price was last looked
+// at, or that sell below cost.
+// ---------------------------------------------------------------------------
+const costOf = (p) => Number(p.avgCost || 0) || Number(p.purchasePrice || 0);
+const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+
+/** Cost x (1 + markup), never above the MRP; 0 when there is nothing to go on. */
+export const suggestedPrice = (p, markupPercent) => {
+  const cost = costOf(p);
+  if (!cost || !(markupPercent > 0)) return 0;
+  const price = round2(cost * (1 + markupPercent / 100));
+  return Number(p.mrp) > 0 ? Math.min(price, Number(p.mrp)) : price;
+};
+
+export const priceReview = asyncHandler(async (req, res) => {
+  const settings = await Setting.forCompany(req.companyId);
+  const markup = Number(settings?.inventory?.defaultMarkupPercent || 0);
+  const all = req.query.all === 'true';
+  const filter = { isActive: { $ne: false } };
+  if (!all) {
+    filter.$or = [
+      { costChangedAt: { $ne: null }, $expr: { $or: [{ $eq: ['$priceReviewedAt', null] }, { $gt: ['$costChangedAt', '$priceReviewedAt'] }] } },
+      { $expr: { $and: [{ $gt: ['$sellingPrice', 0] }, { $gt: ['$avgCost', 0] }, { $lt: ['$sellingPrice', '$avgCost'] }] } },
+    ];
+  }
+  const rows = await Product.find(filter)
+    .select('name sku unit mrp sellingPrice dealerPrice purchasePrice avgCost costChangedAt priceReviewedAt category stock')
+    .sort({ costChangedAt: -1, name: 1 })
+    .limit(500)
+    .lean();
+  const data = rows.map((p) => {
+    const cost = costOf(p);
+    const selling = Number(p.sellingPrice || 0);
+    return {
+      id: String(p._id),
+      name: p.name,
+      sku: p.sku,
+      unit: p.unit,
+      category: p.category || '',
+      stock: Number(p.stock || 0),
+      mrp: Number(p.mrp || 0),
+      sellingPrice: selling,
+      purchasePrice: Number(p.purchasePrice || 0),
+      avgCost: Number(p.avgCost || 0),
+      marginPercent: selling > 0 && cost > 0 ? round2(((selling - cost) / selling) * 100) : null,
+      suggestedPrice: suggestedPrice(p, markup),
+      belowCost: selling > 0 && cost > 0 && selling < cost,
+      costChanged: Boolean(p.costChangedAt && (!p.priceReviewedAt || p.costChangedAt > p.priceReviewedAt)),
+      costChangedAt: p.costChangedAt,
+    };
+  });
+  return success(res, { data, meta: { markupPercent: markup, total: data.length } });
+});
+
+/** POST /products/price-review { items: [{ id, sellingPrice? }] } - save prices, mark reviewed. */
+export const savePriceReview = asyncHandler(async (req, res) => {
+  const items = req.body.items || [];
+  const now = new Date();
+  const docs = await Product.find({ _id: { $in: items.map((i) => i.id) } });
+  const byId = new Map(docs.map((d) => [String(d._id), d]));
+  const errors = [];
+  for (const item of items) {
+    const doc = byId.get(String(item.id));
+    if (!doc) continue;
+    if (item.sellingPrice !== undefined) {
+      const price = round2(item.sellingPrice);
+      if (Number(doc.mrp) > 0 && price > Number(doc.mrp)) {
+        errors.push({ field: `items.${item.id}.sellingPrice`, message: `${doc.name}: more than the MRP ${doc.mrp}` });
+        continue;
+      }
+      doc.sellingPrice = price;
+    }
+    doc.priceReviewedAt = now;
+  }
+  failIfErrors(errors);
+  await Promise.all(docs.map((d) => d.save()));
+  audit(req, {
+    action: AUDIT_ACTIONS.UPDATE,
+    entityType: 'Product',
+    entityLabel: 'Price review',
+    description: `Selling prices reviewed for ${docs.length} product(s)`,
+  });
+  return success(res, { message: `${docs.length} product price(s) reviewed`, data: { reviewed: docs.length } });
+});
+
 export default crud;

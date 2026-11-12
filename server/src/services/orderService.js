@@ -226,6 +226,7 @@ export const buildOrderLines = (items, { products, priceList, settings }) => {
  * comes back as a warning.
  */
 export const stockWarnings = (lines, products, settings) => {
+  if (settings?.inventory?.mode === 'SALES_ONLY') return { warnings: [] }; // no stock kept
   const allowNegative = Boolean(settings?.order?.allowNegativeStock);
 
   // Stock is counted in base units, whatever pack each line is in.

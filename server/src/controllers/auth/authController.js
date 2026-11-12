@@ -102,6 +102,10 @@ export const companyMe = asyncHandler(async (req, res) => {
             invoice: req.settings.invoice,
             order: req.settings.order,
             fieldForce: req.settings.fieldForce,
+            inventory: {
+              mode: req.settings.inventory?.mode || 'STOCK',
+              defaultMarkupPercent: Number(req.settings.inventory?.defaultMarkupPercent || 0),
+            },
           }
         : null,
       branding: { app: 'ElevIQ SFA', company: req.company?.businessName },

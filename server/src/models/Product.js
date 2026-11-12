@@ -62,6 +62,10 @@ const productSchema = new mongoose.Schema(
     // Moving average cost per base unit across all warehouses - what the stock
     // on hand is worth and what each sale costs (see inventoryService).
     avgCost: { type: Number, default: 0, min: 0 },
+    // Price review: a purchase that moves the cost sets costChangedAt; saving
+    // the selling price on the review screen sets priceReviewedAt.
+    costChangedAt: { type: Date, default: null },
+    priceReviewedAt: { type: Date, default: null },
 
     // Stock snapshot / alerts
     openingStock: { type: Number, default: 0 },

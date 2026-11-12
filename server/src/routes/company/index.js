@@ -28,6 +28,7 @@ import * as dashboardController from '../../controllers/company/dashboardControl
 import { authenticate } from '../../middlewares/auth.js';
 import { requireCompanyScope } from '../../middlewares/rbac.js';
 import { tenant } from '../../middlewares/tenant.js';
+import { hideCostsUnlessAllowed } from '../../middlewares/costVisibility.js';
 import { requireFieldDay, requireVisitForSale } from '../../services/fieldDayService.js';
 
 /**
@@ -41,7 +42,7 @@ const router = Router();
 router.use('/auth', companyAuthRoutes);
 
 // Everything else requires an authenticated company session + tenant scope
-router.use(authenticate, requireCompanyScope, tenant);
+router.use(authenticate, requireCompanyScope, tenant, hideCostsUnlessAllowed);
 
 router.get('/ping', (req, res) => {
   res.json({

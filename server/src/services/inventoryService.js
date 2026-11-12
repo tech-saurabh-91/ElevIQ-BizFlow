@@ -99,6 +99,8 @@ export const loadWarehouse = async (id, label = 'Warehouse') => {
 
 /** True when the tenant permits stock to go negative. */
 const allowsNegative = (settings) => Boolean(settings?.order?.allowNegativeStock);
+/** The company only sells - it does not keep stock in this system. */
+export const salesOnly = (settings) => settings?.inventory?.mode === 'SALES_ONLY';
 
 /**
  * The single write path for stock. Never call `Product.stock` / `StockBalance.qty`
@@ -136,6 +138,8 @@ export const recordMovement = async ({
   if (!product) throw new BadRequestError('Product not found', 'INVALID_REFERENCE');
 
   const cfg = settings || (await Setting.forCompany(product.companyId));
+  // A sales-only company keeps no stock: nothing is moved or valued.
+  if (salesOnly(cfg)) return null;
   const negativeAllowed = allowsNegative(cfg);
 
   let warehouse = null;
@@ -233,6 +237,9 @@ export const recordMovement = async ({
   // Keep the company-wide total in lockstep. `Product.stock` is what order
   // booking and invoicing read, so it must always equal the net of all deltas.
   product.stock = round2(Number(product.stock || 0) + delta);
+  if (type === MOVEMENT_TYPES.PURCHASE_RECEIPT && Math.abs(avg - Number(product.avgCost || 0)) >= 0.005) {
+    product.costChangedAt = new Date(); // selling price may need a look
+  }
   product.avgCost = avg;
   if (type === MOVEMENT_TYPES.PURCHASE_RECEIPT && delta > 0 && !reversal && Number(unitCost) > 0) {
     product.purchasePrice = round2(unitCost); // last purchase rate
@@ -343,7 +350,7 @@ export const totalOnHand = async (productId) => {
  * reporting clamps at zero.
  */
 export const reserveStock = async (lines = [], { warehouseId = null, settings = null } = {}) => {
-  if (!settings?.order?.reserveStockOnConfirm) return;
+  if (!settings?.order?.reserveStockOnConfirm || salesOnly(settings)) return;
   const warehouse = warehouseId || (await resolveDefaultWarehouse(settings))?._id || null;
   if (!warehouse) return;
 
@@ -388,7 +395,7 @@ export const releaseReservation = async (lines = [], { warehouseId = null, setti
  * counter / van sales; a dispatch consumes its own reservation so checks on-hand.
  */
 export const assertWarehouseStock = async (warehouse, lines, settings, { excludeReserved = true } = {}) => {
-  if (settings?.order?.allowNegativeStock || !warehouse) return;
+  if (settings?.order?.allowNegativeStock || salesOnly(settings) || !warehouse) return;
   const wh = warehouse._id ? warehouse : await Warehouse.findById(warehouse).select('name code').lean();
   const wanted = new Map();
   lines.forEach((l) => {
@@ -430,6 +437,7 @@ export const damagedWarehouse = async () => Warehouse.findOne({ type: 'DAMAGED',
  */
 export const dispatchOrderStock = async (order, { settings = null, movedBy = null } = {}) => {
   const cfg = settings || (await Setting.forCompany(order.companyId));
+  if (salesOnly(cfg)) return; // no stock kept: dispatch only changes the order status
   const warehouse = order.warehouse || (await resolveDefaultWarehouse(cfg))?._id || null;
   const negativeAllowed = Boolean(cfg?.order?.allowNegativeStock);
   // Units already handed over from a van (invoiced at the shop) left no

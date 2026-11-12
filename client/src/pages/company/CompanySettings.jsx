@@ -167,6 +167,8 @@ const schema = z.object({
     lowStockThreshold: str(10),
     valuationMethod: z.enum(['FIFO', 'AVERAGE', 'LIFO']),
     batchExpiry: z.boolean(),
+    mode: z.enum(['STOCK', 'SALES_ONLY']),
+    defaultMarkupPercent: str(6),
   }),
 
   collections: z.object({
@@ -272,6 +274,8 @@ const toDefaults = (data) => ({
     lowStockThreshold: String(data?.inventory?.lowStockThreshold ?? 10),
     valuationMethod: 'AVERAGE',
     batchExpiry: data?.inventory?.batchExpiry ?? false,
+    mode: data?.inventory?.mode || 'STOCK',
+    defaultMarkupPercent: String(data?.inventory?.defaultMarkupPercent ?? 0),
   },
 
   collections: {
@@ -385,6 +389,7 @@ function SettingsForm({ data, canUpdate, tab }) {
         ...values.inventory,
         defaultWarehouse: opt(values.inventory.defaultWarehouse),
         lowStockThreshold: num(values.inventory.lowStockThreshold),
+        defaultMarkupPercent: num(values.inventory.defaultMarkupPercent) ?? 0,
       },
       collections: {
         ...values.collections,
@@ -430,6 +435,11 @@ function SettingsForm({ data, canUpdate, tab }) {
             invoice: next.invoice,
             order: next.order,
             fieldForce: next.fieldForce,
+            // Menus (sales-only) and suggested prices follow at once.
+            inventory: {
+              mode: next.inventory?.mode || 'STOCK',
+              defaultMarkupPercent: Number(next.inventory?.defaultMarkupPercent || 0),
+            },
           });
         }
       }
@@ -869,6 +879,26 @@ function SettingsForm({ data, canUpdate, tab }) {
                 <Input type="number" min="0" step="1" {...register('inventory.lowStockThreshold')} {...readOnly} />
               </Field>
               <Field
+                label="Business mode"
+                hint={
+                  watch('inventory.mode') === 'SALES_ONLY'
+                    ? 'Only orders and invoices are kept. No stock is moved or checked; each product’s standard cost is used for profit.'
+                    : 'Purchases, stock and average cost are kept; sales are costed at the average.'
+                }
+              >
+                <Select {...register('inventory.mode')} {...readOnly}>
+                  <option value="STOCK">Sales + stock (purchases, inventory)</option>
+                  <option value="SALES_ONLY">Sales only (no stock kept)</option>
+                </Select>
+              </Field>
+              <Field
+                label="Default markup %"
+                error={errors.inventory?.defaultMarkupPercent?.message}
+                hint="Suggested selling price = cost + this %, never above MRP. 0 = no suggestion."
+              >
+                <Input type="number" min="0" step="0.5" {...register('inventory.defaultMarkupPercent')} {...readOnly} />
+              </Field>
+              <Field
                 label="Stock valuation"
                 className="sm:col-span-2"
                 hint="Each purchase blends into the average cost of the stock on hand; every sale is costed at that average for gross profit."
@@ -990,6 +1020,7 @@ const MODULE_LABELS = {
   audit: 'Audit trail',
 };
 const AREA_LABELS = {
+  cost: 'Cost & margin',
   adjustments: 'Stock adjustments',
   transfers: 'Stock transfers',
   attendance: 'Attendance',

@@ -392,6 +392,8 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
   'products.update': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.WAREHOUSE],
   'products.delete': [COMPANY_ROLES.COMPANY_ADMIN],
   'products.export': ALL_ROLES,
+  // Purchase rate, average cost and margin (hidden from everyone else).
+  'products.cost.view': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT, COMPANY_ROLES.WAREHOUSE],
 
   // Discount master (standing trade discounts) and trade schemes.
   'discounts.view': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],

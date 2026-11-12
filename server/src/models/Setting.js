@@ -94,6 +94,12 @@ const settingSchema = new mongoose.Schema(
         // Stock is valued at moving average cost (LIFO is not allowed under Ind AS 2).
         valuationMethod: { type: String, enum: ['FIFO', 'AVERAGE', 'LIFO'], default: 'AVERAGE' },
         batchExpiry: { type: Boolean, default: false },
+        // STOCK: purchases, stock and average cost are kept. SALES_ONLY: a
+        // company that only books orders / invoices - no stock is moved or
+        // checked, and each product's purchase price is its standard cost.
+        mode: { type: String, enum: ['STOCK', 'SALES_ONLY'], default: 'STOCK' },
+        // Markup on cost used to suggest a selling price (0 = no suggestion).
+        defaultMarkupPercent: { type: Number, default: 0, min: 0, max: 1000 },
         defaultTransferWarehouse: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
       },
       default: () => ({}),

@@ -198,3 +198,85 @@ describe('costMovement', () => {
     expect(costMovement({ product: { stock: 15, avgCost: 9.3333 }, delta: -5, type: 'PURCHASE_RECEIPT', unitCost: 8, reversal: true }).avg).toBeCloseTo(10, 2);
   });
 });
+
+describe('Cost visibility', () => {
+  test('a salesman never receives purchase price or average cost', async () => {
+    const User = (await import('../src/models/User.js')).default;
+    await inTenant(() =>
+      User.create({ companyId: state.companyId, name: 'Rep', email: 'rep@cost.test', password: PASSWORD, role: 'SALESMAN' })
+    );
+    const rep = (await request.post('/api/auth/login').send({ identifier: 'rep@cost.test', password: PASSWORD })).body.data.accessToken;
+
+    const asRep = await request.get(`/api/v1/products/${state.productId}`).set(as(rep));
+    expect(asRep.status).toBe(200);
+    expect(asRep.body.data.sellingPrice).toBe(15);
+    expect(asRep.body.data.purchasePrice).toBeUndefined();
+    expect(asRep.body.data.avgCost).toBeUndefined();
+
+    const lookups = await request.get('/api/v1/lookups').set(as(rep));
+    expect(JSON.stringify(lookups.body)).not.toMatch(/purchasePrice|avgCost/);
+
+    const asAdmin = await api.get(`/api/v1/products/${state.productId}`);
+    expect(asAdmin.body.data.avgCost).toBe(12);
+    expect((await request.get('/api/v1/products/price-review').set(as(rep))).status).toBe(403);
+  });
+});
+
+describe('Price review', () => {
+  test('a purchase that moves the cost puts the product up for review with a suggested price', async () => {
+    const Setting = (await import('../src/models/Setting.js')).default;
+    await inTenant(async () => {
+      const s = await Setting.forCompany(state.companyId);
+      s.set({ 'inventory.defaultMarkupPercent': 25 });
+      await s.save();
+    });
+    const list = await api.get('/api/v1/products/price-review');
+    expect(list.status).toBe(200);
+    const row = list.body.data.find((r) => r.id === state.productId);
+    expect(row).toMatchObject({ avgCost: 12, sellingPrice: 15, costChanged: true, suggestedPrice: 15 }); // 12 x 1.25
+    expect(row.marginPercent).toBe(20);
+
+    const save = await api.post('/api/v1/products/price-review', { items: [{ id: state.productId, sellingPrice: 16 }] });
+    expect(save.status).toBe(200);
+    const after = await api.get('/api/v1/products/price-review');
+    expect(after.body.data.find((r) => r.id === state.productId)).toBeUndefined();
+    expect((await productDoc()).sellingPrice).toBe(16);
+
+    const overMrp = await api.post('/api/v1/products/price-review', { items: [{ id: state.productId, sellingPrice: 25 }] });
+    expect(overMrp.status).toBe(422);
+  });
+
+  test('a product sold below its cost is always listed', async () => {
+    await api.patch(`/api/v1/products/${state.productId}`, { sellingPrice: 10 });
+    const list = await api.get('/api/v1/products/price-review');
+    expect(list.body.data.find((r) => r.id === state.productId)).toMatchObject({ belowCost: true });
+    await api.patch(`/api/v1/products/${state.productId}`, { sellingPrice: 16 });
+  });
+});
+
+describe('Sales-only mode', () => {
+  test('nothing is moved or checked; the purchase price is the standard cost', async () => {
+    const Setting = (await import('../src/models/Setting.js')).default;
+    await inTenant(async () => {
+      const s = await Setting.forCompany(state.companyId);
+      s.set({ 'inventory.mode': 'SALES_ONLY', 'order.allowNegativeStock': false });
+      await s.save();
+    });
+    const before = await productDoc();
+    const inv = await api.post('/api/v1/invoices', {
+      customerId: state.customerId,
+      items: [{ product: state.productId, qty: 500 }], // far more than on hand
+      issue: true,
+    });
+    expect(inv.status).toBe(201);
+    const after = await productDoc();
+    expect(after.stock).toBe(before.stock);
+    expect(inv.body.data.items[0].costPrice).toBe(12); // average kept from before; falls back to purchase price
+
+    await inTenant(async () => {
+      const s = await Setting.forCompany(state.companyId);
+      s.set({ 'inventory.mode': 'STOCK' });
+      await s.save();
+    });
+  });
+});
