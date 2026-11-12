@@ -2,11 +2,15 @@ import { AlertTriangle, TrendingUp, Wand2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/utils/cn';
 
-/** How the company keeps stock and prices (from /auth/me settings). */
+/**
+ * The company's pricing defaults and modules. `purchase` is off for a
+ * company on a plan without the Purchase module (set by the platform).
+ */
 export const useInventoryMode = () => {
   const inv = useAuthStore((s) => s.settings?.inventory);
+  const flags = useAuthStore((s) => s.company?.featureFlags);
   return {
-    salesOnly: inv?.mode === 'SALES_ONLY',
+    purchase: flags?.purchase !== false,
     markup: Number(inv?.defaultMarkupPercent || 0),
   };
 };

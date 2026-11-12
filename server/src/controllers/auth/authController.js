@@ -103,7 +103,6 @@ export const companyMe = asyncHandler(async (req, res) => {
             order: req.settings.order,
             fieldForce: req.settings.fieldForce,
             inventory: {
-              mode: req.settings.inventory?.mode || 'STOCK',
               defaultMarkupPercent: Number(req.settings.inventory?.defaultMarkupPercent || 0),
             },
           }

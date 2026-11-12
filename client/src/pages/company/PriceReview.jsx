@@ -58,14 +58,17 @@ export default function PriceReview() {
 
   const saveAll = () =>
     save.mutate(rows.map((r) => (prices[r.id] !== undefined ? { id: r.id, sellingPrice: Number(prices[r.id]) } : { id: r.id })));
+  // The markup is a floor: only prices below the suggestion are raised to
+  // it; a price already above it is left as it is.
   const useAllSuggested = () =>
     setPrices((p) => {
       const next = { ...p };
       rows.forEach((r) => {
-        if (r.suggestedPrice > 0) next[r.id] = String(r.suggestedPrice);
+        if (r.suggestedPrice > 0 && Number(priceOf(r)) < r.suggestedPrice) next[r.id] = String(r.suggestedPrice);
       });
       return next;
     });
+  const belowSuggested = rows.filter((r) => r.suggestedPrice > 0 && Number(priceOf(r)) < r.suggestedPrice).length;
 
   const belowCount = rows.filter((r) => r.belowCost).length;
 
@@ -80,9 +83,9 @@ export default function PriceReview() {
             <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching} aria-label="Refresh" title="Refresh">
               <RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />
             </Button>
-            {markup > 0 && rows.some((r) => r.suggestedPrice > 0) && (
+            {markup > 0 && belowSuggested > 0 && (
               <Button variant="outline" onClick={useAllSuggested}>
-                <Wand2 className="h-4 w-4" /> Use all suggested
+                <Wand2 className="h-4 w-4" /> Raise {belowSuggested} to suggested
               </Button>
             )}
             <Button onClick={saveAll} disabled={!rows.length || save.isPending} loading={save.isPending}>
@@ -114,7 +117,7 @@ export default function PriceReview() {
         </div>
         <span className="text-muted-foreground">
           {markup > 0 ? (
-            <>Suggested price = cost + {markup}% (capped at MRP).</>
+            <>Suggested = the lowest price that keeps {markup}% over cost (capped at MRP).</>
           ) : (
             <>
               No default markup set -{' '}
@@ -149,7 +152,7 @@ export default function PriceReview() {
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
           {/* Column heads (sm and up). */}
-          <div className="hidden grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_minmax(0,1.3fr)] gap-3 border-b bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
+          <div className="hidden gap-3 sm:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))_minmax(0,1.3fr)] border-b bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
             <span>Product</span>
             <span className="text-right">Avg cost</span>
             <span className="text-right">MRP</span>

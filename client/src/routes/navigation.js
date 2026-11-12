@@ -84,9 +84,9 @@ export const companyNav = [
     items: [
       { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, roles: ['SALESMAN'] },
       { to: '/app/sales', label: 'Sales Visit', icon: Navigation, roles: ['SALESMAN', 'MANAGER'] },
-      { to: '/app/stock-query', label: 'Stock Query', icon: Boxes, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'], stock: true },
-      { to: '/app/stock-requests', label: 'Van Stock Requests', icon: ClipboardList, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE', 'COMPANY_ADMIN'], channel: 'VAN_SALE', stock: true },
-      { to: '/app/day-cashout', label: 'Day Cashout', icon: Wallet, roles: ['SALESMAN'], channel: 'VAN_SALE', stock: true },
+      { to: '/app/stock-query', label: 'Stock Query', icon: Boxes, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE'] },
+      { to: '/app/stock-requests', label: 'Van Stock Requests', icon: ClipboardList, roles: ['SALESMAN', 'MANAGER', 'WAREHOUSE', 'COMPANY_ADMIN'], channel: 'VAN_SALE' },
+      { to: '/app/day-cashout', label: 'Day Cashout', icon: Wallet, roles: ['SALESMAN'], channel: 'VAN_SALE' },
       // Running offers, so the salesman can pitch them at the shop.
       { to: '/app/schemes', label: 'Schemes', icon: Gift, permission: 'schemes.view', roles: ['SALESMAN'] },
     ],
@@ -124,7 +124,7 @@ export const companyNav = [
       { to: '/app/price-review', label: 'Price Review', icon: Scale, permission: 'products.update', alsoPermission: 'products.cost.view' },
       { to: '/app/discounts', label: 'Discounts', icon: Percent, permission: 'discounts.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/schemes', label: 'Schemes', icon: Gift, permission: 'schemes.view', excludeRoles: ['SALESMAN'] },
-      { to: '/app/warehouses', label: 'Warehouses', icon: Warehouse, permission: 'inventory.view', excludeRoles: ['SALESMAN'], stock: true },
+      { to: '/app/warehouses', label: 'Warehouses', icon: Warehouse, permission: 'inventory.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/routes', label: 'Routes & Beats', icon: RouteIcon, permission: 'customers.view', excludeRoles: ['SALESMAN'] },
     ],
   },
@@ -132,19 +132,19 @@ export const companyNav = [
     // Buying side: order -> receive -> book the supplier's bill -> pay; returns.
     section: 'Purchase',
     items: [
-      { to: '/app/purchase-orders', label: 'Purchase Orders', icon: ShoppingBag, permission: 'purchases.view', stock: true },
-      { to: '/app/goods-receipts', label: 'Goods Receipts', icon: PackagePlus, permission: 'grn.view', stock: true },
-      { to: '/app/purchase-bills', label: 'Supplier Bills', icon: ReceiptText, permission: 'bills.view', stock: true },
-      { to: '/app/supplier-payments', label: 'Supplier Payments', icon: HandCoins, permission: 'supplierpayments.view', stock: true },
-      { to: '/app/purchase-returns', label: 'Purchase Returns', icon: Undo2, permission: 'purchasereturns.view', stock: true },
-      { to: '/app/suppliers', label: 'Suppliers', icon: Truck, permission: 'products.view', excludeRoles: ['SALESMAN'] },
+      { to: '/app/purchase-orders', label: 'Purchase Orders', icon: ShoppingBag, permission: 'purchases.view', module: 'purchase' },
+      { to: '/app/goods-receipts', label: 'Goods Receipts', icon: PackagePlus, permission: 'grn.view', module: 'purchase' },
+      { to: '/app/purchase-bills', label: 'Supplier Bills', icon: ReceiptText, permission: 'bills.view', module: 'purchase' },
+      { to: '/app/supplier-payments', label: 'Supplier Payments', icon: HandCoins, permission: 'supplierpayments.view', module: 'purchase' },
+      { to: '/app/purchase-returns', label: 'Purchase Returns', icon: Undo2, permission: 'purchasereturns.view', module: 'purchase' },
+      { to: '/app/suppliers', label: 'Suppliers', icon: Truck, permission: 'products.view', excludeRoles: ['SALESMAN'], module: 'purchase' },
     ],
   },
   {
     section: 'Field Force',
     items: [
       { to: '/app/beat-plan', label: 'Beat Plan', icon: CalendarRange, permission: 'fieldforce.targets.manage' },
-      { to: '/app/day-cashouts', label: 'Day Cashouts', icon: Wallet, permission: 'vans.daycash.approve', stock: true },
+      { to: '/app/day-cashouts', label: 'Day Cashouts', icon: Wallet, permission: 'vans.daycash.approve' },
       // Team views; a salesman works from "My Day".
       { to: '/app/visits', label: 'Visits Report', icon: MapPin, permission: 'fieldforce.visits.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, permission: 'fieldforce.attendance.view', excludeRoles: ['SALESMAN'] },
@@ -156,7 +156,7 @@ export const companyNav = [
     section: 'Insights',
     items: [
       { to: '/app/reports', label: 'Reports', icon: BarChart3, anyPermission: ['reports.view', 'reports.register.view', 'reports.mis.view', 'reports.listing.view'] },
-      { to: '/app/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.view', stock: true },
+      { to: '/app/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.view' },
     ],
   },
   {
@@ -183,7 +183,7 @@ export const platformMobileTabs = ['/platform/companies', '/platform/plans', '/p
  * Filter a nav tree by the current user's permissions.
  * Platform users see everything (platform guards are separate).
  */
-export const filterNav = (sections, { can, scope, role, user, salesOnly = false }) =>
+export const filterNav = (sections, { can, scope, role, user, modules = {} }) =>
   sections
     .map((section) => ({
       ...section,
@@ -193,8 +193,8 @@ export const filterNav = (sections, { can, scope, role, user, salesOnly = false 
         if (item.excludeRoles && item.excludeRoles.includes(role)) return false;
         // Channel items (van stock, day cashout...) only for salesmen who sell that way.
         if (item.channel && !sellsVia(user || { role }, item.channel)) return false;
-        // A sales-only company keeps no stock: no inventory, warehouse or van screens.
-        if (item.stock && salesOnly) return false;
+        // Screens of a module the company's plan does not include.
+        if (item.module && modules[item.module] === false) return false;
         if (role === 'COMPANY_ADMIN') return true;
         if (item.alsoPermission && typeof can === 'function' && !can(item.alsoPermission)) return false;
         if (item.anyPermission) return typeof can === 'function' ? item.anyPermission.some((p) => can(p)) : true;

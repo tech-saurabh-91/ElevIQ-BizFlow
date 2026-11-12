@@ -256,8 +256,10 @@ export const createCompany = async (payload, actor) => {
     startDate,
     endDate,
     taxRegime,
+    modules,
     ...companyFields
   } = payload;
+  // The plan's modules, with any the platform switched for this company.
 
   // ---- pre-flight: uniqueness + plan --------------------------------------
   const trimmedCode = (companyFields.code || '').trim();
@@ -315,7 +317,7 @@ export const createCompany = async (payload, actor) => {
       subscriptionEnd: window.subscriptionEnd,
       userLimit: plan?.maxUsers ?? 5,
       limits: limitsFromPlan(plan),
-      featureFlags: plan?.features || {},
+      featureFlags: { ...(plan?.features || {}), ...(modules || {}) },
       createdBy: actor?.id || null,
       activatedAt: window.status === COMPANY_STATUS.ACTIVE ? new Date() : null,
       lastActivityAt: new Date(),
@@ -336,7 +338,7 @@ export const createCompany = async (payload, actor) => {
     // ---- 2. tenant settings ------------------------------------------------
     await runWithContext({ scope: 'company', companyId }, async () => {
       const settings = await Setting.forCompany(company._id);
-      if (plan?.features) settings.featureFlags = { ...plan.features };
+      settings.featureFlags = { ...(plan?.features || {}), ...(modules || {}) };
       // Start the workspace on its country's currency, time zone and tax.
       const tax = { ...(locale.tax || {}), ...(taxRegime ? { regime: taxRegime } : {}) };
       if (taxRegime === 'NONE') tax.defaultTaxRate = 0;
@@ -486,6 +488,10 @@ export const updateCompany = async (id, fields, actor) => {
   }
   if (fields.email !== undefined) set.email = (fields.email || '').toLowerCase();
   if (fields.userLimit !== undefined) set['limits.maxUsers'] = fields.userLimit;
+  // Modules are the platform's to switch (the company cannot).
+  Object.entries(fields.modules || {}).forEach(([key, on]) => {
+    set[`featureFlags.${key}`] = Boolean(on);
+  });
 
   if (fields.slug && fields.slug.toLowerCase() !== before.slug) {
     const taken = await Company.exists({

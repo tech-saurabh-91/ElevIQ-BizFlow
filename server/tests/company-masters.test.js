@@ -881,7 +881,8 @@ describe('Phase 3 - Company settings & permissions', () => {
     expect(res.body.data.tax.defaultTaxRate).toBe(12);
     expect(res.body.data.tax.regime).toBe('GST'); // preserved
     expect(res.body.data.invoice.terms).toContain('15 days');
-    expect(res.body.data.featureFlags.apiAccess).toBe(true);
+    // Modules (feature flags) are the platform's: the company cannot switch them.
+    expect(res.body.data.featureFlags?.apiAccess).not.toBe(true);
     expect(res.body.data.setupProgress.profile).toBe(true);
   });
 

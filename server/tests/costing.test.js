@@ -253,30 +253,3 @@ describe('Price review', () => {
     await api.patch(`/api/v1/products/${state.productId}`, { sellingPrice: 16 });
   });
 });
-
-describe('Sales-only mode', () => {
-  test('nothing is moved or checked; the purchase price is the standard cost', async () => {
-    const Setting = (await import('../src/models/Setting.js')).default;
-    await inTenant(async () => {
-      const s = await Setting.forCompany(state.companyId);
-      s.set({ 'inventory.mode': 'SALES_ONLY', 'order.allowNegativeStock': false });
-      await s.save();
-    });
-    const before = await productDoc();
-    const inv = await api.post('/api/v1/invoices', {
-      customerId: state.customerId,
-      items: [{ product: state.productId, qty: 500 }], // far more than on hand
-      issue: true,
-    });
-    expect(inv.status).toBe(201);
-    const after = await productDoc();
-    expect(after.stock).toBe(before.stock);
-    expect(inv.body.data.items[0].costPrice).toBe(12); // average kept from before; falls back to purchase price
-
-    await inTenant(async () => {
-      const s = await Setting.forCompany(state.companyId);
-      s.set({ 'inventory.mode': 'STOCK' });
-      await s.save();
-    });
-  });
-});

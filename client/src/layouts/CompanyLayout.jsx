@@ -22,7 +22,7 @@ import { useInventoryMode } from '@/components/company/cost-margin';
 export default function CompanyLayout() {
   const { user, company, settings, logout, bootstrapping } = useAuth();
   const { can } = usePermissions();
-  const { salesOnly } = useInventoryMode();
+  const { purchase } = useInventoryMode();
   const location = useLocation();
   const { data: countries = [] } = useCountries();
   const countryCode = findCountry(countries, company?.country)?.code;
@@ -44,7 +44,7 @@ export default function CompanyLayout() {
     );
   }
 
-  const sections = filterNav(companyNav, { can, scope: user?.scope, role: user?.role, user, salesOnly });
+  const sections = filterNav(companyNav, { can, scope: user?.scope, role: user?.role, user, modules: { purchase } });
 
   const limits = user?.limits || {};
   const usage = null; // surfaced once /dashboard/usage exists (Phase 8)

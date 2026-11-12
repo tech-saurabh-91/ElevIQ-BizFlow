@@ -70,7 +70,7 @@ const DASHBOARDS = [
   { code: 'sales', title: 'Sales Trends', description: 'Sales over time, top products and customers', icon: 'LineChart' },
   { code: 'receivables', title: 'Receivables', description: 'Outstanding and overdue invoices', icon: 'Wallet' },
   { code: 'collections', title: 'Collections', description: 'Money collected by mode and person', icon: 'Banknote' },
-  { code: 'inventory', title: 'Inventory Trends', description: 'Stock value and movements', icon: 'Boxes', stock: true },
+  { code: 'inventory', title: 'Inventory Trends', description: 'Stock value and movements', icon: 'Boxes' },
   { code: 'field-force', title: 'Field Force', description: 'Visits, attendance and productivity', icon: 'Footprints' },
 ];
 

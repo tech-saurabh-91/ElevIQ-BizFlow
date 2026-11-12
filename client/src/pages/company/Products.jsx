@@ -187,7 +187,7 @@ function ProductForm({ mode, initial, onClose, onSaved }) {
   const { groups, units } = useCatalog();
   const { can } = usePermissions();
   const seeCost = can('products.cost.view');
-  const { salesOnly, markup } = useInventoryMode();
+  const { purchase, markup } = useInventoryMode();
   const viewOnly = mode === 'view';
   const creating = mode === 'create';
   // Opening stock sits in a main or sub warehouse; vans are loaded by transfer.
@@ -533,12 +533,12 @@ function ProductForm({ mode, initial, onClose, onSaved }) {
           </Field>
           {seeCost && (
             <Field
-              label={salesOnly ? 'Standard cost' : 'Purchase price'}
+              label={purchase ? 'Purchase price' : 'Cost price'}
               error={errors.purchasePrice?.message}
               hint={
-                salesOnly
-                  ? 'What one unit costs you - used for gross profit'
-                  : 'Last purchase rate (updated by every goods receipt); default rate on purchase orders'
+                purchase
+                  ? 'Last purchase rate (updated by every goods receipt); default rate on purchase orders'
+                  : 'What one unit costs you - used for opening stock and gross profit'
               }
             >
               <Input inputMode="decimal" {...register('purchasePrice')} onInput={onlyNumber} error={!!errors.purchasePrice} placeholder="0.00" />
@@ -547,9 +547,9 @@ function ProductForm({ mode, initial, onClose, onSaved }) {
           {seeCost && (
             <CostMargin
               className="sm:col-span-2"
-              cost={(!salesOnly && Number(initial?.avgCost || 0)) || n(watch('purchasePrice'))}
-              costLabel={!salesOnly && Number(initial?.avgCost || 0) ? 'Avg cost' : 'Cost'}
-              lastPurchase={salesOnly ? 0 : n(watch('purchasePrice'))}
+              cost={Number(initial?.avgCost || 0) || n(watch('purchasePrice'))}
+              costLabel={Number(initial?.avgCost || 0) ? 'Avg cost' : 'Cost'}
+              lastPurchase={purchase ? n(watch('purchasePrice')) : 0}
               price={n(watch('sellingPrice'))}
               dealerPrice={n(watch('dealerPrice'))}
               mrp={n(watch('mrp'))}

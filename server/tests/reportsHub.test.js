@@ -148,18 +148,29 @@ describe('Figures', () => {
   });
 });
 
-describe('Business mode', () => {
-  test('sales-only companies do not see purchase or stock reports', async () => {
-    const Setting = (await import('../src/models/Setting.js')).default;
-    await inTenant(async () => {
-      const s = await Setting.forCompany(state.companyId);
-      s.set({ 'inventory.mode': 'SALES_ONLY' });
-      await s.save();
-    });
+describe('Purchase module', () => {
+  test('a company without Purchase gets no purchase screens or reports, and cannot switch it on itself', async () => {
+    const Company = (await import('../src/models/Company.js')).default;
+    await Company.updateOne({ _id: state.companyId }, { $set: { 'featureFlags.purchase': false } });
+
     const codes = (await get('/api/v1/reports/hub/catalog')).body.data.reports.map((r) => r.code);
     expect(codes).not.toContain('purchase-register');
-    expect(codes).not.toContain('stock-valuation');
-    expect(codes).toContain('sales-register');
+    expect(codes).not.toContain('payable-ageing');
+    expect(codes).toEqual(expect.arrayContaining(['sales-register', 'stock-valuation', 'stock-register']));
     expect((await get('/api/v1/reports/hub/run/purchase-register')).status).toBe(403);
+
+    const bills = await get('/api/v1/purchase-bills');
+    expect(bills.status).toBe(403);
+    expect(bills.body.code).toBe('MODULE_DISABLED');
+    expect((await get('/api/v1/purchase-orders')).status).toBe(403);
+    expect((await get('/api/v1/goods-receipts')).status).toBe(403);
+
+    // The company's own settings cannot turn it back on.
+    await request.patch('/api/v1/settings').set(as(state.admin)).send({ featureFlags: { purchase: true } });
+    expect((await Company.findById(state.companyId).lean()).featureFlags.purchase).toBe(false);
+    expect((await get('/api/v1/purchase-bills')).status).toBe(403);
+
+    await Company.updateOne({ _id: state.companyId }, { $set: { 'featureFlags.purchase': true } });
+    expect((await get('/api/v1/purchase-bills')).status).toBe(200);
   });
 });

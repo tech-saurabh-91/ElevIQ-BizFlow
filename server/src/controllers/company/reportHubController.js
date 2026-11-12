@@ -20,6 +20,7 @@ const contextOf = async (req) => {
   const can = (perm) => hasPermission(req, perm);
   return {
     settings,
+    company: req.company,
     can,
     companyId: req.companyId,
     tz: req.company?.timezone || settings?.timezone || DEFAULT_TZ,
@@ -31,7 +32,7 @@ const loadRunnable = async (req) => {
   const report = findReport(req.params.code);
   if (!report) throw new NotFoundError('Report not found');
   const ctx = await contextOf(req);
-  if (!canRun(report, ctx.can, ctx.settings)) throw new ForbiddenError('You do not have access to this report', 'FORBIDDEN');
+  if (!canRun(report, ctx.can, ctx.company)) throw new ForbiddenError('You do not have access to this report', 'FORBIDDEN');
   return { report, ctx };
 };
 
@@ -41,7 +42,7 @@ const visibleColumns = (columns, ctx) =>
 
 export const catalog = asyncHandler(async (req, res) => {
   const ctx = await contextOf(req);
-  const reports = REPORTS.filter((r) => canRun(r, ctx.can, ctx.settings)).map((r) => ({
+  const reports = REPORTS.filter((r) => canRun(r, ctx.can, ctx.company)).map((r) => ({
     code: r.code,
     group: r.group,
     title: r.title,

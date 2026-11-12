@@ -29,7 +29,7 @@ const FEATURES = [
   ['fieldForce', 'Field force'],
   ['barcode', 'Barcode'],
   ['schemes', 'Schemes & discounts'],
-  ['purchase', 'Purchase orders'],
+  ['purchase', 'Purchase (orders, receipts, supplier bills & payments)'],
 ];
 
 const schema = z.object({

@@ -125,6 +125,9 @@ export const createCompanySchema = z.object({
   startDate: optionalDate,
   endDate: optionalDate,
 
+  // Modules on top of the plan (e.g. a sales-only company without Purchase).
+  modules: z.object({ purchase: z.boolean() }).partial().optional(),
+
   admin: adminSchema,
 });
 

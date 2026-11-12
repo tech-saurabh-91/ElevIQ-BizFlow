@@ -141,9 +141,7 @@ export const update = asyncHandler(async (req, res) => {
     doc.set('address', { ...current, ...payload.address });
   }
 
-  if (payload.featureFlags) {
-    doc.set('featureFlags', { ...(doc.get('featureFlags') || {}), ...payload.featureFlags });
-  }
+  // Modules (featureFlags) are set by the platform per company, not here.
 
   SCALARS.forEach((key) => {
     if (payload[key] !== undefined) doc.set(key, payload[key]);

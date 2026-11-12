@@ -340,6 +340,40 @@ describe('Phase 2 - Company list, detail and update', () => {
     expect(res.body.data[0].password).toBeUndefined();
   });
 
+  test('the platform switches modules per company; a new company can start without Purchase', async () => {
+    const token = await asSuper();
+    const Company = mongoose.model('Company');
+
+    const off = await request
+      .patch(`/api/platform/companies/${alphaId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ modules: { purchase: false } });
+    expect(off.status).toBe(200);
+    expect((await Company.findById(alphaId).lean()).featureFlags.purchase).toBe(false);
+    await request.patch(`/api/platform/companies/${alphaId}`).set('Authorization', `Bearer ${token}`).send({ modules: { purchase: true } });
+    expect((await Company.findById(alphaId).lean()).featureFlags.purchase).toBe(true);
+
+    const salesOnly = await request
+      .post('/api/platform/companies')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        businessName: 'Gamma Sales Only',
+        modules: { purchase: false },
+        admin: { name: 'G Admin', email: 'admin@gammasales.test', password: 'Gamma#Pass123' },
+      });
+    expect(salesOnly.status).toBe(201);
+    const gamma = await Company.findOne({ businessName: 'Gamma Sales Only' }).lean();
+    expect(gamma.featureFlags.purchase).toBe(false);
+    // Leave the company list as the later tests expect it.
+    const db = mongoose.connection.db;
+    await Promise.all([
+      db.collection('companies').deleteOne({ _id: gamma._id }),
+      db.collection('users').deleteMany({ companyId: gamma._id }),
+      db.collection('settings').deleteMany({ companyId: gamma._id }),
+      db.collection('subscriptions').deleteMany({ companyId: gamma._id }),
+    ]);
+  });
+
   test('updates company profile fields and rejects duplicate slug', async () => {
     const token = await asSuper();
 

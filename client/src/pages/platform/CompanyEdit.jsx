@@ -53,6 +53,7 @@ const schema = z.object({
   financialYearStartMonth: z.string().optional().or(z.literal('')),
   graceDays: z.coerce.number().int().min(0, 'Cannot be negative').max(60, 'Max 60 days').optional(),
   userLimit: z.coerce.number().int().min(1, 'At least 1').max(10000).optional(),
+  purchaseModule: z.boolean(),
 }).superRefine((v, ctx) => checkContact(v, ctx, { phone: 'phone', gstin: 'gstin', pan: 'pan' }, isIndiaCountry(v.country)));
 
 function Section({ icon: Icon, title, description, children }) {
@@ -128,6 +129,7 @@ export default function CompanyEdit() {
       financialYearStartMonth: String(company.financialYearStartMonth || 4),
       graceDays: company.graceDays ?? 7,
       userLimit: company.userLimit ?? company.limits?.maxUsers ?? 5,
+      purchaseModule: company.featureFlags?.purchase !== false,
     });
   }, [company, reset]);
 
@@ -151,6 +153,7 @@ export default function CompanyEdit() {
         financialYearStartMonth: Number(v.financialYearStartMonth),
         graceDays: v.graceDays,
         userLimit: v.userLimit,
+        modules: { purchase: Boolean(v.purchaseModule) },
       };
       const res = await api.patch(`/platform/companies/${id}`, payload);
       return res.data.data;
@@ -316,6 +319,17 @@ export default function CompanyEdit() {
           >
             <Input type="number" min={0} max={60} {...register('graceDays')} error={!!errors.graceDays} />
           </Field>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 sm:col-span-2">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" {...register('purchaseModule')} />
+            <span>
+              <span className="block text-sm font-medium">Purchase module</span>
+              <span className="block text-xs text-muted-foreground">
+                Purchase orders, goods receipts, supplier bills, supplier payments and purchase returns. Turn off for a
+                sales-only company - they still get orders, invoices, collections and full inventory. The company admin
+                cannot change this.
+              </span>
+            </span>
+          </label>
         </Section>
 
         <div className="flex items-center justify-end gap-3">

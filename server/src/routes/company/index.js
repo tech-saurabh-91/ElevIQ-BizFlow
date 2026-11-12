@@ -30,6 +30,7 @@ import { authenticate } from '../../middlewares/auth.js';
 import { requireCompanyScope } from '../../middlewares/rbac.js';
 import { tenant } from '../../middlewares/tenant.js';
 import { hideCostsUnlessAllowed } from '../../middlewares/costVisibility.js';
+import { requireModule } from '../../middlewares/modules.js';
 import { requireFieldDay, requireVisitForSale } from '../../services/fieldDayService.js';
 
 /**
@@ -97,11 +98,13 @@ router.use('/inventory', inventoryRoutes);
 router.use('/vans', vanRoutes);
 router.use('/stock-requests', stockRequestRoutes);
 router.use('/beat-plans', beatPlanRoutes);
-router.use('/purchase-orders', purchaseOrders);
-router.use('/goods-receipts', goodsReceipts);
-router.use('/purchase-bills', purchaseBills);
-router.use('/supplier-payments', supplierPayments);
-router.use('/purchase-returns', purchaseReturns);
+// Purchase module (platform switches it per company).
+const purchase = requireModule('purchase');
+router.use('/purchase-orders', purchase, purchaseOrders);
+router.use('/goods-receipts', purchase, goodsReceipts);
+router.use('/purchase-bills', purchase, purchaseBills);
+router.use('/supplier-payments', purchase, supplierPayments);
+router.use('/purchase-returns', purchase, purchaseReturns);
 router.use('/field-force/attendance', attendance);
 router.use('/field-force/visits', visits);
 router.use('/field-force/expenses', expenses);

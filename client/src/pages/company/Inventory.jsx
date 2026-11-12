@@ -2338,6 +2338,7 @@ export default function Inventory() {
   const [openingOpen, setOpeningOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   const { company } = useAuth();
+  const purchase = company?.featureFlags?.purchase !== false;
 
   // The section lives in the URL so a refresh (or deep link) keeps the user
   // put; without one the page shows its sections as cards.
@@ -2418,7 +2419,7 @@ export default function Inventory() {
       {tab ? (
         <SectionBar backLabel="All inventory" onBack={() => setTab('')} item={TABS.find((t) => t.value === tab)} />
       ) : (
-        <SectionCards items={TABS} onPick={setTab} />
+        <SectionCards items={TABS.filter((t) => purchase || !['purchases', 'receipts'].includes(t.value))} onPick={setTab} />
       )}
 
       <TabPanel value="stock" active={tab}>

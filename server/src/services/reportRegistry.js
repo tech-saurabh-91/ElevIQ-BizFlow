@@ -307,7 +307,7 @@ const purchaseRegister = {
   description: 'Supplier bills with input GST split, paid and balance.',
   icon: 'ReceiptText',
   requires: ['bills.view'],
-  stock: true,
+  module: 'purchase',
   filters: ['dateRange', 'supplier', 'status'],
   statuses: [['', 'All live'], ['CANCELLED', 'Cancelled']],
   run: async (p, ctx) => {
@@ -362,7 +362,7 @@ const purchaseReturnRegister = {
   description: 'Goods sent back to suppliers (debit notes).',
   icon: 'PackageMinus',
   requires: ['purchasereturns.view'],
-  stock: true,
+  module: 'purchase',
   filters: ['dateRange', 'supplier'],
   run: async (p, ctx) => {
     const { from, to } = windowOf(p, ctx.tz);
@@ -402,7 +402,7 @@ const supplierPaymentRegister = {
   description: 'Payments made to suppliers and the bills they settled.',
   icon: 'HandCoins',
   requires: ['supplierpayments.view'],
-  stock: true,
+  module: 'purchase',
   filters: ['dateRange', 'supplier'],
   run: async (p, ctx) => {
     const { from, to } = windowOf(p, ctx.tz);
@@ -440,7 +440,7 @@ const grnRegister = {
   description: 'Goods received into warehouses, with value.',
   icon: 'PackagePlus',
   requires: ['grn.view'],
-  stock: true,
+  module: 'purchase',
   filters: ['dateRange', 'supplier', 'warehouse'],
   run: async (p, ctx) => {
     const { from, to } = windowOf(p, ctx.tz);
@@ -483,7 +483,6 @@ const stockRegister = {
   description: 'Every stock in and out - purchases, sales, transfers, returns, adjustments.',
   icon: 'ArrowLeftRight',
   requires: ['inventory.view'],
-  stock: true,
   filters: ['dateRange', 'product', 'warehouse'],
   run: async (p, ctx) => {
     const { from, to } = windowOf(p, ctx.tz);
@@ -656,7 +655,7 @@ const payableAgeing = {
   description: 'What you owe suppliers, split by how long it is overdue.',
   icon: 'Timer',
   requires: ['bills.view'],
-  stock: true,
+  module: 'purchase',
   filters: ['supplier'],
   run: async (p, ctx) => {
     const today = startOfDay(new Date(), ctx.tz);
@@ -684,7 +683,6 @@ const stockValuation = {
   description: 'Stock on hand at moving average cost, by product (or in one warehouse).',
   icon: 'Boxes',
   requires: ['inventory.view', 'products.cost.view'],
-  stock: true,
   filters: ['warehouse', 'includeZero'],
   run: async (p, ctx) => {
     let qtyOf = null;
@@ -713,7 +711,6 @@ const slowMoving = {
   description: 'Products in stock that have not sold for a while - money stuck on the shelf.',
   icon: 'Snail',
   requires: ['inventory.view'],
-  stock: true,
   filters: ['days'],
   run: async (p, ctx) => {
     const days = Math.max(1, Number(p.days || 60));
@@ -1055,7 +1052,6 @@ const lowStockList = {
   description: 'Products at or below their reorder level - what to buy next.',
   icon: 'AlertTriangle',
   requires: ['inventory.view'],
-  stock: true,
   filters: [],
   run: async () => {
     const docs = await Product.find({ isActive: { $ne: false }, $expr: { $lte: ['$stock', '$lowStockLevel'] } })
@@ -1102,10 +1098,10 @@ export const REPORTS = [
 
 export const findReport = (code) => REPORTS.find((r) => r.code === code) || null;
 
-/** Can this user open this report? (group permission + the report's own needs + business mode) */
-export const canRun = (report, can, settings) => {
+/** Can this user open this report? (group permission + the report's own needs + the company's modules) */
+export const canRun = (report, can, company) => {
   if (!report) return false;
-  if (report.stock && settings?.inventory?.mode === 'SALES_ONLY') return false;
+  if (report.module && company?.featureFlags?.[report.module] === false) return false;
   if (!can(REPORT_GROUPS[report.group].permission)) return false;
   return (report.requires || []).every((perm) => can(perm));
 };

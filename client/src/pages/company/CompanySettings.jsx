@@ -168,7 +168,6 @@ const schema = z.object({
     lowStockThreshold: str(10),
     valuationMethod: z.enum(['FIFO', 'AVERAGE', 'LIFO']),
     batchExpiry: z.boolean(),
-    mode: z.enum(['STOCK', 'SALES_ONLY']),
     defaultMarkupPercent: str(6),
   }),
 
@@ -275,7 +274,6 @@ const toDefaults = (data) => ({
     lowStockThreshold: String(data?.inventory?.lowStockThreshold ?? 10),
     valuationMethod: 'AVERAGE',
     batchExpiry: data?.inventory?.batchExpiry ?? false,
-    mode: data?.inventory?.mode || 'STOCK',
     defaultMarkupPercent: String(data?.inventory?.defaultMarkupPercent ?? 0),
   },
 
@@ -438,7 +436,6 @@ function SettingsForm({ data, canUpdate, tab }) {
             fieldForce: next.fieldForce,
             // Menus (sales-only) and suggested prices follow at once.
             inventory: {
-              mode: next.inventory?.mode || 'STOCK',
               defaultMarkupPercent: Number(next.inventory?.defaultMarkupPercent || 0),
             },
           });
@@ -878,19 +875,6 @@ function SettingsForm({ data, canUpdate, tab }) {
               </Field>
               <Field label="Low stock threshold" error={errors.inventory?.lowStockThreshold?.message}>
                 <Input type="number" min="0" step="1" {...register('inventory.lowStockThreshold')} {...readOnly} />
-              </Field>
-              <Field
-                label="Business mode"
-                hint={
-                  watch('inventory.mode') === 'SALES_ONLY'
-                    ? 'Only orders and invoices are kept. No stock is moved or checked; each product’s standard cost is used for profit.'
-                    : 'Purchases, stock and average cost are kept; sales are costed at the average.'
-                }
-              >
-                <Select {...register('inventory.mode')} {...readOnly}>
-                  <option value="STOCK">Sales + stock (purchases, inventory)</option>
-                  <option value="SALES_ONLY">Sales only (no stock kept)</option>
-                </Select>
               </Field>
               <Field
                 label="Default markup %"
