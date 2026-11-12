@@ -26,6 +26,7 @@ import {
   nextTransferNumber,
   assertTransferTransition,
   lowStockProducts,
+  withAvgCost,
 } from '../../services/inventoryService.js';
 
 /**
@@ -38,7 +39,7 @@ import {
  */
 
 const POPULATE_BALANCE = [
-  { path: 'product', select: 'name sku unit mrp sellingPrice purchasePrice gstRate lowStockLevel stock category brand' },
+  { path: 'product', select: 'name sku unit mrp sellingPrice purchasePrice avgCost gstRate lowStockLevel stock category brand' },
   { path: 'warehouse', select: 'name code type isDefault' },
 ];
 
@@ -190,13 +191,14 @@ export const stats = asyncHandler(async (req, res) => {
     ]),
     StockBalance.aggregate([
       { $match: base },
+      ...withAvgCost(),
       {
         $group: {
           _id: null,
           lines: { $sum: 1 },
           qty: { $sum: '$qty' },
           reserved: { $sum: '$reservedQty' },
-          value: { $sum: { $multiply: ['$qty', '$lastCost'] } },
+          value: { $sum: { $multiply: ['$qty', '$unitCost'] } },
         },
       },
     ]),
@@ -305,7 +307,8 @@ export const exportStock = asyncHandler(async (req, res) => {
     { header: 'Reserved', key: 'reserved', width: 12 },
     { header: 'Available', key: 'available', width: 12 },
     { header: 'Low Stock Level', key: 'low', width: 16 },
-    { header: 'Last Cost', key: 'cost', width: 12 },
+    { header: 'Avg Cost', key: 'cost', width: 12 },
+    { header: 'Value', key: 'value', width: 14 },
   ];
   sheet.getRow(1).font = { bold: true };
   sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2FF' } };
@@ -320,7 +323,8 @@ export const exportStock = asyncHandler(async (req, res) => {
       reserved: round2(r.reservedQty),
       available: round2(Math.max(0, Number(r.qty || 0) - Number(r.reservedQty || 0))),
       low: Number(r.lowStockLevel || 0),
-      cost: round2(r.lastCost),
+      cost: round2(r.product?.avgCost ?? r.lastCost),
+      value: round2(Number(r.qty || 0) * Number(r.product?.avgCost ?? r.lastCost ?? 0)),
     });
   });
 

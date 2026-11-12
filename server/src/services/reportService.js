@@ -15,6 +15,7 @@ import Expense from '../models/Expense.js';
 import Target from '../models/Target.js';
 
 import { INVOICE_STATUS, PAYMENT_STATUS } from '../config/constants.js';
+import { withAvgCost } from './inventoryService.js';
 
 /**
  * Phase 8 - Report aggregations.
@@ -429,12 +430,13 @@ export const inventoryReport = async ({ companyId, window, granularity = 'day', 
   const [byWarehouse, movementSeries, byType, lowStock, valuation] = await Promise.all([
     StockBalance.aggregate([
       { $match: balMatch },
+      ...withAvgCost(),
       {
         $group: {
           _id: '$warehouse',
           lines: { $sum: 1 },
           qty: { $sum: '$qty' },
-          value: { $sum: { $multiply: ['$qty', '$lastCost'] } },
+          value: { $sum: { $multiply: ['$qty', '$unitCost'] } },
         },
       },
       { $sort: { value: -1 } },
@@ -454,13 +456,14 @@ export const inventoryReport = async ({ companyId, window, granularity = 'day', 
       .lean(),
     StockBalance.aggregate([
       { $match: balMatch },
+      ...withAvgCost(),
       {
         $group: {
           _id: null,
           lines: { $sum: 1 },
           qty: { $sum: '$qty' },
           reserved: { $sum: '$reservedQty' },
-          value: { $sum: { $multiply: ['$qty', '$lastCost'] } },
+          value: { $sum: { $multiply: ['$qty', '$unitCost'] } },
         },
       },
     ]),

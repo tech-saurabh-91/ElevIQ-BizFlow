@@ -91,7 +91,8 @@ const settingSchema = new mongoose.Schema(
       type: {
         defaultWarehouse: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
         lowStockThreshold: { type: Number, default: BUSINESS_DEFAULTS.lowStockThreshold },
-        valuationMethod: { type: String, enum: ['FIFO', 'AVERAGE', 'LIFO'], default: 'FIFO' },
+        // Stock is valued at moving average cost (LIFO is not allowed under Ind AS 2).
+        valuationMethod: { type: String, enum: ['FIFO', 'AVERAGE', 'LIFO'], default: 'AVERAGE' },
         batchExpiry: { type: Boolean, default: false },
         defaultTransferWarehouse: { type: mongoose.Schema.Types.ObjectId, ref: 'Warehouse', default: null },
       },

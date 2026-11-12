@@ -30,6 +30,52 @@ import { baseQtyOf } from './catalogService.js';
  */
 
 const EPSILON = 0.0001;
+const round4 = (n) => Math.round(Number(n || 0) * 10000) / 10000;
+
+/**
+ * Receipts that bring goods in at a known cost and so move the average:
+ * a purchase, opening stock, a manual adjustment / count with a cost, and a
+ * customer return booked at what it cost when sold. Everything else coming in
+ * (transfers, van loads) and everything going out moves at the average.
+ */
+const COSTED_IN = new Set([
+  MOVEMENT_TYPES.PURCHASE_RECEIPT,
+  MOVEMENT_TYPES.OPENING,
+  MOVEMENT_TYPES.ADJUSTMENT,
+  MOVEMENT_TYPES.COUNT,
+  MOVEMENT_TYPES.SALES_RETURN,
+]);
+
+/**
+ * Moving average cost (per base unit, all warehouses together).
+ *  - in at a known cost:  avg = (onHand x avg + qty x cost) / (onHand + qty)
+ *  - anything else:       moves at the current average, which stays as it is
+ *  - a reversal:          undoes the original movement at its original cost
+ * Stock below zero counts as zero, so the first receipt after a shortage sets
+ * the average to its own cost. Returns the cost this movement is booked at and
+ * the product's new average.
+ */
+export const costMovement = ({ product, delta, type, unitCost = 0, reversal = false }) => {
+  const onHand = Number(product.stock || 0);
+  const given = Number(unitCost || 0);
+  let avg = Number(product.avgCost || 0) || Number(product.purchasePrice || 0);
+  let cost = avg;
+
+  if (delta > 0) {
+    const costed = given > 0 && (reversal || COSTED_IN.has(type));
+    if (costed) {
+      cost = given;
+      const base = Math.max(onHand, 0);
+      avg = base > EPSILON && avg > 0 ? (base * avg + delta * given) / (base + delta) : given;
+    }
+  } else if (reversal && given > 0) {
+    // Taking back an earlier receipt (GRN / adjustment cancelled).
+    cost = given;
+    const left = onHand + delta;
+    if (left > EPSILON) avg = Math.max(0, (onHand * avg + delta * given) / left);
+  }
+  return { cost: round4(cost), avg: round4(avg) };
+};
 
 /** Resolve the tenant's default warehouse (settings -> MAIN -> first active). */
 export const resolveDefaultWarehouse = async (settings) => {
@@ -79,6 +125,7 @@ export const recordMovement = async ({
   unitCost = 0,
   movedBy = null,
   settings = null,
+  reversal = false,
 }) => {
   const delta = Number(qty || 0);
   if (!Number.isFinite(delta) || Math.abs(delta) < EPSILON) {
@@ -126,9 +173,11 @@ export const recordMovement = async ({
       qty: legacyQty,
       reservedQty: 0,
       lowStockLevel: Number(product.lowStockLevel || 0),
-      lastCost: Number(unitCost || 0),
+      lastCost: 0,
     });
   }
+
+  const { cost, avg } = costMovement({ product, delta, type, unitCost, reversal });
 
   const previousQty = Number(balance.qty || 0);
   const newQty = round2(previousQty + delta);
@@ -151,8 +200,10 @@ export const recordMovement = async ({
   balance.productSku = product.sku || '';
   balance.unit = product.unit || 'PCS';
   balance.lowStockLevel = Number(product.lowStockLevel || 0);
-  if (Number(unitCost || 0) > 0) balance.lastCost = round2(unitCost);
-  balance.qty = newQty < 0 ? 0 : newQty; // never persist a negative balance
+  balance.lastCost = round4(avg);
+  // Below zero only when the company allows it (checked above): the shortage
+  // stays visible until goods arrive instead of vanishing at 0.
+  balance.qty = newQty;
   balance.lastMovementAt = new Date();
   balance.lastMovementType = type;
   await balance.save();
@@ -167,9 +218,9 @@ export const recordMovement = async ({
     warehouseCode: warehouse?.code || '',
     warehouseName: warehouse?.name || '',
     qty: delta,
-    balanceAfter: newQty < 0 ? 0 : newQty,
-    unitCost: round2(unitCost),
-    value: round2(delta * Number(unitCost || 0)),
+    balanceAfter: newQty,
+    unitCost: cost,
+    value: round2(delta * cost),
     refType,
     refId: refId || null,
     refNo: refNo || '',
@@ -182,6 +233,10 @@ export const recordMovement = async ({
   // Keep the company-wide total in lockstep. `Product.stock` is what order
   // booking and invoicing read, so it must always equal the net of all deltas.
   product.stock = round2(Number(product.stock || 0) + delta);
+  product.avgCost = avg;
+  if (type === MOVEMENT_TYPES.PURCHASE_RECEIPT && delta > 0 && !reversal && Number(unitCost) > 0) {
+    product.purchasePrice = round2(unitCost); // last purchase rate
+  }
   await product.save();
 
   return { movement, balance, product, previousQty, newQty };
@@ -218,11 +273,23 @@ export const reverseMovementsFor = async (refType, refId, reason, settings, move
       reason: reason || 'Reversal',
       note: `Reversal of movement ${String(m._id)}`,
       unitCost: Number(m.unitCost || 0),
+      reversal: true,
       movedBy,
     });
   }
   return recordMovements(reversals, settings);
 };
+
+/**
+ * Aggregation stages that attach the product's moving average cost to each
+ * StockBalance row as `unitCost`, so stock value = qty x average cost (one
+ * cost per product, whichever warehouse holds it).
+ */
+export const withAvgCost = () => [
+  { $lookup: { from: 'products', localField: 'product', foreignField: '_id', as: '_p', pipeline: [{ $project: { avgCost: 1 } }] } },
+  { $addFields: { unitCost: { $ifNull: [{ $first: '$_p.avgCost' }, '$lastCost'] } } },
+  { $project: { _p: 0 } },
+];
 
 // ---------------------------------------------------------------------------
 // Availability
@@ -429,7 +496,6 @@ export const dispatchOrderStock = async (order, { settings = null, movedBy = nul
       refId: order._id,
       refNo: order.orderNo || '',
       reason: 'Order dispatched',
-      unitCost: Number(line.unitPrice || 0) / Number(line.unitFactor || 1),
       movedBy,
       settings: cfg,
     });

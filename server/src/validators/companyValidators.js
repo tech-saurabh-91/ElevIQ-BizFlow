@@ -498,7 +498,8 @@ export const settingsUpdateSchema = z.object({
     .object({
       defaultWarehouse: refId,
       lowStockThreshold: z.coerce.number().min(0).optional(),
-      valuationMethod: z.enum(['FIFO', 'AVERAGE', 'LIFO']).optional(),
+      // Only moving average is implemented; anything sent is stored as AVERAGE.
+      valuationMethod: z.enum(['FIFO', 'AVERAGE', 'LIFO']).transform(() => 'AVERAGE').optional(),
       batchExpiry: z.boolean().optional(),
     })
     .partial()

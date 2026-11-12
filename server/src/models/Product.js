@@ -57,7 +57,11 @@ const productSchema = new mongoose.Schema(
     mrp: money(),
     sellingPrice: money(),
     dealerPrice: money(),
+    // Last purchase rate per base unit (updated by every posted goods receipt).
     purchasePrice: money(),
+    // Moving average cost per base unit across all warehouses - what the stock
+    // on hand is worth and what each sale costs (see inventoryService).
+    avgCost: { type: Number, default: 0, min: 0 },
 
     // Stock snapshot / alerts
     openingStock: { type: Number, default: 0 },

@@ -385,7 +385,6 @@ const issueInvoice = async (req, invoice, note = '') => {
           refId: invoice._id,
           refNo: invoice.invoiceNo || '',
           reason: warehouse.type === 'VAN' ? 'Van sale' : 'Direct sale',
-          unitCost: Number(line.unitPrice || 0) / Number(line.unitFactor || 1),
           movedBy: req.user.id,
           settings,
         });
@@ -414,7 +413,6 @@ const issueInvoice = async (req, invoice, note = '') => {
           refId: invoice._id,
           refNo: invoice.invoiceNo || '',
           reason: 'Van delivery against order',
-          unitCost: Number(line.unitPrice || 0) / Number(line.unitFactor || 1),
           movedBy: req.user.id,
           settings,
         });
@@ -428,6 +426,16 @@ const issueInvoice = async (req, invoice, note = '') => {
       vanDelivery = true;
     }
   }
+
+  // What the goods cost at the moment of sale (moving average) - kept on the
+  // line so gross profit stays right however the average moves later.
+  const costs = await Product.find({ _id: { $in: invoice.items.map((l) => l.product) } })
+    .select('avgCost purchasePrice')
+    .lean();
+  const costOf = new Map(costs.map((p) => [String(p._id), Number(p.avgCost || 0) || Number(p.purchasePrice || 0)]));
+  invoice.items.forEach((line) => {
+    line.costPrice = Math.round((costOf.get(String(line.product)) || 0) * Number(line.unitFactor || 1) * 100) / 100;
+  });
 
   invoice.status = INVOICE_STATUS.ISSUED;
   invoice.seller = sellerSnapshot(req.company);
@@ -831,6 +839,9 @@ export const cancel = asyncHandler(async (req, res) => {
         refId: invoice._id,
         refNo: invoice.invoiceNo || '',
         reason: 'Invoice cancelled',
+        // Back in at what it cost when it was sold.
+        unitCost: Number(line.costPrice || 0) / Number(line.unitFactor || 1),
+        reversal: true,
         movedBy: req.user.id,
         settings,
       });

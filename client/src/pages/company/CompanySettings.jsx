@@ -270,7 +270,7 @@ const toDefaults = (data) => ({
   inventory: {
     defaultWarehouse: data?.inventory?.defaultWarehouse?.id || data?.inventory?.defaultWarehouse || '',
     lowStockThreshold: String(data?.inventory?.lowStockThreshold ?? 10),
-    valuationMethod: data?.inventory?.valuationMethod || 'FIFO',
+    valuationMethod: 'AVERAGE',
     batchExpiry: data?.inventory?.batchExpiry ?? false,
   },
 
@@ -868,10 +868,17 @@ function SettingsForm({ data, canUpdate, tab }) {
               <Field label="Low stock threshold" error={errors.inventory?.lowStockThreshold?.message}>
                 <Input type="number" min="0" step="1" {...register('inventory.lowStockThreshold')} {...readOnly} />
               </Field>
+              <Field
+                label="Stock valuation"
+                className="sm:col-span-2"
+                hint="Each purchase blends into the average cost of the stock on hand; every sale is costed at that average for gross profit."
+              >
+                <Input value="Moving average cost" readOnly disabled />
+              </Field>
               <ComingSoon
                 className="sm:col-span-2"
-                title="Stock valuation method & batch expiry"
-                text="Stock is valued at the last purchase cost today. FIFO / weighted-average valuation and batch-wise expiry tracking are planned."
+                title="Batch & expiry tracking"
+                text="Batch-wise stock with expiry dates is planned."
               />
             </FormSection>
           </CardContent>

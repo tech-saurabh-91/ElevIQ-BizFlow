@@ -44,6 +44,9 @@ const invoiceItemSchema = new mongoose.Schema(
     taxableAmount: money(),
     taxAmount: money(),
     lineTotal: money(),
+    // Cost of the goods on this line (per invoiced unit), taken from the
+    // moving average cost when the invoice is issued - drives gross profit.
+    costPrice: money(),
 
     // Pricing trail: price list -> discount rule -> scheme (see pricingService).
     manualPrice: { type: Boolean, default: false },
