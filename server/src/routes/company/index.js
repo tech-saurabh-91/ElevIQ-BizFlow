@@ -26,6 +26,11 @@ import stockRequestRoutes from './stockRequests.js';
 import beatPlanRoutes from './beatPlans.js';
 import { units as unitRoutes, categories as categoryRoutes } from './catalog.js';
 import * as dashboardController from '../../controllers/company/dashboardController.js';
+import * as widgetsController from '../../controllers/company/dashboardWidgetsController.js';
+import { z } from 'zod';
+import { authorize } from '../../middlewares/rbac.js';
+import { validate } from '../../middlewares/validate.js';
+import { COMPANY_ROLE_LIST } from '../../config/constants.js';
 import { authenticate } from '../../middlewares/auth.js';
 import { requireCompanyScope } from '../../middlewares/rbac.js';
 import { tenant } from '../../middlewares/tenant.js';
@@ -56,6 +61,16 @@ router.get('/ping', (req, res) => {
 
 // ---- Workspace dashboard ---------------------------------------------------
 router.get('/dashboard/summary', dashboardController.summary);
+// Role-based widgets, and the admin's widget-by-role control.
+router.get('/dashboard/widgets', widgetsController.myWidgets);
+router.get('/dashboard/widgets/access', authorize('settings.update'), widgetsController.getAccess);
+router.put(
+  '/dashboard/widgets/access',
+  authorize('settings.update'),
+  validate({ body: z.object({ access: z.record(z.array(z.enum(COMPANY_ROLE_LIST)).nullable()) }) }),
+  widgetsController.saveAccess
+);
+router.post('/dashboard/widgets/access/reset', authorize('settings.update'), widgetsController.resetAccess);
 
 // ---- Phase 3: workspace masters -------------------------------------------
 // A salesman books nothing outside an open working day (attendance marked

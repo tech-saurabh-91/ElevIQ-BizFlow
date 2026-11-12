@@ -1,4 +1,4 @@
-import dayjs from 'dayjs';
+import { startOfDay as dayStart, dayKey, DEFAULT_TZ } from '../../services/fieldForceService.js';
 import mongoose from 'mongoose';
 import Setting from '../../models/Setting.js';
 import { success } from '../../utils/apiResponse.js';
@@ -17,8 +17,11 @@ export const summary = asyncHandler(async (req, res) => {
   const companyId = req.companyId;
   const user = req.user;
 
-  const startOfDay = dayjs().startOf('day').toDate();
-  const startOfMonth = dayjs().startOf('month').toDate();
+  // Today / this month in the company's timezone (servers run on UTC).
+  const tz = req.company?.timezone || req.settings?.timezone || DEFAULT_TZ;
+  const todayKey = dayKey(new Date(), tz);
+  const startOfDay = dayStart(todayKey, tz);
+  const startOfMonth = dayStart(`${todayKey.slice(0, 8)}01`, tz);
   // A salesman's home shows their own numbers, not the whole company's.
   const own = user.role === 'SALESMAN';
   const me = own ? new mongoose.Types.ObjectId(String(user.id)) : null;

@@ -152,6 +152,8 @@ const settingSchema = new mongoose.Schema(
     // Report-wise access: { reportCode: [roles] }. A report listed here opens
     // only for those roles (admins always); others follow their group permission.
     reportAccess: { type: Object, default: () => ({}) },
+    // Dashboard widgets per role: { widgetKey: [roles] } (unlisted: the widget's defaults).
+    dashboardAccess: { type: Object, default: () => ({}) },
 
     // Feature toggles for this company (mirrors plan flags, admin can tweak)
     featureFlags: { type: Object, default: () => ({}) },

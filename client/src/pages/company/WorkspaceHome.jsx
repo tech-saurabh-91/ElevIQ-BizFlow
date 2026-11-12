@@ -25,6 +25,7 @@ import StatCard, { STAT_GRID } from '@/components/company/stat-card';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatMoney, formatNumber, formatDate } from '@/utils/format';
+import RoleDashboard, { WidgetBoard } from '@/components/company/RoleDashboard';
 
 /** "Good morning" etc. by the device clock. */
 const greeting = () => {
@@ -136,6 +137,29 @@ export default function WorkspaceHome() {
         ]
   ).filter((a) => can(a.perm));
   const showSetup = user?.role === 'COMPANY_ADMIN';
+
+  // Everyone but a field salesman gets the role-based dashboard (the widgets
+  // their role is given - the admin can change that per role).
+  if (!isSalesman) {
+    const setupSteps = showSetup
+      ? [
+          { label: 'Company profile & invoice settings', to: '/app/settings', done: summary.setup?.profile },
+          { label: 'Add your team members', to: '/app/users', done: summary.setup?.users },
+          { label: 'Import customers', to: '/app/customers', done: summary.setup?.customers },
+          { label: 'Add products & price lists', to: '/app/products', done: summary.setup?.products },
+          { label: 'Book your first order', to: '/app/orders', done: summary.setup?.firstOrder },
+        ]
+      : null;
+    return (
+      <RoleDashboard
+        user={user}
+        company={company}
+        quickActions={quickActions}
+        setupSteps={isLoading ? null : setupSteps}
+        canCustomize={can('settings.update')}
+      />
+    );
+  }
 
   return (
     <div>
@@ -400,6 +424,9 @@ export default function WorkspaceHome() {
           </Card>
         )}
       </div>
+
+      {/* Charts and lists the salesman's role is given (own data only). */}
+      <WidgetBoard company={company} />
     </div>
   );
 }

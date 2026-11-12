@@ -17,7 +17,7 @@ import { cn } from '@/utils/cn';
  * is locked when the role lacks the data the report shows (e.g. costs).
  */
 
-const ROLE_LABEL = { MANAGER: 'Manager', ACCOUNTANT: 'Accountant', WAREHOUSE: 'Warehouse', SALESMAN: 'Salesman' };
+const ROLE_LABEL = { COMPANY_ADMIN: 'Admin', MANAGER: 'Manager', ACCOUNTANT: 'Accountant', WAREHOUSE: 'Warehouse', SALESMAN: 'Salesman' };
 const PERM_LABEL = (p) =>
   ({
     'products.cost.view': 'Cost & margin view',
@@ -38,17 +38,51 @@ const GROUP_HEAD = {
   REGISTER: 'from-sky-600 to-blue-500',
   MIS: 'from-cyan-600 to-teal-500',
   LISTING: 'from-teal-600 to-emerald-500',
+  kpi: 'from-blue-600 to-indigo-500',
+  chart: 'from-indigo-600 to-violet-500',
+  list: 'from-violet-600 to-fuchsia-500',
+};
+
+const REPORTS_CONFIG = {
+  endpoint: '/v1/reports/hub/access',
+  queryKey: ['company', 'reports-hub', 'access'],
+  invalidate: ['company', 'reports-hub', 'catalog'],
+  title: 'Report Access',
+  description: 'Choose which role can open each report. Admins always see every report.',
+  breadcrumbs: [{ label: 'Reports', to: '/app/reports' }, { label: 'Access' }],
+  itemLabel: 'Report',
+  savedMsg: 'Report access saved',
+  resetMessage: "Every report goes back to the role's report group permission (Settings → Permissions).",
+  note: 'Reports marked “Custom” use your ticks; the rest follow the role’s report group permission.',
+};
+
+export const DASHBOARD_CONFIG = {
+  endpoint: '/v1/dashboard/widgets/access',
+  queryKey: ['company', 'dashboard', 'widgets', 'access'],
+  invalidate: ['company', 'dashboard', 'widgets'],
+  title: 'Customize Dashboard',
+  description: 'Choose what each role sees on its home dashboard.',
+  breadcrumbs: [{ label: 'Dashboard', to: '/app' }, { label: 'Customize' }],
+  itemLabel: 'Widget',
+  savedMsg: 'Dashboard saved',
+  resetMessage: 'Every widget goes back to the roles it is meant for by default.',
+  note: 'Widgets marked “Custom” use your ticks; the rest show for the roles they are made for.',
 };
 
 export default function ReportAccess() {
+  return <AccessMatrix config={REPORTS_CONFIG} />;
+}
+
+/** Items x roles tick matrix (reports or dashboard widgets). */
+export function AccessMatrix({ config }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState({}); // code -> { ROLE: bool }
   const [error, setError] = useState(null);
   const [confirmReset, setConfirmReset] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['company', 'reports-hub', 'access'],
-    queryFn: async () => (await api.get('/v1/reports/hub/access')).data?.data,
+    queryKey: config.queryKey,
+    queryFn: async () => (await api.get(config.endpoint)).data?.data,
   });
   useEffect(() => setDraft({}), [data]);
 
@@ -61,16 +95,16 @@ export default function ReportAccess() {
 
   const done = (res, msg) => {
     toast.success(msg);
-    queryClient.setQueryData(['company', 'reports-hub', 'access'], res.data?.data);
-    queryClient.invalidateQueries({ queryKey: ['company', 'reports-hub', 'catalog'] });
+    queryClient.setQueryData(config.queryKey, res.data?.data);
+    queryClient.invalidateQueries({ queryKey: config.invalidate });
   };
   const save = useMutation({
-    mutationFn: (access) => api.put('/v1/reports/hub/access', { access }),
-    onSuccess: (res) => done(res, 'Report access saved'),
+    mutationFn: (access) => api.put(config.endpoint, { access }),
+    onSuccess: (res) => done(res, config.savedMsg),
     onError: (err) => setError(apiError(err)),
   });
   const reset = useMutation({
-    mutationFn: () => api.post('/v1/reports/hub/access/reset'),
+    mutationFn: () => api.post(`${config.endpoint}/reset`),
     onSuccess: (res) => {
       setConfirmReset(false);
       done(res, 'Back to role permissions');
@@ -84,9 +118,9 @@ export default function ReportAccess() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Report Access"
-        description="Choose which role can open each report. Admins always see every report."
-        breadcrumbs={[{ label: 'Reports', to: '/app/reports' }, { label: 'Access' }]}
+        title={config.title}
+        description={config.description}
+        breadcrumbs={config.breadcrumbs}
         actions={
           <>
             <Button variant="outline" onClick={() => setConfirmReset(true)}>
@@ -101,9 +135,8 @@ export default function ReportAccess() {
 
       <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
         <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        A locked box means the role cannot see that report&apos;s data (for example costs or supplier bills) - give it that
-        permission in Settings → Permissions first. Reports marked “Custom” use your ticks; the rest follow the role&apos;s report
-        group permission.
+        A locked box means the role cannot see that data (for example costs or supplier bills) - give it that permission in
+        Settings → Permissions first. {config.note}
       </p>
 
       {error && <ErrorAlert title="Could not save" message={error.message} onClose={() => setError(null)} />}
@@ -121,7 +154,7 @@ export default function ReportAccess() {
                 <table className="w-full min-w-[560px] text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="px-4 py-2 text-left font-medium">Report</th>
+                      <th className="px-4 py-2 text-left font-medium">{config.itemLabel}</th>
                       {roles.map((role) => (
                         <th key={role} className="w-28 px-2 py-2 text-center font-medium">
                           {ROLE_LABEL[role] || role}
@@ -194,8 +227,8 @@ export default function ReportAccess() {
         onClose={() => setConfirmReset(false)}
         onConfirm={() => reset.mutate()}
         loading={reset.isPending}
-        title="Reset all report access?"
-        message="Every report goes back to the role's report group permission (Settings → Permissions)."
+        title="Reset everything to the defaults?"
+        message={config.resetMessage}
         confirmLabel="Reset"
       />
     </div>

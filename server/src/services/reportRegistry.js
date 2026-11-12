@@ -16,7 +16,7 @@ import PurchaseBill from '../models/PurchaseBill.js';
 import PurchaseReturn from '../models/PurchaseReturn.js';
 import SupplierPayment from '../models/SupplierPayment.js';
 import Target from '../models/Target.js';
-import { startOfDay, DEFAULT_TZ } from './fieldForceService.js';
+import { startOfDay, dayKey, DEFAULT_TZ } from './fieldForceService.js';
 
 /**
  * Report registry: every printable report in one place.
@@ -63,8 +63,10 @@ const finish = (columns, rows, extra = {}) => ({
 
 /** Inclusive date window from YYYY-MM-DD params in the company's timezone (default: this month). */
 export const windowOf = (params, tz = DEFAULT_TZ) => {
-  const fromKey = params.from || dayjs().startOf('month').format('YYYY-MM-DD');
-  const toKey = params.to || dayjs().format('YYYY-MM-DD');
+  // "Today" is the company's today, not the server's (servers run on UTC).
+  const todayKey = dayKey(new Date(), tz);
+  const fromKey = params.from || `${todayKey.slice(0, 8)}01`;
+  const toKey = params.to || todayKey;
   const from = startOfDay(fromKey, tz);
   const to = dayjs(startOfDay(toKey, tz)).add(1, 'day').toDate();
   return { from, to, fromKey, toKey };

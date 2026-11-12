@@ -196,6 +196,55 @@ describe('Report-wise access', () => {
   });
 });
 
+describe('Dashboard widgets', () => {
+  const keys = async (token) => (await get('/api/v1/dashboard/widgets', token)).body.data.map((w) => w.key);
+
+  test('the owner gets the business pulse with real numbers', async () => {
+    const res = await get('/api/v1/dashboard/widgets');
+    expect(res.status).toBe(200);
+    const by = Object.fromEntries(res.body.data.map((w) => [w.key, w]));
+    expect(by['sales-month'].data.value).toBe(885);
+    expect(by['gross-profit-month'].data.value).toBe(250);
+    expect(by['payables'].data.value).toBe(1180);
+    expect(by['sales-trend'].data.points).toHaveLength(30);
+    expect(by['top-products'].data.rows[0]).toMatchObject({ title: 'Cookies 100g', value: 750 });
+  });
+
+  test('each role gets its own set', async () => {
+    const wh = await keys(state.wh);
+    expect(wh).toEqual(expect.arrayContaining(['low-stock', 'dispatch-pending', 'van-requests']));
+    expect(wh).not.toContain('sales-month');
+    expect(wh).not.toContain('gross-profit-month');
+
+    const sam = await get('/api/v1/dashboard/widgets', state.sam);
+    const samKeys = sam.body.data.map((w) => w.key);
+    expect(samKeys).not.toContain('gross-profit-month');
+    expect(samKeys).not.toContain('stock-value');
+    const month = sam.body.data.find((w) => w.key === 'sales-month');
+    if (month) expect(month.data.value).toBe(0); // the invoice is not Sam's
+  });
+
+  test('the admin decides who sees which widget; costs never leak', async () => {
+    const put = (access) => request.put('/api/v1/dashboard/widgets/access').set(as(state.admin)).send({ access });
+    expect((await put({ 'salesman-leaderboard': ['WAREHOUSE', 'COMPANY_ADMIN'], 'gross-profit-month': ['WAREHOUSE'], 'sales-month': ['WAREHOUSE'] })).status).toBe(200);
+    const wh = await keys(state.wh);
+    expect(wh).toContain('salesman-leaderboard');
+    expect(wh).not.toContain('sales-month'); // no invoices.view: ticking cannot open it
+    expect(wh).not.toContain('gross-profit-month'); // warehouse cannot see costs
+    expect(await keys()).not.toContain('gross-profit-month'); // admin took it off their own dashboard
+
+    const view = (await get('/api/v1/dashboard/widgets/access')).body.data;
+    const gp = view.reports.find((r) => r.code === 'gross-profit-month').roles.WAREHOUSE;
+    expect(gp.allowed).toBe(false);
+    expect(gp.missing).toContain('invoices.view');
+    expect((await request.put('/api/v1/dashboard/widgets/access').set(as(state.wh)).send({ access: {} })).status).toBe(403);
+
+    await request.post('/api/v1/dashboard/widgets/access/reset').set(as(state.admin)).send({});
+    expect(await keys(state.wh)).not.toContain('salesman-leaderboard');
+    expect(await keys()).toContain('gross-profit-month');
+  });
+});
+
 describe('Purchase module', () => {
   test('a company without Purchase gets no purchase screens or reports, and cannot switch it on itself', async () => {
     const Company = (await import('../src/models/Company.js')).default;
