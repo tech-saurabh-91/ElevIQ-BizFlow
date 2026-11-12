@@ -1000,6 +1000,9 @@ function SettingsForm({ data, canUpdate, tab }) {
 }
 // Human names for the permission keys ("creditnotes.cancel" -> Credit notes / Cancel).
 const MODULE_LABELS = {
+  bills: 'Supplier bills',
+  supplierpayments: 'Supplier payments',
+  purchasereturns: 'Purchase returns',
   dashboard: 'Dashboard',
   users: 'Users & teams',
   customers: 'Customers',

@@ -61,6 +61,9 @@ const BeatPlan = lazy(() => import('@/pages/company/BeatPlan'));
 const Suppliers = lazy(() => import('@/pages/company/Suppliers'));
 const PriceLists = lazy(() => import('@/pages/company/PriceLists'));
 const PriceReview = lazy(() => import('@/pages/company/PriceReview'));
+const PurchaseBills = lazy(() => import('@/pages/company/PurchaseBills'));
+const SupplierPayments = lazy(() => import('@/pages/company/SupplierPayments'));
+const PurchaseReturns = lazy(() => import('@/pages/company/PurchaseReturns'));
 const DiscountRules = lazy(() => import('@/pages/company/DiscountRules'));
 const Schemes = lazy(() => import('@/pages/company/Schemes'));
 const Warehouses = lazy(() => import('@/pages/company/Warehouses'));
@@ -257,6 +260,12 @@ export default function App() {
           <Route path="suppliers" element={guard('products.view', <Suppliers />)} />
           <Route path="price-lists" element={guard('products.view', <PriceLists />)} />
           <Route path="price-review" element={guard('products.update', guard('products.cost.view', <PriceReview />))} />
+          <Route path="purchase-bills" element={guard('bills.view', <PurchaseBills />)} />
+          <Route path="supplier-payments" element={guard('supplierpayments.view', <SupplierPayments />)} />
+          <Route path="purchase-returns" element={guard('purchasereturns.view', <PurchaseReturns />)} />
+          {/* Purchase orders and receipts live on the Inventory page's tabs. */}
+          <Route path="purchase-orders" element={<Navigate to="/app/inventory?tab=purchases" replace />} />
+          <Route path="goods-receipts" element={<Navigate to="/app/inventory?tab=receipts" replace />} />
           <Route path="discounts" element={guard('discounts.view', <DiscountRules />)} />
           <Route path="schemes" element={guard('schemes.view', <Schemes />)} />
           <Route path="warehouses" element={guard('inventory.view', <Warehouses />)} />

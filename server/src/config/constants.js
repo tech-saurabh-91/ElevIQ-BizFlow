@@ -208,6 +208,25 @@ export const GRN_STATUS = Object.freeze({
 });
 export const GRN_STATUS_LIST = Object.values(GRN_STATUS);
 
+/**
+ * Supplier side of a purchase (accounts payable).
+ *  - Bill: the supplier's tax invoice for goods received (GRN). Posting it
+ *    adds to what we owe the supplier.
+ *  - Payment: money paid to a supplier, set against bills (rest = advance).
+ *  - Purchase return (debit note): goods sent back; stock goes out at the
+ *    receipt cost and what we owe goes down.
+ * Each is posted when saved and can be cancelled (which reverses it).
+ */
+export const BILL_STATUS = Object.freeze({
+  POSTED: 'POSTED',
+  PARTIALLY_PAID: 'PARTIALLY_PAID',
+  PAID: 'PAID',
+  CANCELLED: 'CANCELLED',
+});
+export const BILL_STATUS_LIST = Object.values(BILL_STATUS);
+export const SUPPLIER_DOC_STATUS = Object.freeze({ POSTED: 'POSTED', CANCELLED: 'CANCELLED' });
+export const SUPPLIER_DOC_STATUS_LIST = Object.values(SUPPLIER_DOC_STATUS);
+
 /** Manual stock adjustment lifecycle (POSTED books the ledger movement). */
 export const ADJUSTMENT_STATUS = Object.freeze({
   DRAFT: 'DRAFT',
@@ -476,6 +495,17 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
   'grn.update': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.WAREHOUSE],
   'grn.delete': [COMPANY_ROLES.COMPANY_ADMIN],
   'grn.post': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.WAREHOUSE],
+
+  // Supplier bills, payments and purchase returns (accounts payable).
+  'bills.view': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
+  'bills.create': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
+  'bills.cancel': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
+  'supplierpayments.view': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
+  'supplierpayments.create': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
+  'supplierpayments.cancel': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
+  'purchasereturns.view': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT, COMPANY_ROLES.WAREHOUSE],
+  'purchasereturns.create': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.WAREHOUSE],
+  'purchasereturns.cancel': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER],
 
   'fieldforce.view': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER],
   'fieldforce.manage': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.SALESMAN],

@@ -3,6 +3,8 @@ import dayjs from 'dayjs';
 
 import PurchaseOrder from '../../models/PurchaseOrder.js';
 import GoodsReceipt from '../../models/GoodsReceipt.js';
+import PurchaseBill from '../../models/PurchaseBill.js';
+import PurchaseReturn from '../../models/PurchaseReturn.js';
 import Supplier from '../../models/Supplier.js';
 import Product from '../../models/Product.js';
 import Warehouse from '../../models/Warehouse.js';
@@ -618,6 +620,17 @@ export const cancelGrn = asyncHandler(async (req, res) => {
 
   const before = doc.status;
   if (before === GRN_STATUS.POSTED) {
+    // Billed or partly returned goods are part of the supplier account now.
+    const [billed, returned] = await Promise.all([
+      PurchaseBill.exists({ grns: doc._id, status: { $ne: 'CANCELLED' } }),
+      PurchaseReturn.exists({ grn: doc._id, status: 'POSTED' }),
+    ]);
+    if (billed || returned) {
+      throw new ConflictError(
+        `${labelOf(doc, 'grnNo')} is on a supplier bill or purchase return - cancel that first`,
+        'GRN_IN_USE'
+      );
+    }
     await reverseMovementsFor('GOODS_RECEIPT', doc._id, reason || 'GRN cancelled', settings, req.user.id);
     if (doc.purchaseOrder) await rollForwardPo(doc.purchaseOrder);
   }

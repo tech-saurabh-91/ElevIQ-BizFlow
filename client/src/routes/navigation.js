@@ -7,6 +7,11 @@
  */
 import {
   LayoutDashboard,
+  ShoppingBag,
+  PackagePlus,
+  ReceiptText,
+  HandCoins,
+  Undo2,
   Scale,
   Navigation,
   CalendarRange,
@@ -114,7 +119,6 @@ export const companyNav = [
       { to: '/app/customers', label: 'Customers', icon: Users, permission: 'customers.view', salesmanPermission: 'customers.create' },
       { to: '/app/products', label: 'Products', icon: Package, permission: 'products.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/catalog', label: 'Categories & Units', icon: Layers, permission: 'products.view', excludeRoles: ['SALESMAN'] },
-      { to: '/app/suppliers', label: 'Suppliers', icon: Truck, permission: 'products.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/price-lists', label: 'Price Lists', icon: Tags, permission: 'products.view', excludeRoles: ['SALESMAN'] },
       // Selling prices to look at after purchases move the cost.
       { to: '/app/price-review', label: 'Price Review', icon: Scale, permission: 'products.update', alsoPermission: 'products.cost.view' },
@@ -122,6 +126,18 @@ export const companyNav = [
       { to: '/app/schemes', label: 'Schemes', icon: Gift, permission: 'schemes.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/warehouses', label: 'Warehouses', icon: Warehouse, permission: 'inventory.view', excludeRoles: ['SALESMAN'], stock: true },
       { to: '/app/routes', label: 'Routes & Beats', icon: RouteIcon, permission: 'customers.view', excludeRoles: ['SALESMAN'] },
+    ],
+  },
+  {
+    // Buying side: order -> receive -> book the supplier's bill -> pay; returns.
+    section: 'Purchase',
+    items: [
+      { to: '/app/purchase-orders', label: 'Purchase Orders', icon: ShoppingBag, permission: 'purchases.view', stock: true },
+      { to: '/app/goods-receipts', label: 'Goods Receipts', icon: PackagePlus, permission: 'grn.view', stock: true },
+      { to: '/app/purchase-bills', label: 'Supplier Bills', icon: ReceiptText, permission: 'bills.view', stock: true },
+      { to: '/app/supplier-payments', label: 'Supplier Payments', icon: HandCoins, permission: 'supplierpayments.view', stock: true },
+      { to: '/app/purchase-returns', label: 'Purchase Returns', icon: Undo2, permission: 'purchasereturns.view', stock: true },
+      { to: '/app/suppliers', label: 'Suppliers', icon: Truck, permission: 'products.view', excludeRoles: ['SALESMAN'] },
     ],
   },
   {
