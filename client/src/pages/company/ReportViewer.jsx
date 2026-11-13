@@ -30,35 +30,34 @@ const todayKey = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-const PRESETS = [
-  ['This month', () => [firstOfMonth(), todayKey()]],
-  [
-    'Last month',
-    () => {
-      const d = new Date();
-      const s = new Date(d.getFullYear(), d.getMonth() - 1, 1);
-      const e = new Date(d.getFullYear(), d.getMonth(), 0);
-      const k = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
-      return [k(s), k(e)];
-    },
-  ],
-];
+const ymd = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
 
-/** Financial-year presets for the company's year start (April in India). */
-const fyPresets = (startMonth = 4) => {
+/**
+ * The "Period" list: quick months, then every financial year from the current
+ * one back five years (the company's FY start - April in India), then Custom.
+ */
+const periodOptions = (startMonth = 4) => {
   const d = new Date();
   const m = Number(startMonth) || 4;
-  const y = d.getMonth() + 1 >= m ? d.getFullYear() : d.getFullYear() - 1;
-  const mm = String(m).padStart(2, '0');
-  const lastDay = (year) => {
-    const end = new Date(year + 1, m - 1, 0);
-    return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
-  };
-  const label = (year) => (m === 1 ? `FY ${year}` : `FY ${year}-${String(year + 1).slice(-2)}`);
-  return [
-    [`This FY (${label(y)})`, () => [`${y}-${mm}-01`, todayKey()]],
-    [`Last FY (${label(y - 1)})`, () => [`${y - 1}-${mm}-01`, lastDay(y - 1)]],
+  const fy = d.getMonth() + 1 >= m ? d.getFullYear() : d.getFullYear() - 1;
+  const fyLabel = (y) => (m === 1 ? `FY ${y}` : `FY ${y}-${String(y + 1).slice(-2)}`);
+  const quarterStart = new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
+  const options = [
+    { value: 'today', label: 'Today', range: [todayKey(), todayKey()] },
+    { value: 'this-month', label: 'This month', range: [firstOfMonth(), todayKey()] },
+    { value: 'last-month', label: 'Last month', range: [ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), ymd(new Date(d.getFullYear(), d.getMonth(), 0))] },
+    { value: 'this-quarter', label: 'This quarter', range: [ymd(quarterStart), todayKey()] },
   ];
+  for (let y = fy; y > fy - 6; y -= 1) {
+    const to = y === fy ? todayKey() : ymd(new Date(y + 1, m - 1, 0));
+    options.push({
+      value: `fy-${y}`,
+      label: `${fyLabel(y)}${y === fy ? ' (this year)' : y === fy - 1 ? ' (last year)' : ''}`,
+      range: [`${y}-${String(m).padStart(2, '0')}-01`, to],
+      group: 'Financial year',
+    });
+  }
+  return options;
 };
 
 export default function ReportViewer() {
@@ -68,6 +67,7 @@ export default function ReportViewer() {
   const [params, setParams] = useSearchParams();
   const money = (v) => formatMoney(v || 0, company?.currency);
   const [downloading, setDownloading] = useState(false);
+  const periods = useMemo(() => periodOptions(company?.financialYearStartMonth), [company?.financialYearStartMonth]);
 
   const { data: catalog } = useQuery({
     queryKey: ['company', 'reports-hub', 'catalog'],
@@ -159,27 +159,35 @@ export default function ReportViewer() {
           <CardContent className="grid grid-cols-2 gap-3 py-4 sm:grid-cols-3 lg:grid-cols-6">
             {filters.includes('dateRange') && (
               <>
+                <Field label="Period">
+                  <Select
+                    value={periods.find((o) => o.range[0] === query.from && o.range[1] === query.to)?.value || 'custom'}
+                    onChange={(e) => {
+                      const option = periods.find((o) => o.value === e.target.value);
+                      if (option) set({ from: option.range[0], to: option.range[1] });
+                    }}
+                  >
+                    {periods.filter((o) => !o.group).map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                    <optgroup label="Financial year">
+                      {periods.filter((o) => o.group).map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <option value="custom">Custom dates</option>
+                  </Select>
+                </Field>
                 <Field label="From">
                   <Input type="date" value={query.from} max={query.to} onChange={(e) => set({ from: e.target.value })} />
                 </Field>
                 <Field label="To">
                   <Input type="date" value={query.to} min={query.from} onChange={(e) => set({ to: e.target.value })} />
                 </Field>
-                <div className="col-span-2 flex flex-wrap items-end gap-1.5 sm:col-span-1 lg:col-span-1">
-                  {[...PRESETS, ...fyPresets(company?.financialYearStartMonth)].map(([label, fn]) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => {
-                        const [from, to] = fn();
-                        set({ from, to });
-                      }}
-                      className="h-9 rounded-lg border px-2.5 text-xs font-medium hover:bg-accent focus-ring"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
               </>
             )}
             {filters.includes('groupBy') && meta?.groupBy && (
