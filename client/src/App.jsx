@@ -5,6 +5,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { LoadingState } from '@/components/ui/misc';
 
 import AuthLayout from '@/layouts/AuthLayout';
+import LoginLayout from '@/layouts/LoginLayout';
 import PlatformLayout from '@/layouts/PlatformLayout';
 import CompanyLayout from '@/layouts/CompanyLayout';
 
@@ -194,9 +195,9 @@ export default function App() {
         {/* ---------------- Company workspace ---------------- */}
         <Route path="/login" element={
           <PublicOnly>
-            <AuthLayout variant="company">
+            <LoginLayout>
               <CompanyLogin />
-            </AuthLayout>
+            </LoginLayout>
           </PublicOnly>
         } />
         <Route path="/forgot-password" element={

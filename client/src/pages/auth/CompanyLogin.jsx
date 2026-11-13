@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Input, Label } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorAlert } from '@/components/ui/alert';
+import { LogoMark } from '@/components/brand/Logo';
 import { toFieldErrors } from '@/api/client';
 
 const schema = z.object({
@@ -81,13 +82,14 @@ export default function CompanyLogin() {
   return (
     <div>
       <div className="mb-7">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full border bg-muted/60 px-3 py-1 text-xs font-medium text-muted-foreground">
-          <Building2 className="h-3.5 w-3.5" /> Company Workspace
+        <div className="mb-6 flex items-center gap-2.5">
+          <LogoMark size={36} />
+          <span className="text-lg font-bold tracking-tight">
+            ElevIQ <span className="text-brand-500">Bizflow</span>
+          </span>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">Sign in to your workspace</h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          Orders, invoicing, collections and field-force tracking for your business.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-[1.7rem]">Welcome Back!</h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">Sign in to manage your business operations.</p>
       </div>
 
       {serverError && (
@@ -160,7 +162,12 @@ export default function CompanyLogin() {
           </Link>
         </div>
 
-        <Button type="submit" className="w-full" size="lg" loading={isSubmitting}>
+        <Button
+          type="submit"
+          className="w-full bg-gradient-to-r from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-500/25 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand-500/30 active:translate-y-0"
+          size="lg"
+          loading={isSubmitting}
+        >
           <LogIn className="h-4 w-4" /> Sign in
         </Button>
       </form>
@@ -190,7 +197,7 @@ export default function CompanyLogin() {
             Service Provider Console
           </Link>
         </span>
-        <span className="font-semibold text-foreground">ElevIQ SFA</span>
+        <span className="font-semibold text-foreground">ElevIQ Bizflow</span>
       </div>
     </div>
   );
