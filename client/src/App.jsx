@@ -74,6 +74,7 @@ const RoutesPage = lazy(() => import('@/pages/company/Routes'));
 const Users = lazy(() => import('@/pages/company/Users'));
 const CompanySettings = lazy(() => import('@/pages/company/CompanySettings'));
 const AuditTrail = lazy(() => import('@/pages/company/AuditTrail'));
+const YearClosing = lazy(() => import('@/pages/company/YearClosing'));
 
 // ---- Phase 7: inventory + field force -------------------------------------
 const Inventory = lazy(() => import('@/pages/company/Inventory'));
@@ -296,6 +297,7 @@ export default function App() {
           <Route path="users" element={guard('users.view', <Users />)} />
           <Route path="settings" element={guard('settings.view', <CompanySettings />)} />
           <Route path="audit-logs" element={guard('audit.view', <AuditTrail />)} />
+          <Route path="year-closing" element={guard('books.view', <YearClosing />)} />
           <Route
             path="notifications"
             element={guard(null, <Notifications />)}

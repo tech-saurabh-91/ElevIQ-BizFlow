@@ -382,6 +382,8 @@ export const AUDIT_ACTIONS = Object.freeze({
   EXPORT: 'EXPORT',
   IMPERSONATE: 'IMPERSONATE',
   PASSWORD_RESET: 'PASSWORD_RESET',
+  YEAR_CLOSE: 'YEAR_CLOSE',
+  YEAR_REOPEN: 'YEAR_REOPEN',
 });
 
 // ---------------------------------------------------------------------------
@@ -531,6 +533,8 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
   'reports.export': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
 
   'settings.view': [COMPANY_ROLES.COMPANY_ADMIN],
+  'books.view': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
+  'books.close': [COMPANY_ROLES.COMPANY_ADMIN],
   'settings.update': [COMPANY_ROLES.COMPANY_ADMIN],
   'audit.view': [COMPANY_ROLES.COMPANY_ADMIN],
 });

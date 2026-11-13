@@ -41,6 +41,7 @@ import { activeVanOf, assertDayClosed } from '../../services/vanService.js';
 import { recordMovement, resolveDefaultWarehouse, assertWarehouseStock, releaseReservation, reserveStock } from '../../services/inventoryService.js';
 import { baseQtyOf } from '../../services/catalogService.js';
 import { companyToday, tzOf } from '../../utils/companyTime.js';
+import { numberOutOfYear } from '../../utils/numberSeries.js';
 
 /** Relations returned on every invoice read so the UI never needs a second call. */
 const POPULATE = [
@@ -438,6 +439,9 @@ const issueInvoice = async (req, invoice, note = '') => {
     line.costPrice = Math.round((costOf.get(String(line.product)) || 0) * Number(line.unitFactor || 1) * 100) / 100;
   });
 
+  if (numberOutOfYear(invoice.invoiceNo, invoice.invoiceDate, Number((await settingsOf(req))?.financialYearStartMonth || 4))) {
+    invoice.invoiceNo = await nextInvoiceNumber(req.companyId, await settingsOf(req), invoice.invoiceDate);
+  }
   invoice.status = INVOICE_STATUS.ISSUED;
   invoice.seller = sellerSnapshot(req.company);
   invoice.issuedAt = new Date();

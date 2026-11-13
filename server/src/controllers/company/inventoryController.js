@@ -28,6 +28,7 @@ import {
   lowStockProducts,
   withAvgCost,
 } from '../../services/inventoryService.js';
+import { numberOutOfYear } from '../../utils/numberSeries.js';
 
 /**
  * Phase 7 - Inventory controller.
@@ -523,6 +524,9 @@ const postAdjustmentDoc = async (req, doc, settings, text = '') => {
     });
   }
 
+  if (numberOutOfYear(doc.adjustmentNo, doc.adjustmentDate, Number(settings?.financialYearStartMonth || 4))) {
+    doc.adjustmentNo = await nextAdjustmentNumber(req.companyId, settings, doc.adjustmentDate);
+  }
   doc.status = ADJUSTMENT_STATUS.POSTED;
   doc.postedAt = new Date();
   doc.postedBy = req.user.id;
@@ -764,6 +768,9 @@ export const dispatchTransfer = asyncHandler(async (req, res) => {
     line.dispatchedQty = qty;
   }
 
+  if (numberOutOfYear(doc.transferNo, doc.transferDate, Number(settings?.financialYearStartMonth || 4))) {
+    doc.transferNo = await nextTransferNumber(req.companyId, settings, doc.transferDate);
+  }
   doc.status = TRANSFER_STATUS.DISPATCHED;
   doc.dispatchedAt = new Date();
   doc.dispatchedBy = req.user.id;

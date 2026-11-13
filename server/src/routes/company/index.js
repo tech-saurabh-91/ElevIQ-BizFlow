@@ -33,6 +33,8 @@ import { validate } from '../../middlewares/validate.js';
 import { COMPANY_ROLE_LIST } from '../../config/constants.js';
 import { authenticate } from '../../middlewares/auth.js';
 import { AppError } from '../../utils/errors.js';
+import { booksLock } from '../../middlewares/booksLock.js';
+import financialYearRoutes from './financialYears.js';
 import { requireCompanyScope } from '../../middlewares/rbac.js';
 import { tenant } from '../../middlewares/tenant.js';
 import { hideCostsUnlessAllowed } from '../../middlewares/costVisibility.js';
@@ -60,6 +62,9 @@ router.use((req, res, next) => {
     new AppError('Change your password to continue', { status: 403, code: 'PASSWORD_CHANGE_REQUIRED' })
   );
 });
+
+// Closed financial years are read-only (see middlewares/booksLock.js).
+router.use(booksLock);
 
 router.get('/ping', (req, res) => {
   res.json({
@@ -106,6 +111,7 @@ router.use('/pricing', pricingRoutes);
 router.use('/users', userRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/audit-logs', auditLogRoutes);
+router.use('/financial-years', financialYearRoutes);
 router.use('/lookups', lookupRoutes);
 
 // ---- Phase 4: order booking ------------------------------------------------

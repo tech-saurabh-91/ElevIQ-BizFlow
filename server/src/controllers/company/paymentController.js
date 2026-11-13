@@ -31,6 +31,7 @@ import {
   PAYABLE_INVOICE_STATUSES,
 } from '../../services/paymentService.js';
 import { companyToday, tzOf } from '../../utils/companyTime.js';
+import { numberOutOfYear } from '../../utils/numberSeries.js';
 
 /**
  * Phase 6 - Payments & Collections controller.
@@ -156,6 +157,9 @@ const receivePayment = async (req, payment, text = '') => {
   assertAllocationsWithinAmount(payment.amount, payment.allocations);
   const invoicesById = await loadPayableInvoices(payment.allocations, { customerId: payment.customerId });
 
+  if (numberOutOfYear(payment.paymentNo, payment.paymentDate, Number((await settingsOf(req))?.financialYearStartMonth || 4))) {
+    payment.paymentNo = await nextPaymentNumber(req.companyId, await settingsOf(req), payment.paymentDate);
+  }
   payment.status = PAYMENT_STATUS.RECEIVED;
   payment.receivedAt = new Date();
   payment.receivedBy = req.user.id;

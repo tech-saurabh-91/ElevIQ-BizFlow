@@ -28,6 +28,7 @@ import {
   nextGrnNumber,
   assertPoTransition,
 } from '../../services/inventoryService.js';
+import { numberOutOfYear } from '../../utils/numberSeries.js';
 
 /**
  * Phase 7 - Purchasing controller (Purchase Orders -> Goods Receipts).
@@ -578,6 +579,9 @@ const postGrnDoc = async (req, doc, settings, text = '') => {
     });
   }
 
+  if (numberOutOfYear(doc.grnNo, doc.grnDate, Number(settings?.financialYearStartMonth || 4))) {
+    doc.grnNo = await nextGrnNumber(req.companyId, settings, doc.grnDate);
+  }
   doc.status = GRN_STATUS.POSTED;
   doc.postedAt = new Date();
   doc.postedBy = req.user.id;

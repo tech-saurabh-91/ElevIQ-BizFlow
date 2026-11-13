@@ -52,6 +52,8 @@ const companySchema = new mongoose.Schema(
     currency: { type: String, default: 'INR', maxlength: 8 },
     currencySymbol: { type: String, default: '₹', maxlength: 4 },
     financialYearStartMonth: { type: Number, default: 4, min: 1, max: 12 }, // 4 = April
+    /** Last day (company-local 'YYYY-MM-DD') of the latest closed financial year; '' = nothing closed. */
+    booksClosedThrough: { type: String, default: '' },
     locale: { type: String, default: 'en-IN' },
 
     // Subscription / status

@@ -20,6 +20,7 @@ import {
   Users,
   Settings,
   ShieldCheck,
+  CalendarClock,
   Megaphone,
   ScrollText,
   Package,
@@ -164,6 +165,7 @@ export const companyNav = [
     items: [
       { to: '/app/users', label: 'Users & Teams', icon: UserCog, permission: 'users.view' },
       { to: '/app/settings', label: 'Company Settings', icon: Settings, permission: 'settings.view' },
+      { to: '/app/year-closing', label: 'Year Closing', icon: CalendarClock, permission: 'books.view' },
       { to: '/app/audit-logs', label: 'Audit Trail', icon: ShieldCheck, permission: 'audit.view' },
     ],
   },

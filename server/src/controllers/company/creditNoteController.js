@@ -29,6 +29,7 @@ import { recordMovement, resolveDefaultWarehouse, damagedWarehouse } from '../..
 import { baseQtyOf } from '../../services/catalogService.js';
 import { MOVEMENT_TYPES } from '../../config/constants.js';
 import { companyToday, tzOf } from '../../utils/companyTime.js';
+import { numberOutOfYear } from '../../utils/numberSeries.js';
 
 /**
  * Where returned goods go. Only when they had actually left stock: a direct
@@ -229,6 +230,9 @@ const issueCreditNote = async (req, note, text = '') => {
     throw new ConflictError('Linked invoice is not issued', 'INVOICE_NOT_ISSUED');
   }
 
+  if (numberOutOfYear(note.creditNoteNo, note.creditNoteDate, Number((await settingsOf(req))?.financialYearStartMonth || 4))) {
+    note.creditNoteNo = await nextCreditNoteNumber(req.companyId, await settingsOf(req), note.creditNoteDate);
+  }
   note.status = CREDIT_NOTE_STATUS.ISSUED;
   note.seller = sellerSnapshot(req.company);
   note.issuedAt = new Date();

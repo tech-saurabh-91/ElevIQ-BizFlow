@@ -74,6 +74,16 @@ export const getFinancialYearRange = (date = new Date(), startMonth = 4) => {
   return { start: start.toDate(), end: end.toDate(), tag: `${String(startYear).slice(-2)}${String(startYear + 1).slice(-2)}` };
 };
 
+/**
+ * True when a document number carries another financial year than its date -
+ * a draft numbered in one year and re-dated into the next. Such a document is
+ * renumbered in its own year when it is issued / posted.
+ */
+export const numberOutOfYear = (number, date, startMonth = 4) => {
+  if (!number || !date || !/-\d{4}-/.test(number)) return false;
+  return !number.includes(`-${getFinancialYearTag(date, startMonth)}-`);
+};
+
 export const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 export default nextSeries;
