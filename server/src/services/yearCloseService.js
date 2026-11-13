@@ -204,7 +204,7 @@ const MOVEMENT_SOURCES = [
 ];
 
 /** Movements posted on/after `end` whose document is dated before it. */
-const lateMovementIds = async (companyId, end) => {
+export const lateMovementIds = async (companyId, end) => {
   const ids = [];
   for (const [refType, Model, field] of MOVEMENT_SOURCES) {
     const refs = await StockMovement.distinct('refId', { companyId, isDeleted: { $ne: true }, refType, movedAt: { $gte: end }, refId: { $ne: null } });

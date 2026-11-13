@@ -42,15 +42,24 @@ const PRESETS = [
       return [k(s), k(e)];
     },
   ],
-  [
-    'This FY',
-    () => {
-      const d = new Date();
-      const y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
-      return [`${y}-04-01`, todayKey()];
-    },
-  ],
 ];
+
+/** Financial-year presets for the company's year start (April in India). */
+const fyPresets = (startMonth = 4) => {
+  const d = new Date();
+  const m = Number(startMonth) || 4;
+  const y = d.getMonth() + 1 >= m ? d.getFullYear() : d.getFullYear() - 1;
+  const mm = String(m).padStart(2, '0');
+  const lastDay = (year) => {
+    const end = new Date(year + 1, m - 1, 0);
+    return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+  };
+  const label = (year) => (m === 1 ? `FY ${year}` : `FY ${year}-${String(year + 1).slice(-2)}`);
+  return [
+    [`This FY (${label(y)})`, () => [`${y}-${mm}-01`, todayKey()]],
+    [`Last FY (${label(y - 1)})`, () => [`${y - 1}-${mm}-01`, lastDay(y - 1)]],
+  ];
+};
 
 export default function ReportViewer() {
   const { code } = useParams();
@@ -157,7 +166,7 @@ export default function ReportViewer() {
                   <Input type="date" value={query.to} min={query.from} onChange={(e) => set({ to: e.target.value })} />
                 </Field>
                 <div className="col-span-2 flex flex-wrap items-end gap-1.5 sm:col-span-1 lg:col-span-1">
-                  {PRESETS.map(([label, fn]) => (
+                  {[...PRESETS, ...fyPresets(company?.financialYearStartMonth)].map(([label, fn]) => (
                     <button
                       key={label}
                       type="button"

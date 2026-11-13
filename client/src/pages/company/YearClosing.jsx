@@ -359,6 +359,23 @@ export default function YearClosing() {
                           ? `Ended - ready to close.${y.reopened ? ' (Reopened earlier.)' : ''}`
                           : 'Close the earlier year first.'}
                   </p>
+                  {y.history?.length > 0 && (
+                    <details className="mt-2 text-xs">
+                      <summary className="cursor-pointer font-medium text-muted-foreground">History ({y.history.length})</summary>
+                      <ul className="mt-1.5 space-y-1 border-l pl-3">
+                        {[...y.history].reverse().map((h, i) => (
+                          <li key={i}>
+                            <span className={cn('font-semibold', h.action === 'REOPENED' ? 'text-warning-foreground dark:text-warning' : 'text-success')}>
+                              {h.action === 'REOPENED' ? 'Reopened' : 'Closed'}
+                            </span>{' '}
+                            {formatDate(h.at)}
+                            {h.byName ? ` by ${h.byName}` : ''}
+                            {h.note && <span className="block text-muted-foreground">“{h.note}”</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {y.status === 'CLOSED' && (
                       <Button size="sm" variant="outline" onClick={() => setViewTag(y.tag)}>

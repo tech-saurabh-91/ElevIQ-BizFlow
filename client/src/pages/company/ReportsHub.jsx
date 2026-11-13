@@ -16,6 +16,8 @@ import {
   ArrowLeftRight,
   TrendingUp,
   Hourglass,
+  Scale,
+  PackageSearch,
   Timer,
   Boxes,
   Snail,
@@ -77,7 +79,7 @@ const DASHBOARDS = [
 ];
 
 // Icons named by the server's report registry (kept explicit so the bundle stays small).
-const ICONS = { FileText, Undo2, Wallet, ShoppingCart, ReceiptText, PackageMinus, HandCoins, PackagePlus, ArrowLeftRight, TrendingUp, Hourglass, Timer, Boxes, Snail, Landmark, Award, Target, Users, Package, Truck, AlertTriangle, LayoutDashboard, LineChart, Banknote, Footprints, FileBarChart };
+const ICONS = { FileText, Undo2, Wallet, ShoppingCart, ReceiptText, PackageMinus, HandCoins, PackagePlus, ArrowLeftRight, TrendingUp, Hourglass, Scale, PackageSearch, Timer, Boxes, Snail, Landmark, Award, Target, Users, Package, Truck, AlertTriangle, LayoutDashboard, LineChart, Banknote, Footprints, FileBarChart };
 const iconOf = (name) => ICONS[name] || FileBarChart;
 
 export default function ReportsHub() {

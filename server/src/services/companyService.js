@@ -208,6 +208,7 @@ export const serializeCompany = (c, extras = {}) => {
     currency: c.currency,
     currencySymbol: c.currencySymbol,
     financialYearStartMonth: c.financialYearStartMonth,
+    booksClosedThrough: c.booksClosedThrough || '',
 
     plan: c.plan
       ? { id: String(c.plan._id || c.plan), code: c.plan.code, name: c.plan.name }

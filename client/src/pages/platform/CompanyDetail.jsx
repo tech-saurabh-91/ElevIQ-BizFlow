@@ -422,6 +422,10 @@ export default function CompanyDetail() {
                 </span>
               </div>
               <div className="flex justify-between">
+                <span className="text-muted-foreground">Books closed up to</span>
+                <span>{company.booksClosedThrough ? formatDate(company.booksClosedThrough) : 'No year closed'}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Grace days</span>
                 <span>{company.graceDays}</span>
               </div>

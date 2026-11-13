@@ -150,6 +150,26 @@ describe('Financial year closing', () => {
     expect(again.status).toBe(409);
   });
 
+  test("this year's opening balances equal last year's closing", async () => {
+    const total = Number(state.invoice.total);
+    const range = `from=${curStart}-04-01&to=${todayIn}`;
+    const cust = await request.get(`/api/v1/reports/hub/run/customer-balances?${range}`).set(as(state.admin));
+    expect(cust.status).toBe(200);
+    const row = cust.body.data.rows.find((r) => r.name === 'March Kirana');
+    expect(row.opening).toBeCloseTo(total - 500, 2);
+
+    const lastYear = await request.get(`/api/v1/reports/hub/run/customer-balances?from=${prevStart}-04-01&to=${prevStart + 1}-03-31`).set(as(state.admin));
+    const ly = lastYear.body.data.rows.find((r) => r.name === 'March Kirana');
+    expect(ly).toMatchObject({ opening: 0, receipts: 500 });
+    expect(ly.sales).toBeCloseTo(total, 2);
+    expect(ly.closing).toBeCloseTo(total - 500, 2);
+
+    const stock = await request.get(`/api/v1/reports/hub/run/stock-summary?${range}`).set(as(state.admin));
+    expect(stock.status).toBe(200);
+    expect(stock.body.data.rows[0]).toMatchObject({ name: 'Year Soap', openingQty: 40 });
+    expect(stock.body.data.rows[0].openingValue).toBeCloseTo(1600, 2);
+  });
+
   test('no new document can be dated in the closed year', async () => {
     const res = await request.post('/api/v1/invoices').set(as(state.admin)).send({ customerId: state.customerId, invoiceDate: inPrev('03-30'), items: [{ product: state.productId, qty: 1 }] });
     expect(res.status).toBe(423);

@@ -17,6 +17,7 @@ import PurchaseReturn from '../models/PurchaseReturn.js';
 import SupplierPayment from '../models/SupplierPayment.js';
 import Target from '../models/Target.js';
 import { startOfDay, dayKey, DEFAULT_TZ } from './fieldForceService.js';
+import { lateMovementIds } from './yearCloseService.js';
 
 /**
  * Report registry: every printable report in one place.
@@ -706,6 +707,179 @@ const stockValuation = {
   },
 };
 
+// ---- balance summaries: opening + movement in the period = closing ----------
+// Same arithmetic as the year-end closing figures, so a closed year's closing
+// balance is exactly the next year's opening balance.
+
+/** Per-party sums of `value` for documents dated before `before` (or within [from, to)). */
+const partySums = async (Model, match, dateField, party, value, { before, from, to }) => {
+  const when = before ? { $lt: before } : { $gte: from, $lt: to };
+  const rows = await Model.aggregate([
+    { $match: { ...match, [dateField]: when } },
+    { $group: { _id: `$${party}`, v: { $sum: value } } },
+  ]);
+  return new Map(rows.map((r) => [String(r._id), r.v]));
+};
+
+const balanceSummary = async ({ p, ctx, Party, partyFilter, legs }) => {
+  const { from, to } = windowOf(p, ctx.tz);
+  const base = { companyId: oid(ctx.companyId), isDeleted: { $ne: true } };
+  const parties = await Party.find(partyFilter).select('name code openingBalance createdAt').sort({ name: 1 }).lean();
+  const before = {};
+  const during = {};
+  for (const leg of legs) {
+    const match = { ...base, ...leg.match };
+    before[leg.key] = await partySums(leg.Model, match, leg.date, leg.party, leg.value, { before: from });
+    during[leg.key] = await partySums(leg.Model, match, leg.date, leg.party, leg.value, { from, to });
+  }
+  return parties
+    .map((x) => {
+      const id = String(x._id);
+      const createdAt = new Date(x.createdAt);
+      // A master's own opening balance counts from the day it was created.
+      const masterBefore = createdAt < from ? Number(x.openingBalance || 0) : 0;
+      const masterDuring = createdAt >= from && createdAt < to ? Number(x.openingBalance || 0) : 0;
+      const opening = masterBefore + legs.reduce((sum, l) => sum + l.sign * (before[l.key].get(id) || 0), 0);
+      const row = { name: x.name, code: x.code || '', opening: r2(opening) };
+      let closing = opening + masterDuring;
+      legs.forEach((l) => {
+        row[l.key] = r2(during[l.key].get(id) || 0);
+        closing += l.sign * row[l.key];
+      });
+      if (masterDuring) row[legs[0].key] = r2(row[legs[0].key] + masterDuring);
+      row.closing = r2(closing);
+      return row;
+    })
+    .filter((r) => p.includeZero === 'true' || [r.opening, r.closing, ...legs.map((l) => r[l.key])].some((v) => Math.abs(v) >= 0.01));
+};
+
+const customerBalances = {
+  code: 'customer-balances',
+  group: 'MIS',
+  title: 'Customer Balance Summary',
+  description: 'Opening balance, sales, receipts, credit notes and closing balance of every customer for a period.',
+  icon: 'Scale',
+  requires: ['invoices.view', 'payments.view'],
+  filters: ['dateRange', 'customer', 'includeZero'],
+  run: async (p, ctx) => {
+    const rows = await balanceSummary({
+      p,
+      ctx,
+      Party: Customer,
+      partyFilter: p.customer ? { _id: oid(p.customer) } : {},
+      legs: [
+        { key: 'sales', Model: Invoice, match: { status: { $in: LIVE_INVOICE } }, date: 'invoiceDate', party: 'customerId', value: '$total', sign: 1 },
+        { key: 'receipts', Model: Payment, match: { status: 'RECEIVED' }, date: 'paymentDate', party: 'customerId', value: { $ifNull: ['$amountApplied', '$amount'] }, sign: -1 },
+        { key: 'credits', Model: CreditNote, match: { status: 'ISSUED' }, date: 'creditNoteDate', party: 'customerId', value: '$total', sign: -1 },
+      ],
+    });
+    const columns = [col('name', 'Customer'), col('code', 'Code'), col('opening', 'Opening', 'money'), col('sales', 'Sales', 'money'), col('receipts', 'Receipts', 'money'), col('credits', 'Credit notes', 'money'), col('closing', 'Closing', 'money')];
+    return finish(columns, rows, {
+      note: 'Opening = balance at the start of the period. Receipts are what was set against invoices (advances not included). A new customer’s own opening balance shows under Sales.',
+    });
+  },
+};
+
+const supplierBalances = {
+  code: 'supplier-balances',
+  group: 'MIS',
+  title: 'Supplier Balance Summary',
+  description: 'Opening balance, bills, payments, returns and closing balance of every supplier for a period.',
+  icon: 'Scale',
+  requires: ['bills.view', 'supplierpayments.view'],
+  module: 'purchase',
+  filters: ['dateRange', 'supplier', 'includeZero'],
+  run: async (p, ctx) => {
+    const rows = await balanceSummary({
+      p,
+      ctx,
+      Party: Supplier,
+      partyFilter: p.supplier ? { _id: oid(p.supplier) } : {},
+      legs: [
+        { key: 'bills', Model: PurchaseBill, match: { status: { $ne: 'CANCELLED' } }, date: 'billDate', party: 'supplierId', value: '$total', sign: 1 },
+        { key: 'payments', Model: SupplierPayment, match: { status: { $ne: 'CANCELLED' } }, date: 'paymentDate', party: 'supplierId', value: '$amount', sign: -1 },
+        { key: 'returns', Model: PurchaseReturn, match: { status: { $ne: 'CANCELLED' } }, date: 'returnDate', party: 'supplierId', value: '$total', sign: -1 },
+      ],
+    });
+    const columns = [col('name', 'Supplier'), col('code', 'Code'), col('opening', 'Opening', 'money'), col('bills', 'Bills', 'money'), col('payments', 'Payments', 'money'), col('returns', 'Returns', 'money'), col('closing', 'Closing', 'money')];
+    return finish(columns, rows, { note: 'Opening = what you owed at the start of the period. A new supplier’s own opening balance shows under Bills.' });
+  },
+};
+
+const stockSummary = {
+  code: 'stock-summary',
+  group: 'MIS',
+  title: 'Stock Summary',
+  description: 'Opening stock, inward, outward and closing stock with value for a period, by product.',
+  icon: 'PackageSearch',
+  requires: ['inventory.view', 'products.cost.view'],
+  filters: ['dateRange', 'warehouse', 'product', 'includeZero'],
+  run: async (p, ctx) => {
+    const { from, to } = windowOf(p, ctx.tz);
+    const companyId = oid(ctx.companyId);
+    const base = { companyId, isDeleted: { $ne: true }, ...by(p, 'warehouse'), ...by(p, 'product') };
+    // A movement belongs to its document's date (late entries count in their own period).
+    const upTo = async (end) => {
+      const late = await lateMovementIds(companyId, end);
+      const rows = await StockMovement.aggregate([
+        { $match: { ...base, $or: [{ movedAt: { $lt: end } }, { _id: { $in: late } }] } },
+        {
+          $group: {
+            _id: '$product',
+            name: { $last: '$productName' },
+            sku: { $last: '$productSku' },
+            unit: { $last: '$unit' },
+            qty: { $sum: '$qty' },
+            value: { $sum: '$value' },
+            inQty: { $sum: { $cond: [{ $gt: ['$qty', 0] }, '$qty', 0] } },
+            inValue: { $sum: { $cond: [{ $gt: ['$qty', 0] }, '$value', 0] } },
+            outQty: { $sum: { $cond: [{ $lt: ['$qty', 0] }, '$qty', 0] } },
+            outValue: { $sum: { $cond: [{ $lt: ['$qty', 0] }, '$value', 0] } },
+          },
+        },
+      ]);
+      return new Map(rows.map((r) => [String(r._id), r]));
+    };
+    const [open, close] = await Promise.all([upTo(from), upTo(to)]);
+    const zero = { qty: 0, value: 0, inQty: 0, inValue: 0, outQty: 0, outValue: 0 };
+    const rows = [...close.entries()]
+      .map(([id, c]) => {
+        const o = open.get(id) || zero;
+        return {
+          sku: c.sku,
+          name: c.name,
+          unit: c.unit,
+          openingQty: r2(o.qty),
+          openingValue: r2(o.value),
+          inQty: r2(c.inQty - o.inQty),
+          inValue: r2(c.inValue - o.inValue),
+          outQty: r2(-(c.outQty - o.outQty)),
+          outValue: r2(-(c.outValue - o.outValue)),
+          closingQty: r2(c.qty),
+          closingValue: r2(c.value),
+        };
+      })
+      .filter((r) => p.includeZero === 'true' || [r.openingQty, r.inQty, r.outQty, r.closingQty].some((v) => Math.abs(v) > 0.0001))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const columns = [
+      col('sku', 'Code'),
+      col('name', 'Product'),
+      col('unit', 'Unit'),
+      col('openingQty', 'Opening qty', 'number'),
+      col('openingValue', 'Opening value', 'money'),
+      col('inQty', 'In qty', 'number'),
+      col('inValue', 'In value', 'money'),
+      col('outQty', 'Out qty', 'number'),
+      col('outValue', 'Out value', 'money'),
+      col('closingQty', 'Closing qty', 'number'),
+      col('closingValue', 'Closing value', 'money'),
+    ];
+    return finish(columns, rows, {
+      note: 'Values at moving average cost from the stock ledger. Transfers count out of one warehouse and into another (they cancel out across all warehouses).',
+    });
+  },
+};
+
 const slowMoving = {
   code: 'slow-moving',
   group: 'MIS',
@@ -1088,6 +1262,9 @@ export const REPORTS = [
   receivableAgeing,
   payableAgeing,
   stockValuation,
+  stockSummary,
+  customerBalances,
+  supplierBalances,
   slowMoving,
   gstSummary,
   salesmanPerformance,
