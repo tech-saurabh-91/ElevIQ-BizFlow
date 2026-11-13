@@ -5,7 +5,7 @@ import {
   COMPANY_ROLES,
   AUDIT_ACTIONS,
 } from '../config/constants.js';
-import { paginationSchema } from '../middlewares/validate.js';
+import { paginationSchema, dateNotBefore } from '../middlewares/validate.js';
 
 /**
  * Phase 2 — Platform Admin Panel validators.
@@ -129,9 +129,10 @@ export const createCompanySchema = z.object({
   modules: z.object({ purchase: z.boolean() }).partial().optional(),
 
   admin: adminSchema,
-});
+}).superRefine(dateNotBefore('endDate', 'startDate', 'End date cannot be before the start date'));
 
 export const updateCompanySchema = createCompanySchema
+  .innerType()
   .omit({ admin: true, planId: true, startMode: true, trialDays: true, billingCycle: true, startDate: true, endDate: true })
   .partial()
   .extend({
@@ -155,7 +156,8 @@ export const companyStatusSchema = z.object({
   subscriptionEnd: optionalDate,
 });
 
-export const assignSubscriptionSchema = z.object({
+export const assignSubscriptionSchema = z
+  .object({
   planId: objectIdSchema,
   billingCycle: z.enum(CYCLES).optional(),
   startDate: optionalDate,
@@ -165,7 +167,8 @@ export const assignSubscriptionSchema = z.object({
   notes: z.string().trim().max(500).optional().or(z.literal('')),
   /** Move the company to ACTIVE when the subscription starts. */
   activate: z.boolean().optional().default(true),
-});
+  })
+  .superRefine(dateNotBefore('endDate', 'startDate', 'End date cannot be before the start date'));
 
 export const companyParamsSchema = z.object({ id: objectIdSchema });
 
@@ -188,7 +191,11 @@ const planFeatures = z
   .optional();
 
 export const createPlanSchema = z.object({
-  code: z.string().trim().toUpperCase().min(2).max(20),
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9_-]{2,20}$/, 'Code must be 2-20 letters, numbers, - or _'),
   name: z.string().trim().min(2, 'Plan name is required').max(80),
   description: z.string().trim().max(500).optional().or(z.literal('')),
   price: z.coerce.number().min(0, 'Price cannot be negative').max(100000000),
@@ -232,7 +239,18 @@ export const auditLogQuerySchema = paginationSchema.extend({
 // Announcements
 // ---------------------------------------------------------------------------
 
-export const createAnnouncementSchema = z.object({
+// A call-to-action goes to an https/http page or a path inside the app - never javascript: or data: links.
+const ctaLink = z
+  .string()
+  .trim()
+  .max(400)
+  .refine((v) => !v || /^https?:\/\/[^\s]+$/i.test(v) || /^\/(?!\/)[^\s]*$/.test(v), {
+    message: 'Link must start with https:// or / (a page in the app)',
+  })
+  .optional()
+  .or(z.literal(''));
+
+const announcementBase = z.object({
   title: z.string().trim().min(3, 'Title must be at least 3 characters').max(200),
   body: z.string().trim().max(4000).optional().or(z.literal('')),
   type: z.enum(['INFO', 'UPDATE', 'MAINTENANCE', 'PROMO', 'FEATURE']).default('INFO'),
@@ -242,10 +260,11 @@ export const createAnnouncementSchema = z.object({
   startsAt: optionalDate,
   endsAt: optionalDate,
   ctaLabel: z.string().trim().max(80).optional().or(z.literal('')),
-  ctaLink: z.string().trim().max(400).optional().or(z.literal('')),
+  ctaLink,
 });
-
-export const updateAnnouncementSchema = createAnnouncementSchema.partial();
+const endsAfterStart = dateNotBefore('endsAt', 'startsAt', 'End date cannot be before the start date');
+export const createAnnouncementSchema = announcementBase.superRefine(endsAfterStart);
+export const updateAnnouncementSchema = announcementBase.partial().superRefine(endsAfterStart);
 
 // ---------------------------------------------------------------------------
 // Platform admin profile
@@ -271,6 +290,9 @@ export const platformChangePasswordSchema = z.object({
     .regex(/[A-Z]/, 'Must contain an uppercase letter')
     .regex(/[0-9]/, 'Must contain a number')
     .regex(/[^A-Za-z0-9]/, 'Must contain a symbol'),
+}).refine((v) => v.newPassword !== v.currentPassword, {
+  path: ['newPassword'],
+  message: 'Choose a password different from the current one',
 });
 
 /** Kept for parity with other validator files. */

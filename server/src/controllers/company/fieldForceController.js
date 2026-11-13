@@ -35,6 +35,28 @@ import {
   markGeofence,
 } from '../../services/fieldForceService.js';
 import { assertCanMarkIn, assertCanMarkOut, fieldDayState } from '../../services/fieldDayService.js';
+import { hasPermission } from '../../middlewares/rbac.js';
+
+/**
+ * The time on a self check-in / check-out: never in the future, and - unless
+ * the user may correct attendance - only today (a check-out may still close an
+ * earlier day that was left open).
+ */
+const selfMarkTime = (req, payload, tz, { closingOldDay = false } = {}) => {
+  const now = new Date();
+  const at = dateOrNull(payload.at) || now;
+  const fail = (field, message) => {
+    throw new BadRequestError(message, 'VALIDATION_ERROR', [{ field, message }]);
+  };
+  if (at.getTime() > now.getTime() + 2 * 60 * 1000) fail('at', 'Time cannot be in the future');
+  if (hasPermission(req, 'fieldforce.attendance.approve') || closingOldDay) return at;
+  const today = startOfDay(now, tz).getTime();
+  if (payload.day && startOfDay(validDay(payload.day) || now, tz).getTime() !== today) {
+    fail('day', 'Attendance can only be marked for today - ask your manager to correct another day');
+  }
+  if (at.getTime() < today) fail('at', 'Check-in time must be today');
+  return at;
+};
 import { tzOf } from '../../services/vanService.js';
 
 /**
@@ -162,7 +184,7 @@ export const checkIn = asyncHandler(async (req, res) => {
   const payload = { ...req.body };
 
   const tz = tzFor(req);
-  const at = dateOrNull(payload.at) || new Date();
+  const at = selfMarkTime(req, payload, tz);
   const day = startOfDay(validDay(payload.day) || at, tz);
   const location = payload.location || {};
 
@@ -224,7 +246,7 @@ export const checkOut = asyncHandler(async (req, res) => {
   const payload = { ...req.body };
 
   const tz = tzFor(req);
-  const at = dateOrNull(payload.at) || new Date();
+  const at = selfMarkTime(req, payload, tz, { closingOldDay: true });
   const { start: day, end } = dayRange(validDay(payload.day) || at, tz);
   const thatDay = { $gte: day, $lt: end };
   const location = payload.location || {};
@@ -607,7 +629,7 @@ export const visitCheckIn = asyncHandler(async (req, res) => {
   await assertCanStartVisit(req.user.id, settings, { exceptVisit: doc._id });
 
   doc.checkIn = {
-    at: dateOrNull(payload.at) || new Date(),
+    at: selfMarkTime(req, { at: payload.at }, tzFor(req)),
     location: { lat: numberOrNull(location.lat), lng: numberOrNull(location.lng) },
     accuracy: payload.accuracy == null ? null : Number(payload.accuracy),
     address: payload.address || '',
@@ -678,8 +700,14 @@ export const visitCheckOut = asyncHandler(async (req, res) => {
     doc.invoiceValue = Number(invoice.total || 0);
   }
 
+  const outAt = selfMarkTime(req, { at: payload.at }, tzFor(req));
+  if (doc.checkIn?.at && outAt < new Date(doc.checkIn.at)) {
+    throw new BadRequestError('Check-out cannot be before the check-in', 'VALIDATION_ERROR', [
+      { field: 'at', message: 'Check-out cannot be before the check-in' },
+    ]);
+  }
   doc.checkOut = {
-    at: dateOrNull(payload.at) || new Date(),
+    at: outAt,
     location: { lat: numberOrNull(location.lat), lng: numberOrNull(location.lng) },
     accuracy: payload.accuracy == null ? null : Number(payload.accuracy),
     address: payload.address || '',

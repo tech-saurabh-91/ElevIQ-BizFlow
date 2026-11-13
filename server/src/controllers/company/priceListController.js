@@ -8,12 +8,24 @@ import { dayKey, DEFAULT_TZ } from '../../services/fieldForceService.js';
 const validateItems = async (items = []) => {
   if (!items.length) return items;
   const ids = [...new Set(items.map((i) => String(i.product)))];
-  const found = await Product.find({ _id: { $in: ids } }).select('_id').lean();
-  const foundIds = new Set(found.map((p) => String(p._id)));
-  const missing = ids.filter((id) => !foundIds.has(id));
+  const found = await Product.find({ _id: { $in: ids } }).select('_id name mrp').lean();
+  const byId = new Map(found.map((p) => [String(p._id), p]));
+  const missing = ids.filter((id) => !byId.has(id));
   if (missing.length) {
     throw new BadRequestError(`Unknown product(s) in price list: ${missing.join(', ')}`, 'INVALID_REFERENCE');
   }
+  // One price per product, and never above the printed MRP.
+  const errors = [];
+  const seen = new Set();
+  items.forEach((item, i) => {
+    const p = byId.get(String(item.product));
+    if (seen.has(String(item.product))) errors.push({ field: `items.${i}.product`, message: `${p.name} is listed twice` });
+    seen.add(String(item.product));
+    if (Number(p.mrp) > 0 && Number(item.price) > Number(p.mrp)) {
+      errors.push({ field: `items.${i}.price`, message: `${p.name}: price ${item.price} is more than the MRP ${p.mrp}` });
+    }
+  });
+  if (errors.length) throw new BadRequestError(errors[0].message, 'VALIDATION_ERROR', errors);
   return items;
 };
 

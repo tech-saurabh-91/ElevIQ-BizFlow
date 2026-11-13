@@ -17,7 +17,7 @@ import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, MOVEMENT_TYPES, PURCHASE_ORDER_STATUS, GRN_STATUS } from '../../config/constants.js';
 import { AppError, BadRequestError, ConflictError, ErrorCodes } from '../../utils/errors.js';
 import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
-import { computeTotals, priceLineValues, taxBreakupFor, sellerStateOf, assertPackQty } from '../../services/orderService.js';
+import { computeTotals, priceLineValues, taxBreakupFor, sellerStateOf, assertPackQty, wholeUnitCodes, assertWholeQty } from '../../services/orderService.js';
 import { lineUnit } from '../../services/catalogService.js';
 import {
   recordMovement,
@@ -811,6 +811,7 @@ const buildPoLines = async (raw = [], settings) => {
   const ids = [...new Set(raw.map((l) => String(l.product)).filter(Boolean))];
   const docs = ids.length ? await Product.find({ _id: { $in: ids } }) : [];
   const byId = new Map(docs.map((d) => [String(d._id), d]));
+  const wholeUnits = await wholeUnitCodes();
 
   const lines = raw.map((input, index) => {
     const product = byId.get(String(input.product));
@@ -820,6 +821,7 @@ const buildPoLines = async (raw = [], settings) => {
     // defaults to the product's purchase price per base unit x pack size.
     const unit = lineUnit(product, input.unit);
     assertPackQty(input.qty, unit.factor, product, unit.unit, index);
+    assertWholeQty(input.qty, unit.unit, wholeUnits, product, index);
     const unitPrice =
       input.unitPrice === undefined || input.unitPrice === null || input.unitPrice === ''
         ? Number(product.purchasePrice || 0) * unit.factor
@@ -871,10 +873,21 @@ const buildGrnLines = async (raw = [], po) => {
   const poLineByProduct = new Map(
     ((po && po.items) || []).map((i) => [String(i.product), i])
   );
+  const wholeUnits = await wholeUnitCodes();
+  if (raw.length && raw.every((l) => !(Number(l.receivedQty) > 0))) {
+    throw new AppError('Enter the quantity received on at least one line', {
+      status: 422,
+      code: 'VALIDATION_ERROR',
+      errors: [{ field: 'items.0.receivedQty', message: 'Enter the quantity received' }],
+    });
+  }
 
   return raw.map((input, index) => {
     const product = byId.get(String(input.product));
     if (!product) throw new BadRequestError(`Product not found for line ${index + 1}`, 'INVALID_REFERENCE');
+    const lineUnitCode = poLineByProduct.get(String(input.product))?.unit || product.unit || 'PCS';
+    assertWholeQty(input.receivedQty, lineUnitCode, wholeUnits, product, index, 'receivedQty');
+    assertWholeQty(input.rejectedQty || 0, lineUnitCode, wholeUnits, product, index, 'rejectedQty');
 
     const received = Number(input.receivedQty || 0);
     const rejected = Math.min(Number(input.rejectedQty || 0), received);

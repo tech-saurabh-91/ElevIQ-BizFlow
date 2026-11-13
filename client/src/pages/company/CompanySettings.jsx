@@ -147,7 +147,7 @@ const schema = z.object({
     footerNote: str(500),
     defaultDueDays: str(4),
     showQr: z.boolean(),
-    upiVpa: str(80),
+    upiVpa: str(80).refine((v) => !v || /^[\w.-]{2,256}@[a-zA-Z][a-zA-Z0-9]{1,63}$/.test(v), 'Enter a UPI ID like shopname@okhdfcbank'),
     showGstin: z.boolean(),
     rounding: z.enum(['NEAREST', 'DOWN', 'NONE']),
     defaultPaymentTerms: z.enum(PAYMENT_TERMS),
@@ -187,7 +187,7 @@ const schema = z.object({
     trackLiveLocation: z.boolean(),
     workStart: str(5),
     workEnd: str(5),
-  }),
+  }).refine((f) => !f.workStart || !f.workEnd || f.workEnd > f.workStart, { path: ['workEnd'], message: 'Work end must be after work start' }),
 }).superRefine((v, ctx) =>
   checkContact(
     v,

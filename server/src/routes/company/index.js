@@ -32,6 +32,7 @@ import { authorize } from '../../middlewares/rbac.js';
 import { validate } from '../../middlewares/validate.js';
 import { COMPANY_ROLE_LIST } from '../../config/constants.js';
 import { authenticate } from '../../middlewares/auth.js';
+import { AppError } from '../../utils/errors.js';
 import { requireCompanyScope } from '../../middlewares/rbac.js';
 import { tenant } from '../../middlewares/tenant.js';
 import { hideCostsUnlessAllowed } from '../../middlewares/costVisibility.js';
@@ -50,6 +51,15 @@ router.use('/auth', companyAuthRoutes);
 
 // Everything else requires an authenticated company session + tenant scope
 router.use(authenticate, requireCompanyScope, tenant, hideCostsUnlessAllowed);
+
+// A first / admin-set password is known to someone else: until the user picks
+// their own (POST /api/auth/change-password), nothing can be changed.
+router.use((req, res, next) => {
+  if (!req.user?.mustChangePassword || req.isImpersonating || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  return next(
+    new AppError('Change your password to continue', { status: 403, code: 'PASSWORD_CHANGE_REQUIRED' })
+  );
+});
 
 router.get('/ping', (req, res) => {
   res.json({

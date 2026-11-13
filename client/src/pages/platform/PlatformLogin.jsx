@@ -78,7 +78,7 @@ export default function PlatformLogin() {
             id="email"
             type="email"
             autoComplete="username"
-            placeholder="superadmin@eleviqsfa.com"
+            placeholder="you@company.com"
             error={errors.email?.message}
             {...register('email')}
           />
@@ -125,15 +125,12 @@ export default function PlatformLogin() {
         </Button>
       </form>
 
-      <div className="mt-6 rounded-lg border bg-muted/40 p-3.5 text-xs text-muted-foreground">
-        <p className="mb-1 font-medium text-foreground">First time here?</p>
-        <p>
-          Seeded credentials come from your <code className="rounded bg-muted px-1">.env</code> file
-          (<code className="rounded bg-muted px-1">SUPER_ADMIN_EMAIL</code> /{' '}
-          <code className="rounded bg-muted px-1">SUPER_ADMIN_PASSWORD</code>) via{' '}
-          <code className="rounded bg-muted px-1">npm run seed</code>.
-        </p>
-      </div>
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        Company user?{' '}
+        <Link to="/login" className="font-medium text-brand-600 hover:underline">
+          Sign in to your workspace
+        </Link>
+      </p>
     </div>
   );
 }

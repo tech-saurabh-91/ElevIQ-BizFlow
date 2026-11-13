@@ -61,6 +61,9 @@ const schema = z.object({
   if (v.mode === 'CHEQUE' && v.chequeDate && v.chequeDate < (v.paymentDate || todayInput())) {
     ctx.addIssue({ code: 'custom', path: ['chequeDate'], message: 'Cheque date cannot be before the payment date' });
   }
+  if (v.mode === 'CHEQUE' && !String(v.reference || '').trim()) {
+    ctx.addIssue({ code: 'custom', path: ['reference'], message: 'Enter the cheque number' });
+  }
 });
 
 export default function PaymentEditor() {

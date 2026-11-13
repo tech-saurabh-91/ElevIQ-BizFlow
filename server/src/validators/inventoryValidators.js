@@ -125,14 +125,19 @@ export const poListQuerySchema = paginationSchema.extend({
 // Goods receipts
 // ---------------------------------------------------------------------------
 
-export const grnLineSchema = z.object({
-  product: objectIdSchema,
-  receivedQty: z.coerce.number().min(0, 'Cannot be negative').max(1e9),
-  rejectedQty: z.coerce.number().min(0).max(1e9).optional(),
-  rejectReason: softString(300),
-  unitCost: rate,
-  note: softString(300),
-});
+export const grnLineSchema = z
+  .object({
+    product: objectIdSchema,
+    receivedQty: z.coerce.number().min(0, 'Cannot be negative').max(1e9),
+    rejectedQty: z.coerce.number().min(0).max(1e9).optional(),
+    rejectReason: softString(300),
+    unitCost: rate,
+    note: softString(300),
+  })
+  .refine((l) => Number(l.rejectedQty || 0) <= Number(l.receivedQty || 0), {
+    path: ['rejectedQty'],
+    message: 'Rejected cannot be more than received',
+  });
 
 export const grnCreateSchema = z.object({
   purchaseOrder: refId,
@@ -193,7 +198,7 @@ export const adjustmentLineSchema = z.object({
 
 export const adjustmentCreateSchema = z.object({
   warehouse: objectIdSchema,
-  adjustmentDate: optionalDate,
+  adjustmentDate: optionalDate.refine(notFutureDate, { message: 'Adjustment date cannot be in the future' }),
   reason: z.enum(ADJUSTMENT_REASONS),
   notes: softString(1000),
   items: z.array(adjustmentLineSchema).min(1, 'Add at least one line').max(500),
@@ -203,7 +208,7 @@ export const adjustmentCreateSchema = z.object({
 export const adjustmentUpdateSchema = z
   .object({
     warehouse: refId,
-    adjustmentDate: optionalDate,
+    adjustmentDate: optionalDate.refine(notFutureDate, { message: 'Adjustment date cannot be in the future' }),
     reason: z.enum(ADJUSTMENT_REASONS).optional(),
     notes: softString(1000),
     items: z.array(adjustmentLineSchema).min(1, 'Add at least one line').max(500).optional(),
@@ -237,7 +242,7 @@ export const transferCreateSchema = z
   .object({
     fromWarehouse: objectIdSchema,
     toWarehouse: objectIdSchema,
-    transferDate: optionalDate,
+    transferDate: optionalDate.refine(notFutureDate, { message: 'Transfer date cannot be in the future' }),
     vehicleNo: softString(30),
     notes: softString(1000),
     items: z.array(transferLineSchema).min(1, 'Add at least one line').max(500),
@@ -251,7 +256,7 @@ export const transferUpdateSchema = z
   .object({
     fromWarehouse: refId,
     toWarehouse: refId,
-    transferDate: optionalDate,
+    transferDate: optionalDate.refine(notFutureDate, { message: 'Transfer date cannot be in the future' }),
     vehicleNo: softString(30),
     notes: softString(1000),
     items: z.array(transferLineSchema).min(1, 'Add at least one line').max(500).optional(),

@@ -41,7 +41,11 @@ export const paymentCreateSchema = z
   .refine(
     (v) => !v.chequeDate || !v.paymentDate || Date.parse(v.chequeDate) >= Date.parse(v.paymentDate) - 86400000,
     { message: 'Cheque date cannot be before the payment date', path: ['chequeDate'] }
-  );
+  )
+  .refine((v) => v.mode !== 'CHEQUE' || Boolean(String(v.reference || '').trim()), {
+    message: 'Enter the cheque number',
+    path: ['reference'],
+  });
 
 export const paymentUpdateSchema = z
   .object({

@@ -154,7 +154,7 @@ const receivePayment = async (req, payment, text = '') => {
   }
 
   assertAllocationsWithinAmount(payment.amount, payment.allocations);
-  const invoicesById = await loadPayableInvoices(payment.allocations);
+  const invoicesById = await loadPayableInvoices(payment.allocations, { customerId: payment.customerId });
 
   payment.status = PAYMENT_STATUS.RECEIVED;
   payment.receivedAt = new Date();
@@ -329,7 +329,7 @@ export const create = asyncHandler(async (req, res) => {
 
   // Validate every referenced invoice is payable before persisting anything.
   let invoicesById = new Map();
-  if (allocations.length) invoicesById = await loadPayableInvoices(allocations);
+  if (allocations.length) invoicesById = await loadPayableInvoices(allocations, { customerId: payload.customerId });
   stampInvoiceNos(allocations, invoicesById);
 
   const payment = new Payment({
@@ -398,7 +398,7 @@ export const update = asyncHandler(async (req, res) => {
     const allocations = normalizeAllocations(payload.allocations);
     assertAllocationsWithinAmount(payment.amount, allocations);
     if (allocations.length) {
-      const invoicesById = await loadPayableInvoices(allocations);
+      const invoicesById = await loadPayableInvoices(allocations, { customerId: payment.customerId });
       stampInvoiceNos(allocations, invoicesById);
     }
     payment.allocations = allocations;

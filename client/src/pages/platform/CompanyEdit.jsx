@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorAlert } from '@/components/ui/alert';
 
-const schema = z.object({
+const shape = {
   businessName: z.string().trim().min(2, 'Business name is required').max(160),
   legalName: z.string().trim().max(200).optional().or(z.literal('')),
   code: z
@@ -54,7 +54,10 @@ const schema = z.object({
   graceDays: z.coerce.number().int().min(0, 'Cannot be negative').max(60, 'Max 60 days').optional(),
   userLimit: z.coerce.number().int().min(1, 'At least 1').max(10000).optional(),
   purchaseModule: z.boolean(),
-}).superRefine((v, ctx) => checkContact(v, ctx, { phone: 'phone', gstin: 'gstin', pan: 'pan' }, isIndiaCountry(v.country)));
+};
+const schema = z.object(shape).superRefine((v, ctx) => checkContact(v, ctx, { phone: 'phone', gstin: 'gstin', pan: 'pan' }, isIndiaCountry(v.country)));
+/** Server errors for fields the form shows inline; the rest go to the alert. */
+const shownOnField = (f) => String(f).replace(/^body\./, '') in shape;
 
 function Section({ icon: Icon, title, description, children }) {
   return (
@@ -169,7 +172,7 @@ export default function CompanyEdit() {
       const fields = toFieldErrors(info.errors);
       setServerErrors(info.errors);
       setFormError(Object.keys(fields).length ? '' : info.message);
-      Object.entries(fields).forEach(([f, msg]) => setError(f, { type: 'server', message: msg }));
+      Object.entries(fields).forEach(([f, msg]) => shownOnField(f) && setError(f.replace(/^body\./, ''), { type: 'server', message: msg }));
     },
   });
 
@@ -225,7 +228,7 @@ export default function CompanyEdit() {
           <ErrorAlert
             title="The company could not be updated"
             message={formError}
-            errors={serverErrors.filter((e) => !e.field || e.field === '_')}
+            errors={serverErrors.filter((e) => !e.field || e.field === '_' || !shownOnField(e.field))}
             onClose={() => {
               setFormError('');
               setServerErrors([]);

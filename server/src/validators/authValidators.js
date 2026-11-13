@@ -27,6 +27,9 @@ export const changePasswordSchema = z.object({
     .regex(/[A-Z]/, 'Must contain an uppercase letter')
     .regex(/[0-9]/, 'Must contain a number')
     .regex(/[^A-Za-z0-9]/, 'Must contain a symbol'),
+}).refine((v) => v.newPassword !== v.currentPassword, {
+  path: ['newPassword'],
+  message: 'Choose a password different from the current one',
 });
 
 export const forgotPasswordSchema = z.object({

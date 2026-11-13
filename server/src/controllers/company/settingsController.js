@@ -8,6 +8,7 @@ import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, DEFAULT_PERMISSIONS, buildDefaultPermissions, COMPANY_ROLE_LIST } from '../../config/constants.js';
 import { toPlain, refOrNull } from './_helpers.js';
 import { assertAddresses } from '../../services/locationService.js';
+import { assertIdentity } from '../../services/identityRules.js';
 import { assertUnlocked, lockInfo } from '../../services/settingLocks.js';
 
 const SECTIONS = ['series', 'tax', 'invoice', 'order', 'inventory', 'collections', 'fieldForce'];
@@ -128,6 +129,34 @@ export const update = asyncHandler(async (req, res) => {
       },
     }
   );
+
+  // Field formats after the lock check (a locked field reports "locked", not "invalid").
+  if (payload.profile || payload.address) {
+    const current = await companyOf(req);
+    const profile = payload.profile || {};
+    const address = { ...(current?.address || {}), ...(payload.address || {}) };
+    await assertIdentity(
+      {
+        phone: profile.phone ?? current?.phone,
+        website: profile.website ?? current?.website,
+        gstin: profile.gstin ?? current?.gstin,
+        pan: profile.pan ?? current?.pan,
+        state: address.state,
+        country: address.country,
+      },
+      {
+        phone: 'body.profile.phone',
+        website: 'body.profile.website',
+        gstin: 'body.profile.gstin',
+        pan: 'body.profile.pan',
+        state: 'body.address.state',
+      },
+      new Set([
+        ...['phone', 'website', 'gstin', 'pan'].filter((k) => profile[k] !== undefined),
+        ...(payload.address?.state !== undefined || payload.address?.country !== undefined ? ['state'] : []),
+      ])
+    );
+  }
 
   SECTIONS.forEach((section) => {
     if (payload[section]) {

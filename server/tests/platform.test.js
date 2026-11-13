@@ -253,7 +253,8 @@ describe('Phase 2 - Company provisioning', () => {
     const Company = (await import('../src/models/Company.js')).default;
     const before = await Company.countDocuments({});
 
-    // Invalid billing window (custom end before start) fails after validation.
+    // Invalid billing window (custom end before start): now refused by the
+    // request validation itself; either way nothing may be left behind.
     const res = await request
       .post('/api/platform/companies')
       .set('Authorization', `Bearer ${token}`)
@@ -264,7 +265,7 @@ describe('Phase 2 - Company provisioning', () => {
         endDate: '2027-01-01',
         admin: { name: 'R Admin', email: 'admin@rollback.test', password: 'Roll#Pass123' },
       });
-    expect(res.status).toBe(400);
+    expect([400, 422]).toContain(res.status);
 
     const after = await Company.countDocuments({});
     expect(after).toBe(before);

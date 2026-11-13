@@ -281,8 +281,10 @@ const WIDGETS = [
         { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$invoiceDate', timezone: ctx.tz } }, total: { $sum: '$total' } } },
       ]);
       const by = new Map(rows.map((x) => [x._id, x.total]));
+      // Calendar days of the company (the server clock runs on UTC).
+      const todayKey = dayKey(new Date(), ctx.tz);
       const points = Array.from({ length: 30 }, (_, i) => {
-        const d = dayjs(from).add(i, 'day');
+        const d = dayjs(todayKey).subtract(29 - i, 'day');
         return { label: d.format('D MMM'), value: r2(by.get(d.format('YYYY-MM-DD'))) };
       });
       return { points, format: 'money' };
@@ -300,7 +302,8 @@ const WIDGETS = [
       const rows = await Invoice.aggregate([
         { $match: { ...base(ctx), status: { $in: LIVE_INVOICE }, invoiceDate: { $gte: w.monthStart, $lt: w.tomorrow }, ...scopeOf(ctx, 'salesman') } },
         { $unwind: '$items' },
-        { $group: { _id: '$items.product', name: { $first: '$items.name' }, qty: { $sum: '$items.qty' }, value: { $sum: '$items.taxableAmount' } } },
+        // Quantity in the base unit (a carton of 10 counts as 10).
+        { $group: { _id: '$items.product', name: { $first: '$items.name' }, qty: { $sum: { $ifNull: ['$items.baseQty', '$items.qty'] } }, value: { $sum: '$items.taxableAmount' } } },
         { $sort: { value: -1 } },
         { $limit: 5 },
       ]);

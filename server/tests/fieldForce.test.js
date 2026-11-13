@@ -1,4 +1,18 @@
 import { boot, shutdown, clearDb } from './helpers.js';
+import { jest } from '@jest/globals';
+
+// Self check-in / check-out times may not be in the future, and these tests
+// stamp times across the working day (09:15 ... 18:30): run the clock at
+// 20:00 India time today. Only Date is faked - timers stay real.
+{
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+  jest.useFakeTimers({
+    now: new Date(`${day}T20:00:00+05:30`),
+    advanceTimers: true,
+    doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'hrtime', 'performance'],
+  });
+}
+afterAll(() => jest.useRealTimers());
 
 let app;
 let request;

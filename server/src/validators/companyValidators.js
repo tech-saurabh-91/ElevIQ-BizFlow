@@ -25,6 +25,24 @@ const optionalDate = z
 
 const money = z.coerce.number().min(0, 'Cannot be negative').max(1e12).optional();
 
+/** Optional phone: 7-15 digits, optional +, spaces or dashes. */
+const phoneField = z
+  .string()
+  .trim()
+  .max(20)
+  .refine((v) => !v || (/^\+?\d[\d\s-]{5,18}\d$/.test(v) && v.replace(/\D/g, '').length >= 7 && v.replace(/\D/g, '').length <= 15), {
+    message: 'Enter a valid phone number (7-15 digits)',
+  })
+  .optional()
+  .or(z.literal(''));
+/** 24-hour "HH:MM". */
+const clockTime = z
+  .string()
+  .trim()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use 24-hour time, e.g. 09:30')
+  .optional()
+  .or(z.literal(''));
+
 const refId = objectIdSchema.optional().or(z.literal(''));
 
 const addressSchema = z
@@ -233,7 +251,7 @@ export const warehouseCreateSchema = z.object({
   vehicleType: softString(40),
   image: softString(500),
   address: addressSchema.optional(),
-  phone: softString(20),
+  phone: phoneField,
   email: z.string().trim().toLowerCase().email('Enter a valid email').optional().or(z.literal('')),
   manager: refId,
   capacity: z.coerce.number().min(0).optional(),
@@ -473,7 +491,12 @@ export const settingsUpdateSchema = z.object({
       footerNote: softString(500),
       defaultDueDays: z.coerce.number().int().min(0).max(365).optional(),
       showQr: z.boolean().optional(),
-      upiVpa: softString(80),
+      upiVpa: z
+        .string()
+        .trim()
+        .regex(/^[\w.-]{2,256}@[a-zA-Z][a-zA-Z0-9]{1,63}$/, 'Enter a UPI ID like shopname@okhdfcbank')
+        .optional()
+        .or(z.literal('')),
       showGstin: z.boolean().optional(),
       rounding: z.enum(['NEAREST', 'DOWN', 'NONE']).optional(),
       defaultPaymentTerms: z.enum(PAYMENT_TERMS).optional(),
@@ -524,10 +547,14 @@ export const settingsUpdateSchema = z.object({
       enforceGeofence: z.boolean().optional(),
       requireSelfie: z.boolean().optional(),
       trackLiveLocation: z.boolean().optional(),
-      workStart: softString(5),
-      workEnd: softString(5),
+      workStart: clockTime,
+      workEnd: clockTime,
     })
     .partial()
+    .refine((v) => !v.workStart || !v.workEnd || v.workEnd > v.workStart, {
+      path: ['workEnd'],
+      message: 'Work end must be after work start',
+    })
     .optional(),
 
   maintenanceMode: z.boolean().optional(),

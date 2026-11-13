@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../../controllers/company/supplierAccountsController.js';
-import { validate, objectIdSchema } from '../../middlewares/validate.js';
+import { validate, objectIdSchema, notFutureDate } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
 import { idParamsSchema } from '../../validators/companyValidators.js';
 import { PAYMENT_MODES } from '../../config/constants.js';
@@ -11,6 +11,13 @@ import { PAYMENT_MODES } from '../../config/constants.js';
  * (mounted separately in routes/company/index.js).
  */
 const text = (max) => z.string().trim().max(max).optional().or(z.literal(''));
+/** A real date, not after today. */
+const pastDate = (label) =>
+  z
+    .string()
+    .trim()
+    .refine((v) => !v || !Number.isNaN(Date.parse(v)), 'Enter a valid date')
+    .refine(notFutureDate, `${label} cannot be in the future`);
 const supplierQuery = z.object({ supplierId: objectIdSchema.optional() }).passthrough();
 const cancelBody = z.object({ reason: text(500) }).partial();
 
@@ -18,7 +25,7 @@ const cancelBody = z.object({ reason: text(500) }).partial();
 const billBody = z.object({
   supplierId: objectIdSchema,
   supplierInvoiceNo: z.string().trim().min(1, 'Enter the supplier invoice number').max(60),
-  supplierInvoiceDate: z.string().min(1, 'Enter the supplier invoice date'),
+  supplierInvoiceDate: pastDate('Supplier invoice date').refine((v) => v.length > 0, 'Enter the supplier invoice date'),
   grnIds: z.array(objectIdSchema).min(1, 'Pick at least one goods receipt').max(50),
   items: z
     .array(
@@ -46,10 +53,10 @@ bills.post('/:id/cancel', authorize('bills.cancel'), validate({ params: idParams
 const paymentBody = z.object({
   supplierId: objectIdSchema,
   amount: z.coerce.number().positive('Enter the amount paid').max(1e11),
-  paymentDate: z.string().optional(),
+  paymentDate: pastDate('Payment date').optional(),
   mode: z.enum(PAYMENT_MODES).optional(),
   reference: text(80),
-  allocations: z.array(z.object({ bill: objectIdSchema, amount: z.coerce.number().min(0) })).max(500).optional(),
+  allocations: z.array(z.object({ bill: objectIdSchema, amount: z.coerce.number().min(0, 'Cannot be negative').max(1e11) })).max(500).optional(),
   notes: text(1000),
 });
 
@@ -63,10 +70,10 @@ payments.post('/:id/cancel', authorize('supplierpayments.cancel'), validate({ pa
 // ---- Purchase returns -----------------------------------------------------------
 const returnBody = z.object({
   grnId: objectIdSchema,
-  items: z.array(z.object({ grnItemId: objectIdSchema, qty: z.coerce.number().min(0) })).min(1).max(500),
+  items: z.array(z.object({ grnItemId: objectIdSchema, qty: z.coerce.number().min(0, 'Cannot be negative') })).min(1).max(500),
   reason: text(300),
   notes: text(1000),
-  returnDate: z.string().optional(),
+  returnDate: pastDate('Return date').optional(),
 });
 
 export const returns = Router();

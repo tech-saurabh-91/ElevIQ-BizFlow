@@ -11,6 +11,24 @@ import { runWithContext } from '../middlewares/tenantContext.js';
 import { withoutTenant } from '../middlewares/tenant.js';
 import logger from '../utils/logger.js';
 import { assertAddresses, findCountry } from './locationService.js';
+import { assertIdentity, panFromGstin } from './identityRules.js';
+
+// Company contact / tax fields and where their errors are reported (form field names).
+const IDENTITY_PATHS = { phone: 'phone', website: 'website', gstin: 'gstin', pan: 'pan', state: 'state', country: 'country' };
+const identityValues = (c) => ({
+  phone: c.phone,
+  website: c.website,
+  gstin: c.gstin,
+  pan: c.pan,
+  state: c.address?.state,
+  country: c.address?.country,
+});
+const changedIdentity = (fields) =>
+  new Set([
+    ...['phone', 'website', 'gstin', 'pan'].filter((k) => fields[k] !== undefined),
+    ...(fields.address?.state !== undefined ? ['state'] : []),
+    ...(fields.address?.country !== undefined ? ['country'] : []),
+  ]);
 import { assertUnlocked } from './settingLocks.js';
 
 /**
@@ -261,7 +279,10 @@ export const createCompany = async (payload, actor) => {
   } = payload;
   // The plan's modules, with any the platform switched for this company.
 
-  // ---- pre-flight: uniqueness + plan --------------------------------------
+  // ---- pre-flight: field rules, uniqueness + plan ----------------------------
+  await assertIdentity(identityValues(companyFields), IDENTITY_PATHS);
+  companyFields.pan = panFromGstin(companyFields.gstin, companyFields.pan);
+
   const trimmedCode = (companyFields.code || '').trim();
   const trimmedSlug = (companyFields.slug || '').trim();
 
@@ -445,6 +466,16 @@ export const createCompany = async (payload, actor) => {
 export const updateCompany = async (id, fields, actor) => {
   const before = await getCompanyOr404(id);
   await assertAddresses(fields, { address: 'body' });
+  // Judge the changed fields against the stored ones (e.g. a new GSTIN vs the saved state).
+  await assertIdentity(
+    identityValues({ ...before, ...fields, address: { ...(before.address || {}), ...(fields.address || {}) } }),
+    IDENTITY_PATHS,
+    changedIdentity(fields)
+  );
+  if (fields.gstin !== undefined && !fields.pan) {
+    const derived = panFromGstin(fields.gstin, '');
+    if (derived) fields.pan = derived;
+  }
 
   // The platform may correct the tax ID or registered state, but never the
   // currency, country or financial year once the company has transactions.

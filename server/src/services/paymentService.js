@@ -120,7 +120,7 @@ export const reversePayment = async (payment, invoicesById) => {
  * payable (issued-ish, same tenant, balance remaining). Throws 422 with
  * per-line errors when a line cannot be settled.
  */
-export const loadPayableInvoices = async (allocations = []) => {
+export const loadPayableInvoices = async (allocations = [], { customerId } = {}) => {
   const ids = [...new Set(allocations.map((a) => String(oid(a.invoice))))]
     .filter((id) => id && id !== 'null' && id !== 'undefined');
   if (!ids.length) return new Map();
@@ -135,6 +135,12 @@ export const loadPayableInvoices = async (allocations = []) => {
       errors.push({ field: `allocations.${index}.invoice`, message: 'Invoice not found' });
       return;
     }
+    // Money from one customer can only settle that customer's invoices.
+    if (customerId && String(invoice.customerId) !== String(oid(customerId))) {
+      errors.push({ field: `allocations.${index}.invoice`, message: `${invoice.invoiceNo} belongs to another customer` });
+      return;
+    }
+    // (More than the balance is fine: the excess is capped and kept as an advance.)
     if (!PAYABLE_INVOICE_STATUSES.includes(invoice.status)) {
       recalcInvoiceBalance(invoice);
       const balance = round2(Number(invoice.balanceDue || 0));

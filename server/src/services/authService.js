@@ -542,6 +542,14 @@ export const changePassword = async ({ scope, userId, companyId, currentPassword
 
   const { validatePasswordPolicy } = await import('../utils/password.js');
   validatePasswordPolicy(newPassword);
+  // A forced change must really change it (the old one is known to someone else).
+  if (newPassword === currentPassword) {
+    throw new AppError('Choose a password different from the current one', {
+      status: 400,
+      code: 'SAME_PASSWORD',
+      errors: [{ field: 'newPassword', message: 'Choose a password different from the current one' }],
+    });
+  }
 
   doc.password = newPassword;
   doc.mustChangePassword = false;

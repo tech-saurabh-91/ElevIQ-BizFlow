@@ -50,10 +50,8 @@ export const resolveLinePricing = (product, priceList, input) => {
       ? Number(entry?.discountPercent || 0)
       : Number(input.discountPercent);
 
-  const taxRate =
-    input.taxRate === undefined || input.taxRate === null || input.taxRate === ''
-      ? Number(product.gstRate ?? 0)
-      : Number(input.taxRate);
+  // The tax rate on a sale is the product's (HSN) rate - a request cannot change it.
+  const taxRate = Number(product.gstRate ?? 0);
 
   return { unitPrice, discountPercent, taxRate, unit: unit.unit, unitFactor: unit.factor, priceListEntry: Boolean(entry) };
 };
@@ -145,6 +143,21 @@ export const taxBreakupFor = (taxTotal, settings, { sellerState, buyerState } = 
 };
 
 const round4 = (n) => Math.round(Number(n) * 10000) / 10000;
+
+/** Codes of units counted in whole numbers (PCS, BOX...) - those without "allow decimals". */
+export const wholeUnitCodes = async () => {
+  const { default: Unit } = await import('../models/Unit.js');
+  return new Set((await Unit.find({ allowDecimals: { $ne: true } }).select('code').lean()).map((u) => String(u.code).toUpperCase()));
+};
+
+/** A counted unit takes whole quantities only. */
+export const assertWholeQty = (qty, unit, wholeUnits, product, index = 0, field = 'qty') => {
+  if (wholeUnits.has(String(unit || '').toUpperCase()) && !Number.isInteger(Number(qty))) {
+    throw new BadRequestError(`${product.name}: ${unit} must be a whole number (line ${index + 1})`, 'VALIDATION_ERROR', [
+      { field: `items.${index}.${field}`, message: `${unit} must be a whole number` },
+    ]);
+  }
+};
 
 /** Packs (boxes, cartons...) are traded in whole numbers. */
 export const assertPackQty = (qty, unitFactor, product, unit, index = 0) => {

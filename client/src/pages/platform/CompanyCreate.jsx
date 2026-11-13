@@ -129,7 +129,7 @@ const DEFAULTS = {
   adminName: '',
   adminEmail: '',
   adminPhone: '',
-  adminPassword: 'ChangeMe#123',
+  adminPassword: '',
   adminTitle: '',
 };
 
@@ -147,6 +147,33 @@ function Section({ icon: Icon, title, description, children }) {
     </Card>
   );
 }
+
+/** A fresh strong first password for every company (never a shared default). */
+const strongPassword = () => {
+  const pick = (set, n) =>
+    Array.from(window.crypto.getRandomValues(new Uint32Array(n)), (x) => set[x % set.length]).join('');
+  const chars = [
+    ...pick('ABCDEFGHJKLMNPQRSTUVWXYZ', 2),
+    ...pick('abcdefghijkmnpqrstuvwxyz', 4),
+    ...pick('23456789', 3),
+    ...pick('@#$%&*!', 1),
+  ];
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = window.crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+};
+
+const ADMIN_FIELDS = {
+  'admin.name': 'adminName',
+  'admin.email': 'adminEmail',
+  'admin.phone': 'adminPhone',
+  'admin.password': 'adminPassword',
+  'admin.title': 'adminTitle',
+};
+/** Server errors for fields the form shows inline; the rest go to the alert. */
+const shownOnField = (f) => (ADMIN_FIELDS[f] || String(f).replace(/^body\./, '')) in DEFAULTS;
 
 export default function CompanyCreate() {
   const navigate = useNavigate();
@@ -171,7 +198,7 @@ export default function CompanyCreate() {
     getValues,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm({ resolver: zodResolver(schema), defaultValues: DEFAULTS });
+  } = useForm({ resolver: zodResolver(schema), defaultValues: { ...DEFAULTS, adminPassword: strongPassword() } });
 
   const startMode = watch('startMode');
 
@@ -243,24 +270,17 @@ export default function CompanyCreate() {
     onError: (err) => {
       const info = apiError(err);
       const fields = toFieldErrors(info.errors);
-      setServerErrors(info.errors);
+      setServerErrors(info.errors || []);
       setFormError(Object.keys(fields).length ? '' : info.message);
       Object.entries(fields).forEach(([f, msg]) => {
-        const map = {
-          'admin.name': 'adminName',
-          'admin.email': 'adminEmail',
-          'admin.phone': 'adminPhone',
-          'admin.password': 'adminPassword',
-          'admin.title': 'adminTitle',
-        };
-        setError(map[f] || f, { type: 'server', message: msg });
+        if (shownOnField(f)) setError(ADMIN_FIELDS[f] || f.replace(/^body\./, ''), { type: 'server', message: msg });
       });
     },
   });
 
   const onSubmit = (values) => {
     setFormError('');
-    setServerErrors(null);
+    setServerErrors([]);
     mutation.mutate(values);
   };
 
@@ -285,7 +305,7 @@ export default function CompanyCreate() {
           <ErrorAlert
             title="The company could not be created"
             message={formError}
-            errors={serverErrors.filter((e) => !e.field || e.field === '_')}
+            errors={serverErrors.filter((e) => !e.field || e.field === '_' || !shownOnField(e.field))}
             onClose={() => {
               setFormError('');
               setServerErrors([]);
@@ -433,10 +453,15 @@ export default function CompanyCreate() {
             label="Initial password"
             required
             error={errors.adminPassword?.message}
-            hint="8+ chars with upper, lower, number and symbol. The admin must change it at first login."
+            hint="A strong password is generated for each company - share it with the admin privately. They must change it at first login."
             className="sm:col-span-2"
           >
-            <Input {...register('adminPassword')} error={!!errors.adminPassword} />
+            <div className="flex gap-2">
+              <Input {...register('adminPassword')} error={!!errors.adminPassword} autoComplete="new-password" className="font-mono" />
+              <Button type="button" variant="outline" onClick={() => setValue('adminPassword', strongPassword(), { shouldValidate: true })}>
+                New
+              </Button>
+            </div>
           </Field>
         </Section>
 

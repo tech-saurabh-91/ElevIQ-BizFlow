@@ -4,7 +4,7 @@ import DiscountRule from '../models/DiscountRule.js';
 import Scheme from '../models/Scheme.js';
 import { BadRequestError } from '../utils/errors.js';
 import { round2 } from '../models/helpers.js';
-import { resolveLinePricing, priceLineValues, assertPackQty, computeTotals } from './orderService.js';
+import { resolveLinePricing, priceLineValues, assertPackQty, computeTotals, wholeUnitCodes, assertWholeQty } from './orderService.js';
 
 /**
  * Sale pricing: price list -> discount master -> schemes.
@@ -116,6 +116,9 @@ export const buildSaleLines = async (items, opts) => {
     ...ctx.schemes.filter((s) => s.freeProduct).map((s) => String(s.freeProduct)),
   ]);
 
+  // Units that are counted, not measured (PCS, BOX...) take whole quantities.
+  const wholeUnits = await wholeUnitCodes();
+
   // 1-2. price + trade discount per line
   const rows = paid.map((input, index) => {
     const product = products.get(String(input.product?._id || input.product));
@@ -129,9 +132,18 @@ export const buildSaleLines = async (items, opts) => {
       unit: input.unit,
       unitPrice: manualPrice ? input.unitPrice : undefined,
       discountPercent: manualDiscount ? input.discountPercent : undefined,
-      taxRate: canOverride && has(input.taxRate) ? input.taxRate : undefined,
+      // GST is the product's rate by law - never taken from the request.
+      taxRate: undefined,
     });
     assertPackQty(input.qty, base.unitFactor, product, base.unit, index);
+    assertWholeQty(input.qty, base.unit, wholeUnits, product, index);
+    // A hand-entered price may go down, never above the printed MRP.
+    const mrpForUnit = round2(Number(product.mrp || 0) * Number(base.unitFactor || 1));
+    if (manualPrice && mrpForUnit > 0 && Number(base.unitPrice) > mrpForUnit + 0.001) {
+      throw new BadRequestError(`${product.name}: price ${base.unitPrice} is more than the MRP ${mrpForUnit}`, 'VALIDATION_ERROR', [
+        { field: `items.${index}.unitPrice`, message: `Cannot be more than the MRP ${mrpForUnit}` },
+      ]);
+    }
 
     let tradeDiscount = Number(base.discountPercent || 0);
     let discountRule = null;
