@@ -968,7 +968,7 @@ export default function OrderEditor() {
                       <p className="mt-1">
                         {allowNegative
                           ? 'The order can be saved. Stock will go below zero when it is invoiced.'
-                          : 'The order can be saved, but it can only be invoiced or dispatched once stock arrives.'}
+                          : 'The order can be saved, but it can only be invoiced once stock arrives.'}
                       </p>
                     </AlertDescription>
                   </Alert>

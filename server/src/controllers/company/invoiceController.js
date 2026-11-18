@@ -396,15 +396,24 @@ const issueInvoice = async (req, invoice, note = '') => {
     }
   }
 
-  // Billed at the shop from a van (the order was booked earlier): the goods
-  // are handed over now - they leave the van, the godown reservation is let
-  // go, and the order needs no dispatch / delivery.
-  let vanDelivery = false;
-  if (invoice.order && !invoice.stockPosted && invoice.warehouse) {
-    const warehouse = await Warehouse.findById(invoice.warehouse).lean();
-    if (warehouse?.type === 'VAN') {
-      const settings = await settingsOf(req);
-      await assertWarehouseStock(warehouse, invoice.items, settings);
+  // Invoiced against orders: the invoice IS the delivery. The goods leave the
+  // invoice's warehouse (godown or van) now, the orders' reservations are let
+  // go, and an order needs no manual dispatch - once fully billed it is
+  // marked delivered below.
+  // Orders dispatched under the old flow already took their stock out at
+  // dispatch, so an invoice touching one of them moves no stock again.
+  let deliveredByInvoice = false;
+  if (invoice.order && !invoice.stockPosted) {
+    const orders = await Order.find({ _id: { $in: ordersOfInvoice(invoice) } }).select('warehouse status').lean();
+    const alreadyShipped = orders.some((o) => ['DISPATCHED', 'DELIVERED'].includes(o.status));
+    const settings = await settingsOf(req);
+    const warehouseId = invoice.warehouse || orders[0]?.warehouse || (await resolveDefaultWarehouse(settings))?._id;
+    const warehouse = !alreadyShipped && warehouseId ? await Warehouse.findById(warehouseId).lean() : null;
+    if (warehouse) {
+      const isVan = warehouse.type === 'VAN';
+      // A godown check counts on-hand: this order's own reservation is being
+      // consumed, so it must not block its own invoice.
+      await assertWarehouseStock(warehouse, invoice.items, settings, { excludeReserved: isVan });
       for (const line of invoice.items) {
         await recordMovement({
           product: line.product,
@@ -414,18 +423,18 @@ const issueInvoice = async (req, invoice, note = '') => {
           refType: 'INVOICE',
           refId: invoice._id,
           refNo: invoice.invoiceNo || '',
-          reason: 'Van delivery against order',
+          reason: isVan ? 'Van delivery against order' : 'Delivered against order',
           movedBy: req.user.id,
           settings,
         });
       }
-      for (const id of ordersOfInvoice(invoice)) {
-        const order = await Order.findById(id).select('warehouse').lean();
-        const lines = invoice.items.filter((l) => lineOfOrder(invoice, l, id));
-        await releaseReservation(lines, { warehouseId: order?.warehouse || null, settings });
+      for (const order of orders) {
+        const lines = invoice.items.filter((l) => lineOfOrder(invoice, l, order._id));
+        await releaseReservation(lines, { warehouseId: order.warehouse || null, settings });
       }
+      invoice.warehouse = warehouse._id;
       invoice.stockPosted = true;
-      vanDelivery = true;
+      deliveredByInvoice = true;
     }
   }
 
@@ -457,12 +466,12 @@ const issueInvoice = async (req, invoice, note = '') => {
 
   for (const id of ordersOfInvoice(invoice)) {
     const order = await syncOrderInvoicing(id);
-    // Fully billed and every unit handed over from vans: the order is delivered.
-    if (vanDelivery && order && order.status === 'FULLY_INVOICED' && (await vanDeliveredAll(order))) {
+    // Fully billed and every unit handed over on invoices: the order is delivered.
+    if (deliveredByInvoice && order && order.status === 'FULLY_INVOICED' && (await vanDeliveredAll(order))) {
       order.status = 'DELIVERED';
       order.deliveredAt = new Date();
       order.deliveredByInvoice = invoice._id;
-      order.statusHistory.push({ status: 'DELIVERED', at: new Date(), by: req.user.id, byName: req.user.name, note: `Delivered from the van with invoice ${invoice.invoiceNo}` });
+      order.statusHistory.push({ status: 'DELIVERED', at: new Date(), by: req.user.id, byName: req.user.name, note: `Delivered with invoice ${invoice.invoiceNo}` });
       await order.save();
     }
   }
@@ -871,7 +880,7 @@ export const cancel = asyncHandler(async (req, res) => {
       order.status = 'CONFIRMED';
       order.deliveredAt = null;
       order.deliveredByInvoice = null;
-      order.statusHistory.push({ status: 'CONFIRMED', at: new Date(), by: req.user.id, byName: req.user.name, note: `Van invoice ${invoice.invoiceNo} cancelled` });
+      order.statusHistory.push({ status: 'CONFIRMED', at: new Date(), by: req.user.id, byName: req.user.name, note: `Invoice ${invoice.invoiceNo} cancelled` });
       await order.save();
     }
     if (vanDelivered && !['DISPATCHED', 'DELIVERED', 'CANCELLED'].includes(order.status)) {

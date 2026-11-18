@@ -832,7 +832,7 @@ function SettingsForm({ data, canUpdate, tab }) {
                 <Checkbox label="Reserve stock when an order is confirmed" {...register('order.reserveStockOnConfirm')} disabled={disabled} />
                 <Checkbox
                   label="Allow invoice / dispatch without enough stock"
-                  description="Orders are always taken, with a warning when stock is short. On: invoices and dispatches go through and stock can go below zero until goods arrive. Off: an invoice or dispatch needing more than is in stock is blocked."
+                  description="Orders are always taken, with a warning when stock is short. On: invoices go through and stock can go below zero until goods arrive. Off: an invoice needing more than is in stock is blocked."
                   {...register('order.allowNegativeStock')}
                   disabled={disabled}
                 />

@@ -193,7 +193,7 @@ export default function OrderDetail() {
         <Alert tone="info">
           <AlertTitle>Awaiting approval</AlertTitle>
           <AlertDescription>
-            This order must be approved by a manager before it can be dispatched or invoiced.
+            This order must be approved by a manager before it can be invoiced.
           </AlertDescription>
         </Alert>
       )}

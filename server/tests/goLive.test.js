@@ -2,8 +2,8 @@ import { boot, shutdown, clearDb } from './helpers.js';
 
 /**
  * End-to-end business day, the way a distributor runs it after go-live:
- * buy stock (PO -> GRN), sell it (order -> approval -> invoice -> dispatch ->
- * delivery), collect (payment, cheque bounce), take returns (credit note).
+ * buy stock (PO -> GRN), sell it (order -> approval -> invoice, which takes the
+ * stock out and delivers the order), collect (payment, cheque bounce), take returns (credit note).
  * Every step checks stock and the customer's outstanding.
  */
 
@@ -116,23 +116,16 @@ describe('Go-live business day', () => {
     expect(await stockOf(state.oil)).toBe(100);
   });
 
-  test('3. invoice from the order raises outstanding; dispatch moves the stock once', async () => {
+  test('3. issuing the invoice from the order takes the stock out and delivers the order', async () => {
     const inv = await admin().post('/api/v1/invoices', { orderId: state.order, issue: true });
     expect(inv.status).toBe(201);
     state.invoice = inv.body.data;
     expect(state.invoice.total).toBeCloseTo(3150, 2); // 30 x 100 + 5% GST
     expect(await outstandingOf()).toBeCloseTo(3150, 2);
-    // Invoicing an order does not move stock - dispatch does.
-    expect(await stockOf(state.oil)).toBe(100);
-
-    // Dispatch moves godown stock: not the salesman's call.
-    expect((await call(state.sam).post(`/api/v1/orders/${state.order}/dispatch`, {})).status).toBe(403);
-    const dispatched = await admin().post(`/api/v1/orders/${state.order}/dispatch`, { note: 'Truck 1' });
-    expect(dispatched.status).toBe(200);
+    // The invoice is the delivery: stock leaves now, no manual dispatch.
     expect(await stockOf(state.oil)).toBe(70);
-    const delivered = await admin().post(`/api/v1/orders/${state.order}/deliver`, {});
-    expect(delivered.status).toBe(200);
-    expect(await stockOf(state.oil)).toBe(70);
+    const order = (await admin().get(`/api/v1/orders/${state.order}`)).body.data;
+    expect(order.status).toBe('DELIVERED');
   });
 
   test('4. a partial cash payment settles part of the invoice', async () => {
@@ -225,6 +218,30 @@ describe('Go-live business day', () => {
     expect(dueBefore.status).toBe(422);
     const futurePay = await admin().post('/api/v1/payments', { customerId: state.customer, amount: 10, mode: 'CASH', paymentDate: later });
     expect(futurePay.status).toBe(422);
+  });
+
+  test('11. partial invoices each take their own stock; cancelling one puts it back and reopens the order', async () => {
+    const start = await stockOf(state.oil);
+    const order = await admin().post('/api/v1/orders', { customerId: state.customer, items: [{ product: state.oil, qty: 5 }], submit: true });
+    expect(order.status).toBe(201);
+    expect(order.body.data.status).toBe('CONFIRMED');
+    const id = order.body.data.id;
+    const lineId = order.body.data.items[0].id;
+
+    const first = await admin().post('/api/v1/invoices', { orderId: id, items: [{ orderItemId: lineId, qty: 2 }], issue: true });
+    expect(first.status).toBe(201);
+    expect(await stockOf(state.oil)).toBe(start - 2);
+    expect((await admin().get(`/api/v1/orders/${id}`)).body.data.status).toBe('PARTIALLY_INVOICED');
+
+    const rest = await admin().post('/api/v1/invoices', { orderId: id, issue: true });
+    expect(rest.status).toBe(201);
+    expect(await stockOf(state.oil)).toBe(start - 5);
+    expect((await admin().get(`/api/v1/orders/${id}`)).body.data.status).toBe('DELIVERED');
+
+    const cancelled = await admin().post(`/api/v1/invoices/${rest.body.data.id}/cancel`, { reason: 'Wrong qty' });
+    expect(cancelled.status).toBe(200);
+    expect(await stockOf(state.oil)).toBe(start - 2);
+    expect((await admin().get(`/api/v1/orders/${id}`)).body.data.status).toBe('PARTIALLY_INVOICED');
   });
 });
 
