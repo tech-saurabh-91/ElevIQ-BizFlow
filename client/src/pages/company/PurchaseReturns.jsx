@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { MoreHorizontal, Plus, Search, XCircle } from 'lucide-react';
+import { Eye, MoreHorizontal, Plus, Search, XCircle } from 'lucide-react';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
@@ -23,6 +23,7 @@ import { CancelDialog } from '@/components/company/payables-shared-dialogs';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDate, formatMoney, formatNumber } from '@/utils/format';
+import { PurchaseDocDialog } from '@/components/company/purchase-view';
 
 /**
  * Purchase returns (debit notes): goods from a goods receipt sent back to the
@@ -37,6 +38,7 @@ export default function PurchaseReturns() {
   const [params, setParams] = useSearchParams();
   const [creating, setCreating] = useState(false);
   const [cancelling, setCancelling] = useState(null);
+  const [viewing, setViewing] = useState(null);
 
   const search = params.get('search') || '';
   const status = params.get('status') || '';
@@ -128,7 +130,9 @@ export default function PurchaseReturns() {
               {rows.map((x) => (
                 <TableRow key={x.id}>
                   <TableCell>
-                    <p className="font-semibold">{x.returnNo}</p>
+                    <button type="button" onClick={() => setViewing(x.id)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
+                      {x.returnNo}
+                    </button>
                     <p className="text-xs text-muted-foreground">
                       {formatDate(x.returnDate)} · {x.grnNo}
                     </p>
@@ -146,7 +150,7 @@ export default function PurchaseReturns() {
                     <StatusBadge status={x.status}>{x.status}</StatusBadge>
                   </TableCell>
                   <TableCell className="text-right" data-actions>
-                    {can('purchasereturns.cancel') && x.status !== 'CANCELLED' ? (
+                    {(
                       <DropdownMenu
                         trigger={
                           <span className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent">
@@ -156,12 +160,19 @@ export default function PurchaseReturns() {
                         }
                       >
                         {({ close }) => (
-                          <DropdownMenuItem className="text-destructive" onClick={() => (close(), setCancelling(x))}>
-                            <XCircle className="h-4 w-4" /> Cancel return
-                          </DropdownMenuItem>
+                          <>
+                            <DropdownMenuItem onClick={() => (close(), setViewing(x.id))}>
+                              <Eye className="h-4 w-4" /> View
+                            </DropdownMenuItem>
+                            {can('purchasereturns.cancel') && x.status !== 'CANCELLED' && (
+                              <DropdownMenuItem className="text-destructive" onClick={() => (close(), setCancelling(x))}>
+                                <XCircle className="h-4 w-4" /> Cancel return
+                              </DropdownMenuItem>
+                            )}
+                          </>
                         )}
                       </DropdownMenu>
-                    ) : null}
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -172,6 +183,7 @@ export default function PurchaseReturns() {
       </Card>
 
       {creating && <ReturnDialog onClose={() => setCreating(false)} money={money} />}
+      {viewing && <PurchaseDocDialog kind="return" id={viewing} onClose={() => setViewing(null)} />}
       <CancelDialog
         open={Boolean(cancelling)}
         title={`Cancel return ${cancelling?.returnNo || ''}?`}

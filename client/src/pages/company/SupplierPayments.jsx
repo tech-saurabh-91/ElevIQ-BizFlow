@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { MoreHorizontal, Plus, Search, XCircle } from 'lucide-react';
+import { Eye, MoreHorizontal, Plus, Search, XCircle } from 'lucide-react';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
@@ -25,6 +25,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDate, formatMoney } from '@/utils/format';
 import { cn } from '@/utils/cn';
+import { PurchaseDocDialog } from '@/components/company/purchase-view';
 
 const MODES = [
   ['BANK_TRANSFER', 'Bank transfer'],
@@ -45,6 +46,7 @@ export default function SupplierPayments() {
   const [params, setParams] = useSearchParams();
   const [paying, setPaying] = useState(false);
   const [cancelling, setCancelling] = useState(null);
+  const [viewing, setViewing] = useState(null);
 
   const search = params.get('search') || '';
   const status = params.get('status') || '';
@@ -143,7 +145,9 @@ export default function SupplierPayments() {
               {rows.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell>
-                    <p className="font-semibold">{p.paymentNo}</p>
+                    <button type="button" onClick={() => setViewing(p.id)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
+                      {p.paymentNo}
+                    </button>
                     <p className="text-xs text-muted-foreground">{formatDate(p.paymentDate)}</p>
                   </TableCell>
                   <TableCell className="font-medium">{p.supplierName}</TableCell>
@@ -160,7 +164,7 @@ export default function SupplierPayments() {
                     <StatusBadge status={p.status}>{p.status}</StatusBadge>
                   </TableCell>
                   <TableCell className="text-right" data-actions>
-                    {can('supplierpayments.cancel') && p.status !== 'CANCELLED' ? (
+                    {(
                       <DropdownMenu
                         trigger={
                           <span className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent">
@@ -170,12 +174,19 @@ export default function SupplierPayments() {
                         }
                       >
                         {({ close }) => (
-                          <DropdownMenuItem className="text-destructive" onClick={() => (close(), setCancelling(p))}>
-                            <XCircle className="h-4 w-4" /> Cancel payment
-                          </DropdownMenuItem>
+                          <>
+                            <DropdownMenuItem onClick={() => (close(), setViewing(p.id))}>
+                              <Eye className="h-4 w-4" /> View
+                            </DropdownMenuItem>
+                            {can('supplierpayments.cancel') && p.status !== 'CANCELLED' && (
+                              <DropdownMenuItem className="text-destructive" onClick={() => (close(), setCancelling(p))}>
+                                <XCircle className="h-4 w-4" /> Cancel payment
+                              </DropdownMenuItem>
+                            )}
+                          </>
                         )}
                       </DropdownMenu>
-                    ) : null}
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -186,6 +197,7 @@ export default function SupplierPayments() {
       </Card>
 
       {paying && <PayDialog onClose={() => setPaying(false)} money={money} />}
+      {viewing && <PurchaseDocDialog kind="payment" id={viewing} onClose={() => setViewing(null)} />}
       <CancelDialog
         open={Boolean(cancelling)}
         title={`Cancel payment ${cancelling?.paymentNo || ''}?`}

@@ -123,8 +123,22 @@ export function LineEditor({
   showCost = true,
   showTax = false,
   showUnits = false,
+  showTotals = false,
+  currency,
   maxRows = 200,
 }) {
+  const fmt = (v) => formatMoney(v, currency);
+  // Live calculation (same arithmetic as the server: qty x rate, then tax).
+  const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+  const amounts = value.map((line) => {
+    const net = r2(Number(line[qtyKey] || 0) * Number(line.unitCost || 0));
+    const tax = showTax ? r2((net * Number(line.taxRate || 0)) / 100) : 0;
+    return { net, tax, total: r2(net + tax) };
+  });
+  const subtotal = r2(amounts.reduce((t, a) => t + a.net, 0));
+  const taxTotal = r2(amounts.reduce((t, a) => t + a.tax, 0));
+  const exact = r2(subtotal + taxTotal);
+  const grand = Math.round(exact);
   const byId = (id) => products.find((p) => p.id === id);
 
   // Product, qty, cost[, tax] + a trailing remove button (and unit hint row).
@@ -267,7 +281,13 @@ export function LineEditor({
                 ) : (
                   <span>{product.unit || 'PCS'}</span>
                 )}
-                {product.purchasePrice ? <span>· list cost {formatMoney(product.purchasePrice)} per {product.unit}</span> : null}
+                {product.purchasePrice ? <span>· list cost {fmt(product.purchasePrice)} per {product.unit}</span> : null}
+                {showTotals && amounts[idx].net > 0 && (
+                  <span className="ml-auto font-medium text-foreground tabular-nums">
+                    {fmt(amounts[idx].net)}
+                    {showTax ? ` + tax ${fmt(amounts[idx].tax)} = ${fmt(amounts[idx].total)}` : ''}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -281,6 +301,32 @@ export function LineEditor({
 
       {value.length === 0 && (
         <p className="text-xs text-muted-foreground">Add at least one product line to continue.</p>
+      )}
+
+      {showTotals && value.length > 0 && (
+        <div className="ml-auto w-full max-w-xs space-y-1 rounded-xl border bg-muted/30 p-3 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span className="tabular-nums">{fmt(subtotal)}</span>
+          </div>
+          {showTax && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Tax (GST)</span>
+              <span className="tabular-nums">{fmt(taxTotal)}</span>
+            </div>
+          )}
+          {grand !== exact && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Round off</span>
+              <span className="tabular-nums">{fmt(r2(grand - exact))}</span>
+            </div>
+          )}
+          <div className="flex justify-between border-t pt-1 font-semibold">
+            <span>Total</span>
+            <span className="tabular-nums">{fmt(grand)}</span>
+          </div>
+          {showTax && <p className="text-[11px] text-muted-foreground">Tax is split as CGST + SGST or IGST from the supplier&apos;s state when saved.</p>}
+        </div>
       )}
     </div>
   );

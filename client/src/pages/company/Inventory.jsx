@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowDown, ArrowUp, AlertTriangle, Boxes, ClipboardList, Download, Layers, MoreHorizontal, Package, PackagePlus, Plus, Search, ShoppingCart, Trash2, TrendingUp, Truck, Warehouse, X, Upload } from 'lucide-react';
+import { ArrowDown, ArrowUp, AlertTriangle, Boxes, ClipboardList, Download, Eye, Layers, MoreHorizontal, Package, PackagePlus, Plus, Search, ShoppingCart, Trash2, TrendingUp, Truck, Warehouse, X, Upload } from 'lucide-react';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
@@ -47,6 +47,7 @@ import {
 import BulkImport from '@/components/company/BulkImport';
 import { todayInput } from '@/components/company/form-utils';
 import { SectionCards, SectionBar } from '@/components/ui/section-cards';
+import { PurchaseDocDialog } from '@/components/company/purchase-view';
 
 const TABS = [
   { value: 'stock', label: 'Stock on hand', icon: Boxes, description: 'What each warehouse and van holds right now' },
@@ -1295,6 +1296,7 @@ export function PurchaseOrdersTab() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [action, setAction] = useState(null);
+  const [viewing, setViewing] = useState(null);
 
   const queryParams = useMemo(() => {
     const out = { page, limit };
@@ -1526,7 +1528,11 @@ export function PurchaseOrdersTab() {
                 const available = poActionsFor(row, can);
                 return (
                   <TableRow key={row.id}>
-                    <TableCell className="font-semibold">{row.poNo || '—'}</TableCell>
+                    <TableCell>
+                      <button type="button" onClick={() => setViewing(row.id)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
+                        {row.poNo || '—'}
+                      </button>
+                    </TableCell>
                     <TableCell className="text-sm">{row.supplierName || '—'}</TableCell>
                     <TableCell className="text-sm">{row.warehouseName || '—'}</TableCell>
                     <TableCell className="whitespace-nowrap text-sm">{formatDate(row.poDate)}</TableCell>
@@ -1538,7 +1544,7 @@ export function PurchaseOrdersTab() {
                       <StatusBadge status={row.status} />
                     </TableCell>
                     <TableCell className="text-right">
-                      {available.length > 0 && (
+                      {(
                         <DropdownMenu
                           align="end"
                           width="w-44"
@@ -1551,6 +1557,14 @@ export function PurchaseOrdersTab() {
                         >
                           {({ close }) => (
                             <>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  close();
+                                  setViewing(row.id);
+                                }}
+                              >
+                                <Eye className="h-4 w-4" /> View
+                              </DropdownMenuItem>
                               {available.includes('send') && (
                                 <DropdownMenuItem
                                   onClick={() => {
@@ -1726,6 +1740,8 @@ export function PurchaseOrdersTab() {
             costLabel="Unit price"
             showTax
             showUnits
+            showTotals
+            currency={company?.currency}
           />
 
           <label className="flex cursor-pointer items-center gap-2 text-sm">
@@ -1739,6 +1755,8 @@ export function PurchaseOrdersTab() {
           </label>
         </div>
       </Dialog>
+
+      {viewing && <PurchaseDocDialog kind="po" id={viewing} onClose={() => setViewing(null)} />}
 
       {action?.kind === 'send' && (
         <WorkflowDialog
@@ -1812,6 +1830,7 @@ export function GoodsReceiptsTab() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [action, setAction] = useState(null);
+  const [viewingGrn, setViewingGrn] = useState(null);
 
   const queryParams = useMemo(() => {
     const out = { page, limit };
@@ -2074,7 +2093,11 @@ export function GoodsReceiptsTab() {
                 const available = grnActionsFor(row, can);
                 return (
                   <TableRow key={row.id}>
-                    <TableCell className="font-semibold">{row.grnNo || '—'}</TableCell>
+                    <TableCell>
+                      <button type="button" onClick={() => setViewingGrn(row.id)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
+                        {row.grnNo || '—'}
+                      </button>
+                    </TableCell>
                     <TableCell className="text-sm">{row.poNo || '—'}</TableCell>
                     <TableCell className="text-sm">{row.supplierName || '—'}</TableCell>
                     <TableCell className="text-sm">{row.warehouseName || '—'}</TableCell>
@@ -2086,7 +2109,7 @@ export function GoodsReceiptsTab() {
                       <StatusBadge status={row.status} />
                     </TableCell>
                     <TableCell className="text-right">
-                      {available.length > 0 && (
+                      {(
                         <DropdownMenu
                           align="end"
                           width="w-44"
@@ -2099,6 +2122,14 @@ export function GoodsReceiptsTab() {
                         >
                           {({ close }) => (
                             <>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  close();
+                                  setViewingGrn(row.id);
+                                }}
+                              >
+                                <Eye className="h-4 w-4" /> View
+                              </DropdownMenuItem>
                               {available.includes('post') && (
                                 <DropdownMenuItem
                                   onClick={() => {
@@ -2346,6 +2377,8 @@ export function GoodsReceiptsTab() {
           invalidateKeys={[['company', 'inventory'], ['company', 'products'], ['company', 'dashboard']]}
         />
       )}
+
+      {viewingGrn && <PurchaseDocDialog kind="grn" id={viewingGrn} onClose={() => setViewingGrn(null)} />}
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
