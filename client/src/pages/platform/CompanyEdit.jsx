@@ -12,7 +12,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AddressFields, LocaleFields, checkContact, isIndiaCountry } from '@/components/company/form-utils';
-import { useCountries, findCountry } from '@/hooks/useLocations';
+import { useCountries, findCountry, taxIdWording } from '@/hooks/useLocations';
 import { Input, Select, Field } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -104,6 +104,7 @@ export default function CompanyEdit() {
 
   const { data: countries = [] } = useCountries();
   const editCountry = findCountry(countries, watch('country'));
+  const ids = { taxIdLabel: editCountry?.tax?.taxIdLabel || 'GSTIN', ...taxIdWording(editCountry) };
   const lockedReason = company?.transactions > 0 ? '🔒 Locked: the company already has transactions' : '';
 
   // Populate the form once the company loads.
@@ -265,11 +266,11 @@ export default function CompanyEdit() {
           <Field label="Website" error={errors.website?.message}>
             <Input {...register('website')} error={!!errors.website} />
           </Field>
-          <Field label="GSTIN" error={errors.gstin?.message}>
-            <Input {...register('gstin')} error={!!errors.gstin} className="uppercase" />
+          <Field label={ids.taxIdLabel} error={errors.gstin?.message}>
+            <Input {...register('gstin')} error={!!errors.gstin} placeholder={ids.taxIdPlaceholder} className="uppercase" />
           </Field>
-          <Field label="PAN" error={errors.pan?.message}>
-            <Input {...register('pan')} error={!!errors.pan} className="uppercase" />
+          <Field label={ids.secondIdLabel} error={errors.pan?.message}>
+            <Input {...register('pan')} error={!!errors.pan} placeholder={ids.secondIdPlaceholder} className="uppercase" />
           </Field>
         </Section>
 

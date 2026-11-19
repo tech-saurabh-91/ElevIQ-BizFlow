@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/api/client';
 import { InstallButton } from '@/components/shell/PwaPrompts';
-import { Bell, LogOut, Moon, Sun, UserRound, KeyRound, ChevronDown, Eye, LogIn } from 'lucide-react';
+import { Bell, CircleHelp, LogOut, Moon, Sun, UserRound, KeyRound, ChevronDown, Eye, LogIn } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useUIStore } from '@/store/uiStore';
@@ -12,6 +12,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu';
 import { APP_NAME } from '@/utils/format';
+import HelpPanel from '@/components/help/HelpPanel';
 
 /**
  * Top bar.
@@ -39,6 +40,7 @@ export default function Topbar() {
   const toggleTheme = useUIStore((s) => s.toggleTheme);
   const navigate = useNavigate();
   const [exiting, setExiting] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const companyName = company?.name || user?.companyName || '';
   const appName = APP_NAME;
@@ -82,6 +84,17 @@ export default function Topbar() {
 
       <div className="flex shrink-0 items-center gap-1.5">
         <InstallButton />
+        {scope !== 'platform' && (
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-accent focus-ring"
+            aria-label="Help"
+            title="Help"
+          >
+            <CircleHelp className="h-[18px] w-[18px]" />
+          </button>
+        )}
         {/* Notifications */}
         <button
           type="button"
@@ -177,6 +190,7 @@ export default function Topbar() {
         </DropdownMenu>
       </div>
     </header>
+    <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   );
 }

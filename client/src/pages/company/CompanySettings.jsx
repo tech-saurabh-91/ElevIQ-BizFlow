@@ -26,6 +26,7 @@ import { useCountries, useStates, findCountry } from '@/hooks/useLocations';
 import { formatDate } from '@/utils/format';
 import { cn } from '@/utils/cn';
 import { SALES_CHANNEL_PERMISSIONS } from '@/utils/salesType';
+import { taxIdWording } from '@/hooks/useLocations';
 
 const REGIME_LABELS = { GST: 'GST', VAT: 'VAT', SALES_TAX: 'Sales tax', NONE: 'No tax' };
 const regimeLabel = (r) => REGIME_LABELS[r] || r || '—';
@@ -85,9 +86,9 @@ const SERIES_FIELDS = [
 ];
 
 const TABS = [
-  { value: 'profile', label: 'Business profile', icon: Building2, description: 'Name, logo, address, GSTIN and bank details' },
+  { value: 'profile', label: 'Business profile', icon: Building2, description: 'Name, logo, address, tax ID and bank details' },
   { value: 'localisation', label: 'Localisation & numbering', icon: Globe2, description: 'Currency, timezone, financial year and document numbers' },
-  { value: 'documents', label: 'Tax & documents', icon: FileText, description: 'GST, invoice terms, rounding and printing' },
+  { value: 'documents', label: 'Tax & documents', icon: FileText, description: 'Tax, invoice terms, rounding and printing' },
   { value: 'operations', label: 'Operations', icon: SlidersHorizontal, description: 'Orders, stock, pricing, field force and collections' },
   { value: 'permissions', label: 'Permissions', icon: ShieldCheck, description: 'What each role can see and do' },
 ];
@@ -320,6 +321,7 @@ function SettingsForm({ data, canUpdate, tab }) {
   const timezones = useMemo(() => timezoneOptions(country), [country]);
   const taxIdLabel = country?.tax?.taxIdLabel || 'Tax registration number';
   const isIndia = country?.code === 'IN';
+  const { secondIdLabel, taxIdPlaceholder } = taxIdWording(country);
 
   // ---- Locks: these settings freeze once the company has transactions -----
   const locks = data?.locks || {};
@@ -513,14 +515,14 @@ function SettingsForm({ data, canUpdate, tab }) {
 
             <FormSection title="Tax registration">
               <Field label={taxIdLabel} error={errors.profile?.gstin?.message} hint={lockReason('gstin')}>
-                <Input {...register('profile.gstin')} {...readOnly} {...lockProps('gstin', 'uppercase')} />
+                <Input {...register('profile.gstin')} placeholder={taxIdPlaceholder} {...readOnly} {...lockProps('gstin', 'uppercase')} />
               </Field>
               {isIndia ? (
                 <Field label="PAN" error={errors.profile?.pan?.message}>
                   <Input {...register('profile.pan')} className="uppercase" placeholder="AAAAA0000A" {...readOnly} />
                 </Field>
               ) : (
-                <Field label="Other tax ID" error={errors.profile?.taxId?.message} hint="Optional">
+                <Field label={secondIdLabel} error={errors.profile?.taxId?.message} hint="Optional">
                   <Input {...register('profile.taxId')} {...readOnly} />
                 </Field>
               )}
@@ -600,8 +602,8 @@ function SettingsForm({ data, canUpdate, tab }) {
                   ))}
                 </Select>
               </Field>
-              <Field label="Currency symbol" error={errors.currencySymbol?.message} hint="Filled from the currency; you can override it">
-                <Input {...register('currencySymbol')} {...readOnly} />
+              <Field label="Currency symbol" error={errors.currencySymbol?.message} hint={lockReason('currencySymbol') || 'Filled from the currency; you can override it'}>
+                <Input {...register('currencySymbol')} {...readOnly} {...lockProps('currencySymbol')} />
               </Field>
               <Field
                 label="Financial year starts"
@@ -1237,7 +1239,7 @@ function LockBanner({ locks }) {
     <div className="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
       <p className="font-medium">🔒 Some settings are locked</p>
       <p className="mt-0.5 text-xs text-muted-foreground">
-        This company already has {locks.transactions} transaction(s). Currency, country, financial year and tax regime can
+        This company already has {locks.transactions} transaction(s). Currency, currency symbol, country, financial year and tax regime can
         no longer change, because saved documents depend on them. Tax registration number, registered state and tax
         options can only be changed by your service provider.
       </p>

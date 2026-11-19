@@ -83,6 +83,26 @@ export const useTaxLabels = () => {
     tax: { regime: tax.regime || 'GST', enableCgstSgst: tax.enableCgstSgst, label: taxLabel },
     taxLabel,
     taxIdLabel: country?.tax?.taxIdLabel || 'Tax ID',
+    ...taxIdWording(country),
     country,
+  };
+};
+
+/**
+ * Labels and examples for the two tax ID boxes of a country. India: GSTIN +
+ * PAN. Elsewhere the first box uses the country's tax ID label and the second
+ * reads "PIN no." (or "VAT no." where the first box is already the PIN, as
+ * with the KRA PIN in Kenya). Wording only: the stored fields do not change.
+ */
+export const taxIdWording = (country) => {
+  const isIndia = !country || country.code === 'IN';
+  const first = country?.tax?.taxIdLabel || (isIndia ? 'GSTIN' : 'Tax ID');
+  if (isIndia) return { isIndia, taxIdPlaceholder: '27AAAAA0000A1Z5', secondIdLabel: 'PAN', secondIdPlaceholder: 'AAAAA0000A' };
+  const firstIsPin = first.toUpperCase().split(' ').includes('PIN');
+  return {
+    isIndia,
+    taxIdPlaceholder: country?.code === 'KE' ? 'P051234567X' : '',
+    secondIdLabel: firstIsPin ? 'VAT no.' : 'PIN no.',
+    secondIdPlaceholder: 'Optional',
   };
 };

@@ -25,6 +25,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { formatDate, formatMoney, formatNumber } from '@/utils/format';
 import { todayInput } from '@/components/company/form-utils';
 import { cn } from '@/utils/cn';
+import { useTaxLabels } from '@/hooks/useLocations';
 
 /**
  * Supplier bills: the supplier's tax invoice for goods received on GRNs.
@@ -411,6 +412,7 @@ const Row = ({ label, value }) => (
 );
 
 function BillDetailDialog({ id, onClose, money }) {
+  const { taxIdLabel } = useTaxLabels();
   const { data: bill, isLoading } = useQuery({
     queryKey: [...PAYABLES_KEY, 'bill', id],
     queryFn: async () => (await api.get(`/v1/purchase-bills/${id}`)).data?.data,
@@ -424,7 +426,7 @@ function BillDetailDialog({ id, onClose, money }) {
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={bill.status}>{bill.status.replace(/_/g, ' ')}</StatusBadge>
             <span className="text-muted-foreground">GRN {(bill.grnNos || []).join(', ')}</span>
-            {bill.supplierGstin && <span className="text-muted-foreground">GSTIN {bill.supplierGstin}</span>}
+            {bill.supplierGstin && <span className="text-muted-foreground">{taxIdLabel} {bill.supplierGstin}</span>}
           </div>
           <ul className="divide-y rounded-xl border">
             {bill.items.map((l) => (

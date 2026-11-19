@@ -5,6 +5,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/badge';
 import { formatDate, formatDateTime, formatMoney, formatNumber } from '@/utils/format';
+import { useTaxLabels } from '@/hooks/useLocations';
 
 /**
  * Read-only view of a saved purchase document: purchase order, goods receipt,
@@ -35,9 +36,9 @@ const Fact = ({ label, children }) =>
 const humanize = (v) => String(v || '').replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 
 /** Tax lines: CGST + SGST inside the state, IGST across states. */
-function TaxRows({ doc, money }) {
+function TaxRows({ doc, money, label = 'Tax' }) {
   const t = doc.taxBreakup || {};
-  if (!(t.cgst || t.sgst || t.igst)) return doc.taxTotal ? <Row label="Tax" value={money(doc.taxTotal)} /> : null;
+  if (!(t.cgst || t.sgst || t.igst)) return doc.taxTotal ? <Row label={label} value={money(doc.taxTotal)} /> : null;
   return (
     <>
       {t.cgst > 0 && <Row label="CGST" value={money(t.cgst)} />}
@@ -50,6 +51,7 @@ function TaxRows({ doc, money }) {
 export function PurchaseDocDialog({ kind, id, onClose }) {
   const cfg = KINDS[kind];
   const { company } = useAuth();
+  const { taxIdLabel, taxLabel } = useTaxLabels();
   const money = (v) => formatMoney(v || 0, company?.currency);
   const { data: doc, isLoading } = useQuery({
     queryKey: ['company', 'purchase-view', kind, id],
@@ -71,7 +73,7 @@ export function PurchaseDocDialog({ kind, id, onClose }) {
             {kind === 'po' && doc.receiveProgress !== undefined && (
               <span className="text-muted-foreground">Received {Math.round((Number(doc.receiveProgress) || 0) * 100)}%</span>
             )}
-            {doc.supplierGstin && <span className="text-muted-foreground">GSTIN {doc.supplierGstin}</span>}
+            {doc.supplierGstin && <span className="text-muted-foreground">{taxIdLabel} {doc.supplierGstin}</span>}
           </div>
 
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl border bg-muted/30 p-3 sm:grid-cols-3">
@@ -168,7 +170,7 @@ export function PurchaseDocDialog({ kind, id, onClose }) {
                 <Row label="Subtotal" value={money(doc.subtotal)} />
                 {doc.discountTotal > 0 && <Row label="Discount" value={`− ${money(doc.discountTotal)}`} />}
                 <Row label="Taxable value" value={money(doc.taxableTotal)} />
-                <TaxRows doc={doc} money={money} />
+                <TaxRows doc={doc} money={money} label={taxLabel} />
                 {doc.roundOff ? <Row label="Round off" value={money(doc.roundOff)} /> : null}
                 <Row label="Total" value={money(doc.total)} strong />
               </>
@@ -184,7 +186,7 @@ export function PurchaseDocDialog({ kind, id, onClose }) {
             {kind === 'return' && (
               <>
                 <Row label="Taxable value" value={money(doc.taxableTotal)} />
-                <TaxRows doc={doc} money={money} />
+                <TaxRows doc={doc} money={money} label={taxLabel} />
                 <Row label="Total" value={money(doc.total)} strong />
               </>
             )}

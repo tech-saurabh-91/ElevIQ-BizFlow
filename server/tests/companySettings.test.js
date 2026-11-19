@@ -285,6 +285,31 @@ describe('Settings locked by transactions', () => {
     expect(res.status).toBe(200);
     expect((await Company.findById(fresh._id).lean()).currency).toBe('AED');
   });
+  test('the currency symbol is locked too', async () => {
+    const res = await request.patch('/api/v1/settings').set(as(state.admin)).send({ currencySymbol: '$' });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('SETTING_LOCKED');
+  });
+
+  test('opening stock alone (no orders or invoices) already locks the currency', async () => {
+    const stockOnly = await Company.create({
+      code: 'STKO01',
+      slug: 'stko01',
+      businessName: 'Stock Only Co',
+      status: 'ACTIVE',
+      subscriptionEnd: new Date(Date.now() + 365 * 86400000),
+    });
+    await runWithContext({ scope: 'company', companyId: String(stockOnly._id) }, async () => {
+      await Setting.forCompany(stockOnly._id);
+      await User.create({ companyId: stockOnly._id, name: 'Stock Admin', email: 'admin@stockonly.test', password: PASSWORD, role: 'COMPANY_ADMIN' });
+    });
+    const StockMovement = (await import('../src/models/StockMovement.js')).default;
+    await StockMovement.collection.insertOne({ companyId: stockOnly._id, isDeleted: false, type: 'OPENING', qty: 10 });
+    const token = await login('admin@stockonly.test');
+    const res = await request.patch('/api/v1/settings').set(as(token)).send({ currency: 'AED', currencySymbol: 'AED' });
+    expect(res.status).toBe(409);
+    expect((await Company.findById(stockOnly._id).lean()).currency).not.toBe('AED');
+  });
 });
 
 describe('Issued invoices keep the seller details of their day', () => {

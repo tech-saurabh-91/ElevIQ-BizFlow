@@ -11,16 +11,32 @@ import { REPORTS, REPORT_GROUPS, findReport, canRun, missingFor, windowOf } from
 import { AUDIT_ACTIONS, COMPANY_ROLES } from '../../config/constants.js';
 import { audit } from '../../middlewares/audit.js';
 import { DEFAULT_TZ } from '../../services/fieldForceService.js';
+import { findCountry } from '../../services/locationService.js';
 
 /**
  * Reports hub: the catalog of reports this user may open (grouped Register /
  * MIS / Listing), running one, and exporting it to Excel.
  */
 
+/**
+ * Report wording follows the company's tax vocabulary: "GST" / "GSTIN" read
+ * as the company's own tax label and tax ID label (VAT, VAT no....) outside
+ * India. Only the text changes; the figures are the same.
+ */
+const taxWording = async (req, settings) => {
+  const country = await findCountry(req.company?.country || req.company?.address?.country).catch(() => null);
+  const taxLabel = settings?.tax?.taxLabel || country?.tax?.label || 'Tax';
+  const taxIdLabel = country?.tax?.taxIdLabel || 'Tax ID';
+  if (taxLabel === 'GST' && (!country || country.code === 'IN')) return (text) => text;
+  return (text) => (typeof text === 'string' ? text.replace(/\bGSTIN\b/g, taxIdLabel).replace(/\bGST\b/g, taxLabel) : text);
+};
+const reword = (columns, ctx) => columns.map((c) => ({ ...c, label: ctx.word(c.label) }));
+
 const contextOf = async (req) => {
   const settings = req.settings || (await Setting.forCompany(req.companyId));
   const can = (perm) => hasPermission(req, perm);
   return {
+    word: await taxWording(req, settings),
     settings,
     company: req.company,
     can,
@@ -61,8 +77,8 @@ export const catalog = asyncHandler(async (req, res) => {
   const reports = REPORTS.filter((r) => canRun(r, ctx)).map((r) => ({
     code: r.code,
     group: r.group,
-    title: r.title,
-    description: r.description,
+    title: ctx.word(r.title),
+    description: ctx.word(r.description),
     icon: r.icon,
     filters: r.filters,
     statuses: r.statuses || null,
@@ -75,15 +91,15 @@ export const catalog = asyncHandler(async (req, res) => {
 export const run = asyncHandler(async (req, res) => {
   const { report, ctx } = await loadRunnable(req);
   const result = await report.run(req.query, ctx);
-  const columns = visibleColumns(result.columns, ctx);
+  const columns = reword(visibleColumns(result.columns, ctx), ctx);
   const visible = visibleData(result, ctx);
   const window = report.filters.includes('dateRange') ? windowOf(req.query, ctx.tz) : null;
   return success(res, {
     data: {
       code: report.code,
-      title: report.title,
+      title: ctx.word(report.title),
       group: report.group,
-      description: report.description,
+      description: ctx.word(report.description),
       columns,
       rows: visible.rows,
       totals: visible.totals,
@@ -101,16 +117,16 @@ export const exportXlsx = asyncHandler(async (req, res) => {
   const { report, ctx } = await loadRunnable(req);
   if (!ctx.can('reports.export')) throw new ForbiddenError('You do not have permission to export reports', 'FORBIDDEN');
   const raw = await report.run(req.query, ctx);
-  const columns = visibleColumns(raw.columns, ctx);
+  const columns = reword(visibleColumns(raw.columns, ctx), ctx);
   const result = { ...raw, ...visibleData(raw, ctx) };
   const window = report.filters.includes('dateRange') ? windowOf(req.query, ctx.tz) : null;
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'ElevIQ SFA';
-  const sheet = wb.addWorksheet(report.title.slice(0, 31));
+  const sheet = wb.addWorksheet(ctx.word(report.title).slice(0, 31));
   const company = req.company?.businessName || '';
   sheet.addRow([company]).font = { bold: true, size: 13 };
-  sheet.addRow([report.title + (window ? `  (${dayjs(window.fromKey).format('DD MMM YYYY')} - ${dayjs(window.toKey).format('DD MMM YYYY')})` : '')]).font = { bold: true };
+  sheet.addRow([ctx.word(report.title) + (window ? `  (${dayjs(window.fromKey).format('DD MMM YYYY')} - ${dayjs(window.toKey).format('DD MMM YYYY')})` : '')]).font = { bold: true };
   if (result.note) sheet.addRow([result.note]).font = { italic: true, color: { argb: 'FF666666' } };
   // Summary block (e.g. opening / in / out / net in hand) above the table.
   const TONE_ARGB = { in: 'FF15803D', out: 'FFDC2626' };

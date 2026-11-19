@@ -484,15 +484,17 @@ export const updateCompany = async (id, fields, actor) => {
     before._id,
     {
       currency: before.currency,
+      currencySymbol: before.currencySymbol,
       country: before.address?.country,
       financialYearStartMonth: before.financialYearStartMonth,
     },
     {
       currency: fields.currency,
+      currencySymbol: fields.currencySymbol,
       country: fields.address?.country,
       financialYearStartMonth: fields.financialYearStartMonth,
     },
-    { allowSupport: true, errorPaths: { currency: 'body.currency', country: 'body.country', financialYearStartMonth: 'body.financialYearStartMonth' } }
+    { allowSupport: true, errorPaths: { currency: 'body.currency', currencySymbol: 'body.currencySymbol', country: 'body.country', financialYearStartMonth: 'body.financialYearStartMonth' } }
   );
 
   const set = {};

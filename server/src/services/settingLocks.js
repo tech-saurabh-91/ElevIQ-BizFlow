@@ -3,6 +3,12 @@ import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import CreditNote from '../models/CreditNote.js';
 import PurchaseOrder from '../models/PurchaseOrder.js';
+import PurchaseBill from '../models/PurchaseBill.js';
+import GoodsReceipt from '../models/GoodsReceipt.js';
+import SupplierPayment from '../models/SupplierPayment.js';
+import PurchaseReturn from '../models/PurchaseReturn.js';
+import StockMovement from '../models/StockMovement.js';
+import Expense from '../models/Expense.js';
 import { AppError } from '../utils/errors.js';
 
 /**
@@ -17,6 +23,7 @@ import { AppError } from '../utils/errors.js';
  */
 export const HARD_LOCKED = {
   currency: 'Currency',
+  currencySymbol: 'Currency symbol',
   country: 'Country',
   financialYearStartMonth: 'Financial year start',
   taxRegime: 'Tax regime',
@@ -30,7 +37,21 @@ export const SUPPORT_LOCKED = {
   splitTax: 'CGST/SGST split',
 };
 
-const TRANSACTION_MODELS = [Order, Invoice, Payment, CreditNote, PurchaseOrder];
+// Any money or stock record counts: sales, purchase, stock (opening stock,
+// adjustments and transfers all write stock movements) and expenses.
+const TRANSACTION_MODELS = [
+  Order,
+  Invoice,
+  Payment,
+  CreditNote,
+  PurchaseOrder,
+  PurchaseBill,
+  GoodsReceipt,
+  SupplierPayment,
+  PurchaseReturn,
+  StockMovement,
+  Expense,
+];
 
 /** Number of transactions (any status) the company has. 0 = nothing locked yet. */
 export const countTransactions = async (companyId) => {

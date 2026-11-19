@@ -130,7 +130,7 @@ export default function Companies() {
             <Input
               value={searchDraft}
               onChange={(e) => setSearchDraft(e.target.value)}
-              placeholder="Search by name, code, slug, email or GSTIN…"
+              placeholder="Search by name, code, slug, email or tax ID…"
               className="pl-9"
               aria-label="Search companies"
             />

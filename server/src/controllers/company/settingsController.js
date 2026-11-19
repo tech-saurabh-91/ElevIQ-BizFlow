@@ -94,6 +94,7 @@ export const update = asyncHandler(async (req, res) => {
     req.companyId,
     {
       currency: company?.currency,
+      currencySymbol: company?.currencySymbol,
       country: company?.address?.country,
       financialYearStartMonth: company?.financialYearStartMonth,
       taxRegime: doc.tax?.regime,
@@ -105,6 +106,7 @@ export const update = asyncHandler(async (req, res) => {
     },
     {
       currency: payload.currency,
+      currencySymbol: payload.currencySymbol,
       country: payload.address?.country,
       financialYearStartMonth: payload.financialYearStartMonth,
       taxRegime: payload.tax?.regime,

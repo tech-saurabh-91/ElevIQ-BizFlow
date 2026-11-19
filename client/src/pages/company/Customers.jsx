@@ -158,7 +158,7 @@ const onlyPhone = (e) => {
 };
 
 function CustomerForm({ mode, initial, onClose, onSaved }) {
-  const { taxIdLabel, country } = useTaxLabels();
+  const { taxIdLabel, country, secondIdLabel, taxIdPlaceholder } = useTaxLabels();
   const isIndia = country?.code === 'IN';
   const [formError, setFormError] = useState('');
   const [serverErrors, setServerErrors] = useState([]);
@@ -341,7 +341,7 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
               {...register('gstin', { onBlur: fillPanFromGstin })}
               error={!!errors.gstin}
               maxLength={isIndia ? 15 : 30}
-              placeholder={isIndia ? '27AAAAA0000A1Z5' : ''}
+              placeholder={taxIdPlaceholder}
               className="uppercase"
             />
           </Field>
@@ -350,7 +350,7 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
               <Input {...register('pan')} error={!!errors.pan} maxLength={10} placeholder="AAAAA0000A" className="uppercase" />
             </Field>
           ) : (
-            <Field label="Other tax ID" error={errors.taxId?.message}>
+            <Field label={secondIdLabel} error={errors.taxId?.message}>
               <Input {...register('taxId')} placeholder="Optional" />
             </Field>
           )}

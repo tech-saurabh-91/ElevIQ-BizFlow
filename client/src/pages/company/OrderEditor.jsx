@@ -136,7 +136,7 @@ const toFormValues = (order) => ({
 });
 
 export default function OrderEditor() {
-  const { taxIdLabel } = useTaxLabels();
+  const { taxIdLabel, taxLabel } = useTaxLabels();
   const { id } = useParams();
   // Opened from a customer visit (My Beat): start with that customer.
   const [searchParams] = useSearchParams();
@@ -833,7 +833,7 @@ export default function OrderEditor() {
                               <span className="font-medium tabular-nums">
                                 {line ? money(line.lineTotal) : '—'}
                               </span>
-                              {line && <p className="text-xs text-muted-foreground">{line.taxRate}% GST</p>}
+                              {line && <p className="text-xs text-muted-foreground">{line.taxRate}% {taxLabel}</p>}
                             </td>
                             <td className="flex items-end justify-end py-1 align-top sm:table-cell sm:py-2 sm:pl-2">
                               <button

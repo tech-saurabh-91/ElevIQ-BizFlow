@@ -4,6 +4,7 @@ import { Input, Select } from '@/components/ui/input';
 import { cn } from '@/utils/cn';
 import { titleCase, formatMoney } from '@/utils/format';
 import { unitOf, unitOptions } from '@/utils/units';
+import { useTaxLabels } from '@/hooks/useLocations';
 
 /**
  * Shared Phase 7 inventory helpers: vocabularies, action availability and a
@@ -128,6 +129,7 @@ export function LineEditor({
   maxRows = 200,
 }) {
   const fmt = (v) => formatMoney(v, currency);
+  const { taxLabel, isIndia } = useTaxLabels();
   // Live calculation (same arithmetic as the server: qty x rate, then tax).
   const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
   const amounts = value.map((line) => {
@@ -311,7 +313,7 @@ export function LineEditor({
           </div>
           {showTax && (
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Tax (GST)</span>
+              <span className="text-muted-foreground">Tax ({taxLabel})</span>
               <span className="tabular-nums">{fmt(taxTotal)}</span>
             </div>
           )}
@@ -325,7 +327,7 @@ export function LineEditor({
             <span>Total</span>
             <span className="tabular-nums">{fmt(grand)}</span>
           </div>
-          {showTax && <p className="text-[11px] text-muted-foreground">Tax is split as CGST + SGST or IGST from the supplier&apos;s state when saved.</p>}
+          {showTax && isIndia && <p className="text-[11px] text-muted-foreground">Tax is split as CGST + SGST or IGST from the supplier&apos;s state when saved.</p>}
         </div>
       )}
     </div>

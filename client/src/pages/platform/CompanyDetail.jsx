@@ -299,7 +299,7 @@ export default function CompanyDetail() {
             <InfoRow icon={Building2} label="Legal name" value={company.legalName} />
             <InfoRow icon={Mail} label="Email" value={company.email} />
             <InfoRow icon={Phone} label="Phone" value={company.phone} />
-            <InfoRow icon={CalendarDays} label="GSTIN" value={company.gstin} />
+            <InfoRow icon={CalendarDays} label={/^(IN|India)?$/i.test(String(company.country || addr.country || '')) ? 'GSTIN' : 'Tax ID'} value={company.gstin} />
             <InfoRow
               icon={Building2}
               label="Address"

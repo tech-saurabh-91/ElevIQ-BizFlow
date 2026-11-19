@@ -12,7 +12,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AddressFields, LocaleFields, countryLocaleDefaults, checkContact, isIndiaCountry } from '@/components/company/form-utils';
-import { useCountries, findCountry } from '@/hooks/useLocations';
+import { useCountries, findCountry, taxIdWording } from '@/hooks/useLocations';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ErrorAlert } from '@/components/ui/alert';
@@ -205,6 +205,7 @@ export default function CompanyCreate() {
   // Currency, time zone, financial year and tax follow the chosen country.
   const { data: countries = [] } = useCountries();
   const country = findCountry(countries, watch('country'));
+  const ids = { taxIdLabel: country?.tax?.taxIdLabel || 'GSTIN', ...taxIdWording(country) };
   const applyCountry = (next) => {
     const d = countryLocaleDefaults(next);
     if (!d) return;
@@ -346,11 +347,11 @@ export default function CompanyCreate() {
           <Field label="Website" error={errors.website?.message}>
             <Input {...register('website')} error={!!errors.website} placeholder="https://acme.test" />
           </Field>
-          <Field label="GSTIN" error={errors.gstin?.message}>
-            <Input {...register('gstin')} error={!!errors.gstin} placeholder="27AAAAA0000A1Z5" className="uppercase" />
+          <Field label={ids.taxIdLabel} error={errors.gstin?.message}>
+            <Input {...register('gstin')} error={!!errors.gstin} placeholder={ids.taxIdPlaceholder} className="uppercase" />
           </Field>
-          <Field label="PAN" error={errors.pan?.message}>
-            <Input {...register('pan')} error={!!errors.pan} placeholder="AAAAA0000A" className="uppercase" />
+          <Field label={ids.secondIdLabel} error={errors.pan?.message}>
+            <Input {...register('pan')} error={!!errors.pan} placeholder={ids.secondIdPlaceholder} className="uppercase" />
           </Field>
         </Section>
 

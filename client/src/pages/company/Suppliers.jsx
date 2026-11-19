@@ -116,7 +116,7 @@ const toDefaults = (initial) => ({
 });
 
 function SupplierForm({ mode, initial, onClose, onSaved }) {
-  const { taxIdLabel } = useTaxLabels();
+  const { taxIdLabel, secondIdLabel, taxIdPlaceholder, secondIdPlaceholder } = useTaxLabels();
   const [formError, setFormError] = useState('');
   const [serverErrors, setServerErrors] = useState([]);
   const { company } = useAuth();
@@ -210,10 +210,10 @@ function SupplierForm({ mode, initial, onClose, onSaved }) {
           <Input {...register('website')} placeholder="https://acme.test" />
         </Field>
         <Field label={taxIdLabel} error={errors.gstin?.message}>
-          <Input {...register('gstin')} placeholder="27AAAAA0000A1Z5" className="uppercase" />
+          <Input {...register('gstin')} placeholder={taxIdPlaceholder} className="uppercase" />
         </Field>
-        <Field label="PAN" error={errors.pan?.message}>
-          <Input {...register('pan')} placeholder="AAAAA0000A" className="uppercase" />
+        <Field label={secondIdLabel} error={errors.pan?.message}>
+          <Input {...register('pan')} placeholder={secondIdPlaceholder} className="uppercase" />
         </Field>
       </FormSection>
 

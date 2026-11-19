@@ -167,7 +167,7 @@ const orderRowFromOption = (row) => ({
 });
 
 export default function InvoiceEditor() {
-  const { taxIdLabel } = useTaxLabels();
+  const { taxIdLabel, taxLabel } = useTaxLabels();
   const { id } = useParams();
   const isEdit = Boolean(id);
   const [searchParams] = useSearchParams();
@@ -884,7 +884,7 @@ export default function InvoiceEditor() {
                   <Input {...register('poReference')} placeholder="Customer PO / reference" />
                 </Field>
                 <Field label="Place of supply" error={errors.placeOfSupply?.message} className="sm:col-span-2">
-                  <Input {...register('placeOfSupply')} placeholder="State used for GST supply" />
+                  <Input {...register('placeOfSupply')} placeholder={`State used for ${taxLabel} supply`} />
                 </Field>
               </CardContent>
             </Card>
@@ -1078,7 +1078,7 @@ export default function InvoiceEditor() {
                               <span className="font-medium tabular-nums">
                                 {line ? money(line.lineTotal) : '—'}
                               </span>
-                              {line && <p className="text-xs text-muted-foreground">{line.taxRate}% GST</p>}
+                              {line && <p className="text-xs text-muted-foreground">{line.taxRate}% {taxLabel}</p>}
                             </td>
                             {direct && (
                               <td className="flex items-end justify-end py-1 align-top sm:table-cell sm:py-2 sm:pl-2">
