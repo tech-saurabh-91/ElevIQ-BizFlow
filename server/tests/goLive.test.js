@@ -243,5 +243,49 @@ describe('Go-live business day', () => {
     expect(await stockOf(state.oil)).toBe(start - 2);
     expect((await admin().get(`/api/v1/orders/${id}`)).body.data.status).toBe('PARTIALLY_INVOICED');
   });
-});
 
+  test('12. credit notes: damage needs a Damaged warehouse; money-only reasons move no stock', async () => {
+    const inv = (await admin().get(`/api/v1/invoices/${state.invoice.id}`)).body.data;
+    const line = inv.items[0];
+    const start = await stockOf(state.oil);
+    const notesBefore = (await admin().get('/api/v1/credit-notes')).body.meta.total;
+
+    // The form warns before anything is saved.
+    const opts = (await admin().get('/api/v1/credit-notes/form-options', { invoiceId: inv.id })).body.data;
+    expect(opts.stockPlans.DAMAGE.blocked.code).toBe('DAMAGED_WAREHOUSE_MISSING');
+    expect(opts.stockPlans.SALES_RETURN.target.id).toBe(state.main);
+    expect(opts.stockPlans.RATE_DIFFERENCE.goodsBack).toBe(false);
+
+    // No Damaged warehouse: Save & issue is refused and leaves no stray draft.
+    const blocked = await admin().post('/api/v1/credit-notes', {
+      invoiceId: inv.id, reason: 'DAMAGE', items: [{ invoiceItemId: line.id, qty: 1 }], issue: true,
+    });
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.code).toBe('DAMAGED_WAREHOUSE_MISSING');
+    expect((await admin().get('/api/v1/credit-notes')).body.meta.total).toBe(notesBefore);
+
+    // A draft can still be saved, but not issued.
+    const draft = await admin().post('/api/v1/credit-notes', { invoiceId: inv.id, reason: 'DAMAGE', items: [{ invoiceItemId: line.id, qty: 1 }] });
+    expect(draft.status).toBe(201);
+    const early = await admin().post(`/api/v1/credit-notes/${draft.body.data.id}/issue`, {});
+    expect(early.status).toBe(422);
+    expect(early.body.code).toBe('DAMAGED_WAREHOUSE_MISSING');
+
+    // Once the Damaged warehouse exists, the goods go there - not to the main godown.
+    const damaged = await admin().post('/api/v1/warehouses', { name: 'Damaged Goods', code: 'DMG', type: 'DAMAGED', parent: state.main });
+    expect(damaged.status).toBe(201);
+    const issued = await admin().post(`/api/v1/credit-notes/${draft.body.data.id}/issue`, {});
+    expect(issued.status).toBe(200);
+    expect(String(issued.body.data.stockWarehouse?.id || issued.body.data.stockWarehouse)).toBe(damaged.body.data.id);
+    const qtyIn = async (wh) => (await admin().get('/api/v1/inventory/stock', { warehouseId: wh, productId: state.oil })).body.data[0]?.qty;
+    expect(await qtyIn(state.main)).toBe(start);
+    expect(await qtyIn(damaged.body.data.id)).toBe(1);
+
+    // A rate difference credits money only.
+    const rate = await admin().post('/api/v1/credit-notes', {
+      invoiceId: inv.id, reason: 'RATE_DIFFERENCE', items: [{ invoiceItemId: line.id, qty: 1 }], issue: true,
+    });
+    expect(rate.status).toBe(201);
+    expect(rate.body.data.stockPosted).toBeFalsy();
+  });
+});

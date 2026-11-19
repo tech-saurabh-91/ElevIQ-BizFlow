@@ -8,6 +8,7 @@ import CreditNote from '../../models/CreditNote.js';
 import Invoice from '../../models/Invoice.js';
 import Customer from '../../models/Customer.js';
 import Setting from '../../models/Setting.js';
+import Warehouse from '../../models/Warehouse.js';
 
 import { success, created, paginated } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -31,25 +32,75 @@ import { MOVEMENT_TYPES } from '../../config/constants.js';
 import { companyToday, tzOf } from '../../utils/companyTime.js';
 import { numberOutOfYear } from '../../utils/numberSeries.js';
 
-/**
- * Where returned goods go. Only when they had actually left stock: a direct
- * invoice that posted stock, or an order that was dispatched. A sales return
- * goes back to the warehouse it left from; damaged goods go to the DAMAGED
- * warehouse (if the company keeps one). Rate differences move nothing.
- */
-const returnTarget = async (note, invoice, settings) => {
-  if (!['SALES_RETURN', 'DAMAGE'].includes(note.reason)) return null;
-  let source = null;
-  if (invoice.stockPosted) source = invoice.warehouse;
-  else if (invoice.order) {
+/** Reasons where goods physically come back from the customer. */
+export const GOODS_BACK_REASONS = ['SALES_RETURN', 'DAMAGE'];
+
+/** The warehouse an invoice's goods left from, or null if they never left stock. */
+const sourceWarehouseOf = async (invoice, settings) => {
+  if (invoice.stockPosted) return invoice.warehouse || null;
+  if (invoice.order) {
+    // Old flow: an order dispatched before invoices took the stock out.
     const order = await mongoose.model('Order').findById(invoice.order).select('status warehouse').lean();
     if (order && ['DISPATCHED', 'DELIVERED'].includes(order.status)) {
-      source = order.warehouse || (await resolveDefaultWarehouse(settings))?._id || null;
+      return order.warehouse || (await resolveDefaultWarehouse(settings))?._id || null;
     }
   }
-  if (!source) return null;
-  if (note.reason === 'DAMAGE') return (await damagedWarehouse())?._id || null;
-  return source;
+  return null;
+};
+
+const whView = (w) => (w ? { id: String(w._id), name: w.name, code: w.code || '', type: w.type, isActive: w.isActive !== false } : null);
+
+/**
+ * What a credit note does to stock, per reason:
+ * - SALES_RETURN: goods go back to the warehouse they left from.
+ * - DAMAGE: goods go to the company's DAMAGED warehouse, never into sellable
+ *   stock. Without one the note cannot be issued - create it first.
+ * - RATE_DIFFERENCE / DISCOUNT / SHORTAGE / OTHER: money only, no stock.
+ * Goods that never left stock (an order invoiced but never shipped under the
+ * old flow) move nothing back.
+ * `blocked` carries the reason the note cannot be issued, if any.
+ */
+export const creditStockPlan = async (reason, invoice, settings) => {
+  const source = await sourceWarehouseOf(invoice, settings);
+  const sourceWh = source ? await Warehouse.findById(source).select('name code type isActive').lean() : null;
+  const damagedWh = await damagedWarehouse();
+  const plan = {
+    goodsBack: GOODS_BACK_REASONS.includes(reason),
+    goodsLeftStock: Boolean(source),
+    source: whView(sourceWh),
+    damaged: whView(damagedWh),
+    target: null,
+    blocked: null,
+  };
+  if (!plan.goodsBack || !source) return plan;
+
+  if (reason === 'DAMAGE') {
+    if (!damagedWh) {
+      plan.blocked = {
+        code: 'DAMAGED_WAREHOUSE_MISSING',
+        message: 'No Damaged warehouse found. Create one first (Warehouses → Add warehouse → type "Damaged"), then issue this credit note.',
+      };
+      return plan;
+    }
+    plan.target = plan.damaged;
+    return plan;
+  }
+
+  if (!sourceWh || sourceWh.isActive === false) {
+    plan.blocked = {
+      code: 'RETURN_WAREHOUSE_INACTIVE',
+      message: `The goods left from ${sourceWh?.name || 'a warehouse'} which is no longer active. Activate it again before issuing this return.`,
+    };
+    return plan;
+  }
+  plan.target = plan.source;
+  return plan;
+};
+
+const assertStockPlan = (plan) => {
+  if (plan.blocked) {
+    throw new AppError(plan.blocked.message, { status: 422, code: plan.blocked.code, errors: [{ field: 'reason', message: plan.blocked.message }] });
+  }
 };
 
 const moveReturnStock = async (req, note, warehouse, sign, reason) => {
@@ -239,12 +290,15 @@ const issueCreditNote = async (req, note, text = '') => {
   note.issuedBy = req.user.id;
   pushHistory(note, CREDIT_NOTE_STATUS.ISSUED, req, text || 'Credit note issued');
 
+  // Check where the goods go before anything is written.
+  const plan = await creditStockPlan(note.reason, invoice, await Setting.forCompany(req.companyId));
+  assertStockPlan(plan);
+
   await applyCreditNote(note, invoice);
-  const target = await returnTarget(note, invoice, await Setting.forCompany(req.companyId));
-  if (target) {
-    await moveReturnStock(req, note, target, 1, note.reason === 'DAMAGE' ? 'Damaged goods returned' : 'Goods returned');
+  if (plan.target) {
+    await moveReturnStock(req, note, plan.target.id, 1, note.reason === 'DAMAGE' ? 'Damaged goods returned' : 'Goods returned');
     note.stockPosted = true;
-    note.stockWarehouse = target;
+    note.stockWarehouse = plan.target.id;
   }
   await note.save();
 
@@ -380,6 +434,9 @@ export const create = asyncHandler(async (req, res) => {
     statusHistory: [],
   });
   pushHistory(note, CREDIT_NOTE_STATUS.DRAFT, req, `Created against ${invoice.invoiceNo}`);
+
+  // Save & issue: refuse up front (no stray draft) when the goods have nowhere to go.
+  if (payload.issue) assertStockPlan(await creditStockPlan(note.reason, invoice, settings));
 
   note.creditNoteNo = await nextCreditNoteNumber(req.companyId, settings, note.creditNoteDate);
   await note.save();
@@ -562,8 +619,10 @@ export const formOptions = asyncHandler(async (req, res) => {
   const idOf = (d) => ({ ...d, id: String(d._id), _id: undefined });
 
   let invoice = null;
+  let invoiceDoc = null;
   if (invoiceId) {
     const doc = await Invoice.findById(invoiceId);
+    invoiceDoc = doc;
     if (!doc) throw new BadRequestError('Invoice not found', 'INVALID_REFERENCE');
     if (!CREDITABLE_INVOICE_STATUSES.includes(doc.status)) {
       throw new AppError('Only issued invoices can be credited', {
@@ -621,6 +680,10 @@ export const formOptions = asyncHandler(async (req, res) => {
         creditNoteTotal: Number(i.creditNoteTotal || 0),
       })),
       reasons: CREDIT_NOTE_REASONS,
+      // What issuing does to stock for each reason, so the form can warn first.
+      stockPlans: invoiceDoc
+        ? Object.fromEntries(await Promise.all(CREDIT_NOTE_REASONS.map(async (r) => [r, await creditStockPlan(r, invoiceDoc, settings)])))
+        : null,
       settings: {
         currency: settings?.currency || 'INR',
         currencySymbol: settings?.currencySymbol || '₹',

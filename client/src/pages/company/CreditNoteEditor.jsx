@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -169,6 +169,9 @@ export default function CreditNoteEditor() {
 
   const options = optionsQuery.data;
   const invoice = options?.invoice || null;
+  // What issuing does to stock for the chosen reason (server-computed).
+  const stockPlan = options?.stockPlans?.[reason] || null;
+  const issueBlocked = Boolean(stockPlan?.blocked);
   const currency = options?.settings?.currency || company?.currency || 'INR';
   const money = (value) => formatMoney(value, currency);
 
@@ -491,6 +494,8 @@ export default function CreditNoteEditor() {
               </CardContent>
             </Card>
 
+            {invoice && stockPlan && <StockPlanAlert plan={stockPlan} reason={reason} />}
+
             {invoice && options?.invoice && (
               <Alert tone="info">
                 <AlertTitle>Crediting {invoice.invoiceNo}</AlertTitle>
@@ -696,7 +701,7 @@ export default function CreditNoteEditor() {
               </Button>
               <Button
                 type="button"
-                disabled={saving || !hasLines}
+                disabled={saving || !hasLines || issueBlocked}
                 loading={saving && intent === 'issue'}
                 onClick={() => submitForm('issue')}
               >
@@ -725,5 +730,59 @@ function Row({ label, value, muted = false }) {
         {value}
       </span>
     </div>
+  );
+}
+
+/** Tells the user, before issuing, where (if anywhere) the credited goods go. */
+function StockPlanAlert({ plan, reason }) {
+  if (plan.blocked) {
+    return (
+      <Alert tone="destructive">
+        <AlertTitle>
+          {plan.blocked.code === 'DAMAGED_WAREHOUSE_MISSING' ? 'Create a Damaged warehouse first' : 'Cannot issue this return yet'}
+        </AlertTitle>
+        <AlertDescription>
+          {plan.blocked.message}{' '}
+          <Link to="/app/warehouses" className="font-medium underline">
+            Open Warehouses
+          </Link>
+          . You can still save this credit note as a draft.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  if (!plan.goodsBack) {
+    const why = {
+      RATE_DIFFERENCE: 'A rate difference credits money only.',
+      DISCOUNT: 'A discount credits money only.',
+      SHORTAGE: 'A shortage credits goods the customer never received, so nothing comes back into stock.',
+      OTHER: 'This credit is money only.',
+    }[reason];
+    return (
+      <Alert tone="default">
+        <AlertTitle>No stock change</AlertTitle>
+        <AlertDescription>
+          {why} The quantities only work out the amount. Choose Sales Return or Damage if goods are coming back.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  if (!plan.goodsLeftStock) {
+    return (
+      <Alert tone="default">
+        <AlertTitle>No stock change</AlertTitle>
+        <AlertDescription>The goods on this invoice never left stock, so nothing is added back.</AlertDescription>
+      </Alert>
+    );
+  }
+  return (
+    <Alert tone="success">
+      <AlertTitle>Stock goes back to {plan.target?.name}</AlertTitle>
+      <AlertDescription>
+        {reason === 'DAMAGE'
+          ? `Damaged goods are kept in ${plan.target?.name}, away from sellable stock.`
+          : `The returned quantity is added back to ${plan.target?.name}, where the goods were sold from.`}
+      </AlertDescription>
+    </Alert>
   );
 }
