@@ -41,9 +41,12 @@ export const humanize = (value) => titleCase(String(value || '').replace(/_/g, '
 export const movementLabel = humanize;
 export const reasonLabel = humanize;
 
-/** Signed movement types render green (+) / red (-) in the ledger. */
-export const isPositiveType = (type) =>
-  ['OPENING', 'PURCHASE_RECEIPT', 'SALES_RETURN', 'TRANSFER_IN'].includes(type);
+/**
+ * Stock colour rule, the same on every screen: green when stock came IN,
+ * red when it went OUT - decided by the quantity's sign, not the type, so a
+ * cancelled purchase return (goods back in) is green.
+ */
+export const isStockIn = (row) => Number(row?.qty) > 0;
 
 // ---------------------------------------------------------------------------
 // Action availability

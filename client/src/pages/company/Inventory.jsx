@@ -38,7 +38,7 @@ import {
   LineEditor,
   adjustmentActionsFor,
   grnActionsFor,
-  isPositiveType,
+  isStockIn,
   movementLabel,
   poActionsFor,
   reasonLabel,
@@ -333,6 +333,7 @@ function MovementsTab() {
 
   const rows = data?.data || [];
   const meta = data?.meta || {};
+  const summary = meta.summary;
   const hasFilters = Boolean(type || warehouseId || dateFrom || dateTo);
 
   return (
@@ -400,6 +401,33 @@ function MovementsTab() {
           />
         </Card>
       ) : (
+        <>
+        {summary && (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              { label: summary.hasOpening ? 'Opening stock' : 'Opening (no start date)', v: summary.opening },
+              { label: 'Total in', v: summary.in, tone: 'in' },
+              { label: 'Total out', v: summary.out, tone: 'out' },
+              { label: 'Net in hand', v: summary.closing, strong: true },
+            ].map((x) => (
+              <div
+                key={x.label}
+                className={`rounded-xl border bg-card p-3 shadow-sm ${x.tone === 'in' ? 'border-success/30 bg-success/5' : x.tone === 'out' ? 'border-destructive/30 bg-destructive/5' : x.strong ? 'border-brand-500/40 bg-brand-500/5' : ''}`}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{x.label}</p>
+                <p className={`mt-1 text-lg font-bold tabular-nums ${x.tone === 'in' ? 'text-success' : x.tone === 'out' ? 'text-destructive' : ''}`}>
+                  {x.tone === 'in' ? '+' : x.tone === 'out' ? '-' : ''}
+                  {formatNumber(x.v?.qty || 0)}
+                </p>
+                {x.v?.value !== undefined && <p className="text-xs tabular-nums text-muted-foreground">{money(x.v.value, company?.currency)}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          <span className="font-semibold text-success">Green</span> = stock came in, <span className="font-semibold text-destructive">red</span> = stock went out
+          (a cancelled return that puts goods back is green). Totals cover every movement matching the filters, not just this page.
+        </p>
         <Card className={isFetching ? 'opacity-80 transition-opacity' : 'transition-opacity'}>
           <Table cards>
             <TableHeader>
@@ -415,7 +443,7 @@ function MovementsTab() {
             </TableHeader>
             <TableBody>
               {rows.map((row) => {
-                const positive = isPositiveType(row.type);
+                const positive = isStockIn(row);
                 return (
                   <TableRow key={row.id}>
                     <TableCell className="whitespace-nowrap text-sm">{formatDate(row.movedAt || row.createdAt)}</TableCell>
@@ -427,10 +455,11 @@ function MovementsTab() {
                     </TableCell>
                     <TableCell>
                       <Badge tone={positive ? 'success' : 'destructive'}>{movementLabel(row.type)}</Badge>
+                      {row.reason && <p className="mt-1 max-w-[16rem] truncate text-xs text-muted-foreground">{row.reason}</p>}
                     </TableCell>
                     <TableCell className={`text-right tabular-nums font-medium ${positive ? 'text-success' : 'text-destructive'}`}>
-                      {positive ? '+' : ''}
-                      {formatNumber(row.qty)}
+                      {positive ? '+' : '-'}
+                      {formatNumber(Math.abs(Number(row.qty)))}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {money(row.value, company?.currency)}
@@ -454,6 +483,7 @@ function MovementsTab() {
             onLimitChange={(l) => setParam({ limit: l, page: 1 })}
           />
         </Card>
+        </>
       )}
     </div>
   );

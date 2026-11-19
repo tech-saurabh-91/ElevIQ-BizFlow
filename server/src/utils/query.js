@@ -151,7 +151,8 @@ export const listDocuments = async (Model, options = {}) => {
 
   const [docs, total] = await Promise.all([q, Model.countDocuments(finalFilter)]);
 
-  return { data: docs, meta: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) } };
+  // `filter` is the final query, so a caller can total the same rows.
+  return { data: docs, meta: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) }, filter: finalFilter };
 };
 
 export default listDocuments;

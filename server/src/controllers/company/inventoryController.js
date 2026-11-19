@@ -138,8 +138,52 @@ export const listMovements = asyncHandler(async (req, res) => {
     populate: POPULATE_MOVEMENT,
   });
 
-  return paginated(res, { data: result.data.map(toPlain), ...result.meta });
+  const summary = await movementSummary(req, result.filter);
+  return paginated(res, { data: result.data.map(toPlain), ...result.meta, extra: { summary } });
 });
+
+/**
+ * Totals of the filtered movements: what was in hand before the period, what
+ * came in, what went out, and what is in hand at its end (qty and value).
+ * Signs decide in / out - a cancelled return putting stock back counts as in.
+ */
+const movementSummary = async (req, filter) => {
+  // aggregate() bypasses the tenant scope and casting: do both by hand.
+  const cast = (v) => (v && mongoose.isValidObjectId(v) ? new mongoose.Types.ObjectId(String(v)) : v);
+  const match = { ...filter, companyId: new mongoose.Types.ObjectId(String(req.companyId)), isDeleted: { $ne: true } };
+  ['warehouse', 'product', 'refId'].forEach((k) => {
+    if (typeof match[k] === 'string') match[k] = cast(match[k]);
+  });
+  const { movedAt, ...beforeMatch } = match;
+  const sums = async (m) =>
+    (
+      await StockMovement.aggregate([
+        { $match: m },
+        {
+          $group: {
+            _id: null,
+            inQty: { $sum: { $cond: [{ $gt: ['$qty', 0] }, '$qty', 0] } },
+            inValue: { $sum: { $cond: [{ $gt: ['$qty', 0] }, '$value', 0] } },
+            outQty: { $sum: { $cond: [{ $lt: ['$qty', 0] }, { $multiply: ['$qty', -1] }, 0] } },
+            outValue: { $sum: { $cond: [{ $lt: ['$qty', 0] }, { $multiply: ['$value', -1] }, 0] } },
+            count: { $sum: 1 },
+          },
+        },
+      ])
+    )[0] || { inQty: 0, inValue: 0, outQty: 0, outValue: 0, count: 0 };
+  const period = await sums(match);
+  const before = movedAt?.$gte ? await sums({ ...beforeMatch, movedAt: { $lt: movedAt.$gte } }) : null;
+  const r = (n) => Math.round(Number(n || 0) * 100) / 100;
+  const opening = before ? { qty: r(before.inQty - before.outQty), value: r(before.inValue - before.outValue) } : { qty: 0, value: 0 };
+  return {
+    opening,
+    in: { qty: r(period.inQty), value: r(period.inValue) },
+    out: { qty: r(period.outQty), value: r(period.outValue) },
+    closing: { qty: r(opening.qty + period.inQty - period.outQty), value: r(opening.value + period.inValue - period.outValue) },
+    count: period.count,
+    hasOpening: Boolean(before),
+  };
+};
 
 /** Full movement history for one product (optionally within a warehouse). */
 export const productHistory = asyncHandler(async (req, res) => {

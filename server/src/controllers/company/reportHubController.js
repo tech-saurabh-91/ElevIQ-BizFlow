@@ -40,8 +40,21 @@ const loadRunnable = async (req) => {
 };
 
 /** Cost columns are dropped for users who may not see costs. */
-const visibleColumns = (columns, ctx) =>
-  ctx.can('products.cost.view') ? columns : columns.filter((c) => !COST_FIELDS.includes(c.key) && !['cost', 'value'].includes(c.key));
+/** Cost / stock-value figures stay hidden without "products.cost.view". */
+const STOCK_VALUE_KEYS = ['cost', 'value', 'valueIn', 'valueOut', 'openingValue', 'inValue', 'outValue', 'closingValue'];
+const isCostKey = (key) => COST_FIELDS.includes(key) || STOCK_VALUE_KEYS.includes(key);
+const visibleColumns = (columns, ctx) => (ctx.can('products.cost.view') ? columns : columns.filter((c) => !isCostKey(c.key)));
+
+/** Rows and summary without the hidden figures (not just hidden columns). */
+const visibleData = (result, ctx) => {
+  if (ctx.can('products.cost.view')) return { rows: result.rows, totals: result.totals, summary: result.summary || null };
+  const strip = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => !isCostKey(k)));
+  return {
+    rows: result.rows.map(strip),
+    totals: strip(result.totals),
+    summary: result.summary ? result.summary.map(({ value, ...rest }) => rest) : null,
+  };
+};
 
 export const catalog = asyncHandler(async (req, res) => {
   const ctx = await contextOf(req);
@@ -63,6 +76,7 @@ export const run = asyncHandler(async (req, res) => {
   const { report, ctx } = await loadRunnable(req);
   const result = await report.run(req.query, ctx);
   const columns = visibleColumns(result.columns, ctx);
+  const visible = visibleData(result, ctx);
   const window = report.filters.includes('dateRange') ? windowOf(req.query, ctx.tz) : null;
   return success(res, {
     data: {
@@ -71,8 +85,9 @@ export const run = asyncHandler(async (req, res) => {
       group: report.group,
       description: report.description,
       columns,
-      rows: result.rows,
-      totals: result.totals,
+      rows: visible.rows,
+      totals: visible.totals,
+      summary: visible.summary,
       note: result.note || '',
       truncated: Boolean(result.truncated),
       period: window ? { from: window.fromKey, to: window.toKey } : null,
@@ -85,8 +100,9 @@ const NUMFMT = { money: '#,##0.00', number: '#,##0.##', percent: '0.00"%"' };
 export const exportXlsx = asyncHandler(async (req, res) => {
   const { report, ctx } = await loadRunnable(req);
   if (!ctx.can('reports.export')) throw new ForbiddenError('You do not have permission to export reports', 'FORBIDDEN');
-  const result = await report.run(req.query, ctx);
-  const columns = visibleColumns(result.columns, ctx);
+  const raw = await report.run(req.query, ctx);
+  const columns = visibleColumns(raw.columns, ctx);
+  const result = { ...raw, ...visibleData(raw, ctx) };
   const window = report.filters.includes('dateRange') ? windowOf(req.query, ctx.tz) : null;
 
   const wb = new ExcelJS.Workbook();
@@ -96,6 +112,18 @@ export const exportXlsx = asyncHandler(async (req, res) => {
   sheet.addRow([company]).font = { bold: true, size: 13 };
   sheet.addRow([report.title + (window ? `  (${dayjs(window.fromKey).format('DD MMM YYYY')} - ${dayjs(window.toKey).format('DD MMM YYYY')})` : '')]).font = { bold: true };
   if (result.note) sheet.addRow([result.note]).font = { italic: true, color: { argb: 'FF666666' } };
+  // Summary block (e.g. opening / in / out / net in hand) above the table.
+  const TONE_ARGB = { in: 'FF15803D', out: 'FFDC2626' };
+  if (Array.isArray(result.summary) && result.summary.length) {
+    sheet.addRow([]);
+    sheet.addRow(['', 'Qty', 'Value']).font = { bold: true };
+    result.summary.forEach((x) => {
+      const row = sheet.addRow([x.label, x.qty ?? '', x.value ?? '']);
+      row.getCell(2).numFmt = NUMFMT.number || '#,##0.##';
+      row.getCell(3).numFmt = NUMFMT.money || '#,##0.00';
+      row.font = { bold: Boolean(x.strong), ...(TONE_ARGB[x.tone] ? { color: { argb: TONE_ARGB[x.tone] } } : {}) };
+    });
+  }
   sheet.addRow([]);
   const header = sheet.addRow(columns.map((c) => c.label));
   header.font = { bold: true };
@@ -103,9 +131,13 @@ export const exportXlsx = asyncHandler(async (req, res) => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEF2FF' } };
     cell.border = { bottom: { style: 'thin' } };
   });
-  result.rows.forEach((r) =>
-    sheet.addRow(columns.map((c) => (c.type === 'date' ? (r[c.key] ? new Date(r[c.key]) : '') : r[c.key] ?? '')))
-  );
+  result.rows.forEach((r) => {
+    const row = sheet.addRow(columns.map((c) => (c.type === 'date' ? (r[c.key] ? new Date(r[c.key]) : '') : r[c.key] ?? '')));
+    // In / out columns in green / red when they carry a figure.
+    columns.forEach((c, i) => {
+      if (TONE_ARGB[c.tone] && Number(r[c.key])) row.getCell(i + 1).font = { color: { argb: TONE_ARGB[c.tone] } };
+    });
+  });
   if (Object.keys(result.totals || {}).length) {
     const totalRow = sheet.addRow(columns.map((c, i) => (i === 0 ? 'Total' : result.totals[c.key] ?? '')));
     totalRow.font = { bold: true };

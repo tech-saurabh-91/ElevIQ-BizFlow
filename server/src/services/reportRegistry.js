@@ -483,33 +483,39 @@ const stockRegister = {
   code: 'stock-register',
   group: 'REGISTER',
   title: 'Stock Movement Register',
-  description: 'Every stock in and out - purchases, sales, transfers, returns, adjustments.',
+  description: 'Every stock in and out - purchases, sales, transfers, returns, adjustments - with opening, in, out and closing.',
   icon: 'ArrowLeftRight',
   requires: ['inventory.view'],
   filters: ['dateRange', 'product', 'warehouse'],
   run: async (p, ctx) => {
     const { from, to } = windowOf(p, ctx.tz);
-    const docs = await StockMovement.find({ movedAt: { $gte: from, $lt: to }, ...by(p, 'product'), ...by(p, 'warehouse') })
+    const scope = { ...by(p, 'product'), ...by(p, 'warehouse') };
+    const docs = await StockMovement.find({ movedAt: { $gte: from, $lt: to }, ...scope })
       .sort({ movedAt: 1, _id: 1 })
       .limit(MAX_ROWS + 1)
       .lean();
+    // In / out follows the sign of the quantity: a cancelled return putting
+    // goods back is stock IN, whatever its type.
     const columns = [
       col('date', 'Date', 'date'),
       col('type', 'Type'),
+      col('reason', 'Note'),
       col('docNo', 'Reference'),
       col('product', 'Product'),
       col('warehouse', 'Warehouse'),
-      col('qtyIn', 'In', 'number'),
-      col('qtyOut', 'Out', 'number'),
+      { ...col('qtyIn', 'In', 'number'), tone: 'in' },
+      { ...col('qtyOut', 'Out', 'number'), tone: 'out' },
       col('balance', 'Balance after', 'number'),
       col('unitCost', 'Cost', 'money'),
-      col('value', 'Value', 'money'),
+      { ...col('valueIn', 'In value', 'money'), tone: 'in' },
+      { ...col('valueOut', 'Out value', 'money'), tone: 'out' },
     ];
     columns.find((c) => c.key === 'balance').noTotal = true;
     columns.find((c) => c.key === 'unitCost').noTotal = true;
     const rows = docs.map((d) => ({
       date: d.movedAt,
       type: String(d.type || '').replace(/_/g, ' ').toLowerCase(),
+      reason: d.reason || '',
       docNo: d.refNo,
       product: d.productName,
       warehouse: d.warehouseName || 'Company',
@@ -517,9 +523,32 @@ const stockRegister = {
       qtyOut: d.qty < 0 ? -d.qty : 0,
       balance: d.balanceAfter,
       unitCost: d.unitCost,
-      value: d.value,
+      valueIn: d.qty > 0 ? r2(Math.abs(d.value || 0)) : 0,
+      valueOut: d.qty < 0 ? r2(Math.abs(d.value || 0)) : 0,
+      _tone: d.qty > 0 ? 'in' : d.qty < 0 ? 'out' : '',
     }));
-    return finish(columns, rows);
+
+    // What was in hand before the period (same product / warehouse filter).
+    const [before] = await StockMovement.aggregate([
+      { $match: { companyId: oid(ctx.companyId), isDeleted: { $ne: true }, movedAt: { $lt: from }, ...scope } },
+      { $group: { _id: null, qty: { $sum: '$qty' }, value: { $sum: '$value' } } },
+    ]);
+    const inQty = rows.reduce((t, x) => t + x.qtyIn, 0);
+    const outQty = rows.reduce((t, x) => t + x.qtyOut, 0);
+    const inValue = rows.reduce((t, x) => t + x.valueIn, 0);
+    const outValue = rows.reduce((t, x) => t + x.valueOut, 0);
+    const openQty = r2(before?.qty);
+    const openValue = r2(before?.value);
+    const qtyNote = p.product ? '' : ' (all products together)';
+    return finish(columns, rows, {
+      summary: [
+        { label: 'Opening stock', qty: openQty, value: openValue },
+        { label: 'Total in', qty: r2(inQty), value: r2(inValue), tone: 'in' },
+        { label: 'Total out', qty: r2(outQty), value: r2(outValue), tone: 'out' },
+        { label: 'Net in hand', qty: r2(openQty + inQty - outQty), value: r2(openValue + inValue - outValue), strong: true },
+      ],
+      note: `Green = stock came in, red = stock went out (by quantity, so a cancelled return putting goods back shows green). Net in hand = opening + in - out${qtyNote}.`,
+    });
   },
 };
 

@@ -30,6 +30,9 @@ const todayKey = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+/** Colour of stock coming in / going out (same rule on every stock screen). */
+const TONE_TEXT = { in: 'text-success', out: 'text-destructive' };
+
 const ymd = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
 
 /**
@@ -239,6 +242,26 @@ export default function ReportViewer() {
         </Card>
       )}
 
+      {data?.summary?.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {data.summary.map((x) => (
+            <div
+              key={x.label}
+              className={cn(
+                'rounded-xl border bg-card p-3 shadow-sm',
+                x.tone === 'in' && 'border-success/30 bg-success/5',
+                x.tone === 'out' && 'border-destructive/30 bg-destructive/5',
+                x.strong && 'border-brand-500/40 bg-brand-500/5'
+              )}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{x.label}</p>
+              <p className={cn('mt-1 text-lg font-bold tabular-nums', TONE_TEXT[x.tone])}>{formatNumber(x.qty)}</p>
+              {x.value !== undefined && <p className="text-xs tabular-nums text-muted-foreground">{money(x.value)}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
       {data?.note && (
         <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {data.note}
@@ -279,7 +302,9 @@ export default function ReportViewer() {
                         'py-2',
                         numeric(c) && 'text-right tabular-nums',
                         j === 0 && 'font-medium',
-                        c.type === 'money' && Number(r[c.key]) < 0 && 'text-destructive'
+                        c.type === 'money' && Number(r[c.key]) < 0 && 'text-destructive',
+                        // In / out columns: green when stock came in, red when it went out.
+                        c.tone && Number(r[c.key]) && TONE_TEXT[c.tone]
                       )}
                     >
                       {cell(c, r[c.key])}
@@ -292,7 +317,7 @@ export default function ReportViewer() {
               <TableFooter>
                 <TableRow>
                   {columns.map((c, j) => (
-                    <TableCell key={c.key} className={cn('py-2 font-semibold', numeric(c) && 'text-right tabular-nums')}>
+                    <TableCell key={c.key} className={cn('py-2 font-semibold', numeric(c) && 'text-right tabular-nums', c.tone && TONE_TEXT[c.tone])}>
                       {j === 0 ? `Total (${rows.length})` : totals[c.key] !== undefined ? cell(c, totals[c.key]) : ''}
                     </TableCell>
                   ))}
