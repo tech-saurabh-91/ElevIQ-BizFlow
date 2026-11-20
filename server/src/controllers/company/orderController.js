@@ -55,7 +55,7 @@ import { companyToday, tzOf } from '../../utils/companyTime.js';
 
 /** Relations returned on every order read so the UI never needs a second call. */
 const POPULATE = [
-  { path: 'customerId', select: 'name code phone gstin type creditLimit creditDays paymentTerms outstanding priceList route warehouse address shippingAddress' },
+  { path: 'customerId', select: 'name code phone email gstin type creditLimit creditDays paymentTerms outstanding priceList route warehouse address shippingAddress' },
   { path: 'salesman', select: 'name email role title' },
   { path: 'route', select: 'name code' },
   { path: 'warehouse', select: 'name code' },
@@ -999,7 +999,7 @@ export const pdf = asyncHandler(async (req, res) => {
       ['Customer', order.customerName || customer.name || ''],
       ['Bill to', addressText(order.billingAddress)],
       ['Ship to', addressText(order.shippingAddress)],
-      ['Phone', order.customerPhone || customer.phone],
+      ['Phone', customer.phone || order.customerPhone],
       [loc.taxIdLabel, order.customerGstin || customer.gstin],
     ],
     meta: [

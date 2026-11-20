@@ -128,7 +128,7 @@ const moveReturnStock = async (req, note, warehouse, sign, reason) => {
 const POPULATE = [
   {
     path: 'customerId',
-    select: 'name code phone gstin type creditLimit creditDays paymentTerms outstanding address shippingAddress',
+    select: 'name code phone email gstin type creditLimit creditDays paymentTerms outstanding address shippingAddress',
   },
   {
     path: 'invoice',
@@ -834,7 +834,7 @@ export const pdf = asyncHandler(async (req, res) => {
     party: [
       ['Customer', note.customerName || customer.name || ''],
       ['Address', addressText(note.billingAddress)],
-      ['Phone', note.customerPhone || customer.phone],
+      ['Phone', customer.phone || note.customerPhone],
       [loc.taxIdLabel, note.customerGstin || customer.gstin],
     ],
     meta: [

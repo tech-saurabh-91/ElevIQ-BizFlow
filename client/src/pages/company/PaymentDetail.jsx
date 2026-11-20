@@ -342,8 +342,8 @@ export default function PaymentDetail() {
                   </p>
                 )}
               </div>
-              {(payment.customerPhone || customer.phone) && (
-                <p className="text-muted-foreground">{payment.customerPhone || customer.phone}</p>
+              {(customer.phone || payment.customerPhone) && (
+                <p className="text-muted-foreground">{customer.phone || payment.customerPhone}</p>
               )}
               {customer.id && (
                 <Link

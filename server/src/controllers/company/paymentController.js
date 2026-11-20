@@ -44,7 +44,7 @@ import { numberOutOfYear } from '../../utils/numberSeries.js';
 const POPULATE = [
   {
     path: 'customerId',
-    select: 'name code phone gstin type creditLimit outstanding address',
+    select: 'name code phone email gstin type creditLimit outstanding address',
   },
   { path: 'collectedBy', select: 'name email role' },
   { path: 'createdBy', select: 'name email' },
@@ -674,7 +674,7 @@ export const pdf = asyncHandler(async (req, res) => {
     timezone: req.company?.timezone || settings?.timezone,
     party: [
       ['Received from', payment.customerName || customer.name || ''],
-      ['Phone', payment.customerPhone || customer.phone],
+      ['Phone', customer.phone || payment.customerPhone],
       [loc.taxIdLabel, customer.gstin],
     ],
     meta: [

@@ -39,6 +39,7 @@ import {
 import { breakupRows } from '@/utils/tax';
 import { useTaxLabels } from '@/hooks/useLocations';
 import { ShareDocumentButtons } from '@/components/company/share-document';
+import { CustomerChangedNote } from '@/components/company/customer-changed';
 
 const ACTION_BUTTONS = {
   submit: { label: 'Submit order', icon: Send },
@@ -365,10 +366,10 @@ export default function OrderDetail() {
                 <p className="font-medium">{order.customerName || customer.name || '—'}</p>
                 {customer.code && <p className="text-xs text-muted-foreground">{customer.code}</p>}
               </div>
-              {(order.customerPhone || customer.phone) && (
+              {(customer.phone || order.customerPhone) && (
                 <p className="flex items-center gap-2 text-muted-foreground">
                   <Phone className="h-3.5 w-3.5" />
-                  {order.customerPhone || customer.phone}
+                  {customer.phone || order.customerPhone}
                 </p>
               )}
               {(order.customerGstin || customer.gstin) && (
@@ -382,6 +383,7 @@ export default function OrderDetail() {
                   <span>{billing || addressLines(customer.address)}</span>
                 </div>
               )}
+              <CustomerChangedNote doc={order} customer={customer} draft={isDraft} taxIdLabel={taxIdLabel} />
               {customer.id && (
                 <Link
                   to={`/app/customers?search=${encodeURIComponent(customer.name || '')}`}

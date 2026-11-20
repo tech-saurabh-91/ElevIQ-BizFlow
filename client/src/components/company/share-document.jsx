@@ -72,7 +72,7 @@ function EmailDialog({ kind, doc, onClose }) {
   });
   const [to, setTo] = useState(null); // null = not edited yet: use the customer's email
   const [message, setMessage] = useState('');
-  const address = to ?? (customer?.email || '');
+  const address = to ?? (customer?.email || doc.customerId?.email || '');
   const list = address.split(/[,;\s]+/).filter(Boolean);
   const badEmail = list.find((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
   const toError = !list.length ? 'Enter an email address' : badEmail ? `"${badEmail}" is not a valid email` : list.length > 5 ? 'At most 5 addresses' : '';
@@ -129,7 +129,9 @@ export function ShareDocumentButtons({ kind, doc }) {
 
   const whatsapp = () => {
     const country = findCountry(countries, company?.country);
-    const number = whatsappNumber(doc.customerPhone, country?.phoneCode || (country ? '' : '+91'));
+    // The customer master's current number, not the one copied onto the document.
+    const master = doc.customerId && typeof doc.customerId === 'object' ? doc.customerId : {};
+    const number = whatsappNumber(master.phone || doc.customerPhone, country?.phoneCode || (country ? '' : '+91'));
     const text = encodeURIComponent(summaryOf(kind, doc, company));
     // No number on the customer: WhatsApp asks who to send it to.
     window.open(number ? `https://wa.me/${number}?text=${text}` : `https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer');

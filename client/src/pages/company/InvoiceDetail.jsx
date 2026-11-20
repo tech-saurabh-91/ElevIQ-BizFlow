@@ -45,6 +45,7 @@ import { breakupRows } from '@/utils/tax';
 import { useTaxLabels } from '@/hooks/useLocations';
 import { ShareDocumentButtons } from '@/components/company/share-document';
 import { PrintStatus } from '@/components/company/print-control';
+import { CustomerChangedNote } from '@/components/company/customer-changed';
 
 const addressLines = (address = {}) =>
   [address.line1, address.line2, address.city, address.state, address.pincode, address.country]
@@ -565,10 +566,10 @@ export default function InvoiceDetail() {
                   </p>
                 )}
               </div>
-              {(invoice.customerPhone || customer.phone) && (
+              {(customer.phone || invoice.customerPhone) && (
                 <p className="flex items-center gap-2 text-muted-foreground">
                   <Phone className="h-3.5 w-3.5" />
-                  {invoice.customerPhone || customer.phone}
+                  {customer.phone || invoice.customerPhone}
                 </p>
               )}
               {(invoice.customerGstin || customer.gstin) && (
@@ -582,6 +583,7 @@ export default function InvoiceDetail() {
                   <span>{billing}</span>
                 </div>
               )}
+              <CustomerChangedNote doc={invoice} customer={customer} draft={isDraft} taxIdLabel={taxIdLabel} />
               {customer.id && (
                 <Link
                   to={`/app/customers?search=${encodeURIComponent(customer.name || '')}`}

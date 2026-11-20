@@ -50,7 +50,7 @@ const POPULATE = [
   {
     path: 'customerId',
     select:
-      'name code phone gstin type creditLimit creditDays paymentTerms outstanding priceList route warehouse address shippingAddress',
+      'name code phone email gstin type creditLimit creditDays paymentTerms outstanding priceList route warehouse address shippingAddress',
   },
   { path: 'salesman', select: 'name email role title' },
   { path: 'route', select: 'name code' },
@@ -1305,7 +1305,7 @@ export const pdf = asyncHandler(async (req, res) => {
     party: [
       ['Customer', invoice.customerName || customer.name || ''],
       ['Address', addressText(invoice.billingAddress)],
-      ['Phone', invoice.customerPhone || customer.phone],
+      ['Phone', customer.phone || invoice.customerPhone],
       [loc.taxIdLabel, invoice.customerGstin || customer.gstin],
       ...(invoice.placeOfSupply ? [['Place of supply', invoice.placeOfSupply]] : []),
     ],

@@ -432,3 +432,20 @@ describe('Original and duplicate prints', () => {
     expect(amountInWords(300000, 'KES')).toBe('Kenya Shillings Three Hundred Thousand Only');
   });
 });
+
+describe('Customer contact details come from the master', () => {
+  test('after the phone changes in the master, documents show the new number; the issued copy keeps its own', async () => {
+    const p = await api.post('/api/v1/products', { name: 'Contact Item', category: 'Snacks', unit: 'PCS', gstRate: 0, mrp: 20, sellingPrice: 15, purchasePrice: 10, openingStock: 20, openingWarehouse: state.warehouseId });
+    const inv = await api.post('/api/v1/invoices', { customerId: state.customerId, warehouse: state.warehouseId, issue: true, items: [{ product: p.body.data.id, qty: 1 }] });
+    expect(inv.status).toBe(201);
+    const oldPhone = inv.body.data.customerPhone;
+
+    const upd = await api.patch(`/api/v1/customers/${state.customerId}`, { phone: '+91 90000 55555', email: 'buyer@costshop.test' });
+    expect(upd.status).toBe(200);
+
+    const detail = (await api.get(`/api/v1/invoices/${inv.body.data.id}`)).body.data;
+    expect(detail.customerPhone).toBe(oldPhone); // the document's own copy is unchanged
+    expect(detail.customerId.phone).toBe('+91 90000 55555'); // the screen reads the master
+    expect(detail.customerId.email).toBe('buyer@costshop.test');
+  });
+});
