@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { titleCase } from '@/utils/format';
 import { taxBreakupFor, effectiveTaxRate } from '@/utils/tax';
 import { unitOf, unitPriceFor } from '@/utils/units';
+import { openDocumentPdf } from '@/components/company/print-control';
 
 /**
  * Shared Phase 4 order helpers: workflow actions, document downloads and the
@@ -204,19 +205,7 @@ export function OrderActionDialog({ action, order, open, onClose, onDone }) {
 }
 
 /** Fetch the PDF with the bearer token, then show it in a new tab. */
-export const openOrderPdf = async (order) => {
-  const win = window.open('', '_blank');
-  try {
-    const { data } = await api.get(`/v1/orders/${order.id}/pdf`, { responseType: 'blob' });
-    const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
-    if (win) win.location.href = url;
-    else window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch (err) {
-    if (win) win.close();
-    toast.error(apiError(err).message);
-  }
-};
+export const openOrderPdf = (order) => openDocumentPdf(`/v1/orders/${order.id}/pdf`);
 
 /** Download the filtered order register as Excel. */
 export const downloadOrdersXlsx = async (params = {}) => {

@@ -35,6 +35,7 @@ import { authenticate } from '../../middlewares/auth.js';
 import { AppError } from '../../utils/errors.js';
 import { booksLock } from '../../middlewares/booksLock.js';
 import financialYearRoutes from './financialYears.js';
+import printControlRoutes from './printControl.js';
 import { requireCompanyScope } from '../../middlewares/rbac.js';
 import { tenant } from '../../middlewares/tenant.js';
 import { hideCostsUnlessAllowed } from '../../middlewares/costVisibility.js';
@@ -112,6 +113,7 @@ router.use('/users', userRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/audit-logs', auditLogRoutes);
 router.use('/financial-years', financialYearRoutes);
+router.use('/print-control', printControlRoutes);
 router.use('/lookups', lookupRoutes);
 
 // ---- Phase 4: order booking ------------------------------------------------

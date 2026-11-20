@@ -56,6 +56,14 @@ export const resolveLinePricing = (product, priceList, input) => {
   return { unitPrice, discountPercent, taxRate, unit: unit.unit, unitFactor: unit.factor, priceListEntry: Boolean(entry) };
 };
 
+/** A paid sale line must carry a price (free scheme goods are added separately). */
+export const assertPriced = (product, unitPrice, index) => {
+  if (Number(unitPrice) > 0) return;
+  throw new BadRequestError(`${product.name} has no price. Set its selling price or enter a price.`, 'VALIDATION_ERROR', [
+    { field: `items.${index}.unitPrice`, message: 'Enter a price more than 0' },
+  ]);
+};
+
 /**
  * Price one line from explicit values (used by orders, invoices and credit
  * notes so all three documents share a single tax/rounding implementation).
@@ -212,6 +220,7 @@ export const buildOrderLines = (items, { products, priceList, settings }) => {
     }
 
     const { unitPrice, discountPercent, taxRate, unit, unitFactor } = resolveLinePricing(product, priceList, input);
+    assertPriced(product, unitPrice, index);
     assertPackQty(input.qty, unitFactor, product, unit, index);
 
     const priced = priceLineValues({ ...input, unitPrice, discountPercent, taxRate }, settings);

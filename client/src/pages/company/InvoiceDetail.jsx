@@ -43,6 +43,8 @@ import {
 } from '@/components/company/invoice-shared';
 import { breakupRows } from '@/utils/tax';
 import { useTaxLabels } from '@/hooks/useLocations';
+import { ShareDocumentButtons } from '@/components/company/share-document';
+import { PrintStatus } from '@/components/company/print-control';
 
 const addressLines = (address = {}) =>
   [address.line1, address.line2, address.city, address.state, address.pincode, address.country]
@@ -180,6 +182,7 @@ export default function InvoiceDetail() {
             <Button variant="outline" onClick={() => openInvoicePdf(invoice)}>
               <Printer className="h-4 w-4" /> Print / PDF
             </Button>
+            <ShareDocumentButtons kind="invoice" doc={invoice} />
             {isDraft && can('invoices.update') && (
               <Button variant="outline" onClick={() => navigate(`/app/invoices/${invoice.id}/edit`)}>
                 <Pencil className="h-4 w-4" /> Edit draft
@@ -219,6 +222,7 @@ export default function InvoiceDetail() {
           </>
         }
       />
+      <PrintStatus docType="INVOICE" id={invoice.id} draft={isDraft} />
 
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge status={invoice.status} />

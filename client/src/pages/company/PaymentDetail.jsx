@@ -35,6 +35,8 @@ import {
   paymentModeLabel,
   paymentReasonLabel,
 } from '@/components/company/payment-shared';
+import { ShareDocumentButtons } from '@/components/company/share-document';
+import { PrintStatus } from '@/components/company/print-control';
 
 export default function PaymentDetail() {
   const { id } = useParams();
@@ -134,6 +136,7 @@ export default function PaymentDetail() {
             <Button variant="outline" onClick={() => openPaymentPdf(payment)}>
               <Printer className="h-4 w-4" /> Print / PDF
             </Button>
+            <ShareDocumentButtons kind="payment" doc={payment} />
             {isDraft && can('payments.update') && (
               <Button variant="outline" onClick={() => navigate(`/app/payments/${payment.id}/edit`)}>
                 <Pencil className="h-4 w-4" /> Edit draft
@@ -174,6 +177,7 @@ export default function PaymentDetail() {
           </>
         }
       />
+      <PrintStatus docType="RECEIPT" id={payment.id} draft={isDraft} />
 
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge status={payment.status} />

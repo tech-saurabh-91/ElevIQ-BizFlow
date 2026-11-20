@@ -4,7 +4,7 @@ import DiscountRule from '../models/DiscountRule.js';
 import Scheme from '../models/Scheme.js';
 import { BadRequestError } from '../utils/errors.js';
 import { round2 } from '../models/helpers.js';
-import { resolveLinePricing, priceLineValues, assertPackQty, computeTotals, wholeUnitCodes, assertWholeQty } from './orderService.js';
+import { resolveLinePricing, priceLineValues, assertPackQty, computeTotals, wholeUnitCodes, assertWholeQty, assertPriced } from './orderService.js';
 
 /**
  * Sale pricing: price list -> discount master -> schemes.
@@ -135,6 +135,7 @@ export const buildSaleLines = async (items, opts) => {
       // GST is the product's rate by law - never taken from the request.
       taxRate: undefined,
     });
+    assertPriced(product, base.unitPrice, index);
     assertPackQty(input.qty, base.unitFactor, product, base.unit, index);
     assertWholeQty(input.qty, base.unit, wholeUnits, product, index);
     // A hand-entered price may go down, never above the printed MRP.

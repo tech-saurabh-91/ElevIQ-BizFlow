@@ -60,7 +60,7 @@ beforeAll(async () => {
   state.main = (await admin.post('/api/v1/warehouses', { name: 'Main', code: 'MAIN', type: 'MAIN' })).body.data.id;
   state.van = (await admin.post('/api/v1/warehouses', { name: 'Van 1', code: 'VAN1', type: 'VAN', parent: state.main, vehicleNumber: 'MH12AB0001' })).body.data.id;
   await admin.post(`/api/v1/warehouses/${state.van}/assignments`, { executive: state.vikId });
-  state.soap = (await admin.post('/api/v1/products', { name: 'Soap', category: 'Home', unit: 'PCS', sellingPrice: 20, openingStock: 100, openingWarehouse: state.main })).body.data.id;
+  state.soap = (await admin.post('/api/v1/products', { name: 'Soap', category: 'Home', unit: 'PCS', sellingPrice: 20, purchasePrice: 15, openingStock: 100, openingWarehouse: state.main })).body.data.id;
   await admin.post(`/api/v1/vans/${state.van}/load`, { items: [{ product: state.soap, qty: 30 }] });
   state.customer = (
     await admin.post('/api/v1/customers', {

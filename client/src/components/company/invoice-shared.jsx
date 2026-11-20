@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { titleCase } from '@/utils/format';
 import { taxBreakupFor, effectiveTaxRate } from '@/utils/tax';
 import { unitOf, unitPriceFor } from '@/utils/units';
+import { openDocumentPdf } from '@/components/company/print-control';
 
 /**
  * Shared Phase 5 invoice / credit-note helpers: status vocabularies, action
@@ -254,20 +255,6 @@ export function CreditNoteActionDialog({ action, note, open, onClose, onDone }) 
 // Downloads (bearer token is memory-only, so blobs go through Axios)
 // ---------------------------------------------------------------------------
 
-const openBlobInTab = async (path, mime, label) => {
-  const win = window.open('', '_blank');
-  try {
-    const { data } = await api.get(path, { responseType: 'blob' });
-    const url = URL.createObjectURL(new Blob([data], { type: mime }));
-    if (win) win.location.href = url;
-    else window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch (err) {
-    if (win) win.close();
-    toast.error(apiError(err).message || `Could not open the ${label}`);
-  }
-};
-
 const downloadBlob = async (path, params, filename, mime, successMessage) => {
   try {
     const { data } = await api.get(path, { params, responseType: 'blob' });
@@ -285,11 +272,9 @@ const downloadBlob = async (path, params, filename, mime, successMessage) => {
   }
 };
 
-export const openInvoicePdf = (invoice) =>
-  openBlobInTab(`/v1/invoices/${invoice.id}/pdf`, 'application/pdf', 'invoice');
+export const openInvoicePdf = (invoice) => openDocumentPdf(`/v1/invoices/${invoice.id}/pdf`);
 
-export const openCreditNotePdf = (note) =>
-  openBlobInTab(`/v1/credit-notes/${note.id}/pdf`, 'application/pdf', 'credit note');
+export const openCreditNotePdf = (note) => openDocumentPdf(`/v1/credit-notes/${note.id}/pdf`);
 
 export const downloadInvoicesXlsx = (params = {}) =>
   downloadBlob(

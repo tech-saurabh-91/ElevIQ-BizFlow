@@ -26,10 +26,10 @@ const getTransport = async () => {
 };
 
 /**
- * @param {{ to: string, subject: string, text?: string, html?: string, from?: string }} message
+ * @param {{ to: string, subject: string, text?: string, html?: string, from?: string, replyTo?: string, attachments?: object[] }} message
  * @returns {Promise<{ sent: boolean, reason?: string }>}
  */
-export const sendMail = async ({ to, subject, text, html, from }) => {
+export const sendMail = async ({ to, subject, text, html, from, replyTo, attachments }) => {
   if (!to) return { sent: false, reason: 'no-recipient' };
   if (!subject) return { sent: false, reason: 'no-subject' };
 
@@ -43,7 +43,7 @@ export const sendMail = async ({ to, subject, text, html, from }) => {
 
   try {
     const tx = await getTransport();
-    await tx.sendMail({ from: from || env.mail.from, to, subject, text, html });
+    await tx.sendMail({ from: from || env.mail.from, to, subject, text, html, replyTo, attachments });
     logger.info(`[mailer] sent "${subject}" to ${to}`);
     return { sent: true };
   } catch (err) {

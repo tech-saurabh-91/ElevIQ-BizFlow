@@ -253,3 +253,182 @@ describe('Price review', () => {
     await api.patch(`/api/v1/products/${state.productId}`, { sellingPrice: 16 });
   });
 });
+
+describe('Nothing goes in or out at a zero price', () => {
+  let bare; // a product with no selling or purchase price
+  beforeAll(async () => {
+    const res = await api.post('/api/v1/products', { name: 'Unpriced Item', category: 'Snacks', unit: 'PCS', gstRate: 0, mrp: 50 });
+    expect(res.status).toBe(201);
+    bare = res.body.data.id;
+  });
+
+  test('opening stock on a new product needs a purchase price', async () => {
+    const res = await api.post('/api/v1/products', { name: 'Opening No Cost', category: 'Snacks', unit: 'PCS', gstRate: 0, sellingPrice: 10, openingStock: 5, openingWarehouse: state.warehouseId });
+    expect(res.status).toBe(422);
+    expect(JSON.stringify(res.body.errors)).toContain('purchasePrice');
+    const ok = await api.post('/api/v1/products', { name: 'Opening With Cost', category: 'Snacks', unit: 'PCS', gstRate: 0, sellingPrice: 10, purchasePrice: 8, openingStock: 5, openingWarehouse: state.warehouseId });
+    expect(ok.status).toBe(201);
+  });
+
+  test('an opening stock adjustment needs a unit cost', async () => {
+    const res = await api.post('/api/v1/inventory/adjustments', {
+      warehouse: state.warehouseId,
+      reason: 'OPENING',
+      items: [{ product: bare, qty: 10 }],
+    });
+    expect(res.status).toBe(422);
+    expect(res.body.errors[0].field).toBe('items.0.unitCost');
+    const ok = await api.post('/api/v1/inventory/adjustments', {
+      warehouse: state.warehouseId,
+      reason: 'OPENING',
+      items: [{ product: bare, qty: 10, unitCost: 30 }],
+    });
+    expect(ok.status).toBe(201);
+  });
+
+  test('a purchase order line needs a price', async () => {
+    const res = await api.post('/api/v1/purchase-orders', { supplierId: state.supplierId, warehouse: state.warehouseId, items: [{ product: bare, qty: 5 }] });
+    expect(res.status).toBe(422);
+    expect(res.body.errors[0].field).toBe('items.0.unitPrice');
+  });
+
+  test('a goods receipt line needs a cost', async () => {
+    const res = await api.post('/api/v1/goods-receipts', { supplierId: state.supplierId, warehouse: state.warehouseId, items: [{ product: bare, receivedQty: 5, unitCost: 0 }] });
+    expect(res.status).toBe(422);
+    expect(res.body.errors[0].field).toBe('items.0.unitCost');
+  });
+
+  test('a sale line with no price is refused', async () => {
+    const res = await api.post('/api/v1/invoices', { customerId: state.customerId, warehouse: state.warehouseId, items: [{ product: bare, qty: 1 }] });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/has no price/);
+  });
+});
+
+describe('Email a document with its PDF', () => {
+  let invoiceId;
+  let env;
+  beforeAll(async () => {
+    env = (await import('../src/config/env.js')).default;
+    const p = await api.post('/api/v1/products', { name: 'Mail Item', category: 'Snacks', unit: 'PCS', gstRate: 0, mrp: 20, sellingPrice: 15, purchasePrice: 10, openingStock: 50, openingWarehouse: state.warehouseId });
+    expect(p.status).toBe(201);
+    const inv = await api.post('/api/v1/invoices', { customerId: state.customerId, warehouse: state.warehouseId, items: [{ product: p.body.data.id, qty: 2 }] });
+    expect(inv.status).toBe(201);
+    invoiceId = inv.body.data.id;
+  });
+
+  test('without SMTP it says email is not set up', async () => {
+    const saved = env.mail.url;
+    env.mail.url = '';
+    const res = await api.post(`/api/v1/invoices/${invoiceId}/email`, { to: 'buyer@shop.test' });
+    env.mail.url = saved;
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('EMAIL_NOT_SET_UP');
+  });
+
+  test('a bad or missing address is refused', async () => {
+    expect((await api.post(`/api/v1/invoices/${invoiceId}/email`, { to: 'not-an-email' })).status).toBe(422);
+    expect((await api.post(`/api/v1/invoices/${invoiceId}/email`, { to: '' })).status).toBe(422);
+    const six = Array.from({ length: 6 }, (_, i) => `a${i}@shop.test`).join(',');
+    expect((await api.post(`/api/v1/invoices/${invoiceId}/email`, { to: six })).status).toBe(422);
+  });
+
+  test('sends the invoice PDF as an attachment', async () => {
+    const { renderPdf } = await import('../src/services/documentMail.js');
+    expect(typeof renderPdf).toBe('function');
+    const saved = env.mail.url;
+    const sent = [];
+    // A capturing transport in place of SMTP.
+    env.mail.url = { name: 'capture', version: '1', send: (mail, cb) => (sent.push(mail.data), cb(null, { messageId: 'x' })) };
+    const res = await api.post(`/api/v1/invoices/${invoiceId}/email`, { to: 'Buyer@Shop.test, buyer@shop.test', message: 'Thank you' });
+    env.mail.url = saved;
+    expect(res.status).toBe(200);
+    expect(res.body.data.to).toEqual(['buyer@shop.test']);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].subject).toMatch(/^Invoice /);
+    expect(sent[0].text).toContain('Thank you');
+    const [file] = sent[0].attachments;
+    expect(file.filename).toMatch(/\.pdf$/);
+    expect(file.content.subarray(0, 4).toString()).toBe('%PDF');
+  });
+});
+
+describe('Original and duplicate prints', () => {
+  let invoiceId;
+  let draftId;
+  const pdf = (url) =>
+    request
+      .get(url)
+      .set(as(state.admin))
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+  const status = async (id) => (await api.get(`/api/v1/print-control/status/INVOICE/${id}`)).body.data;
+
+  beforeAll(async () => {
+    const p = await api.post('/api/v1/products', { name: 'Print Item', category: 'Snacks', unit: 'PCS', gstRate: 0, mrp: 20, sellingPrice: 15, purchasePrice: 10, openingStock: 50, openingWarehouse: state.warehouseId });
+    const inv = await api.post('/api/v1/invoices', { customerId: state.customerId, warehouse: state.warehouseId, issue: true, items: [{ product: p.body.data.id, qty: 2 }] });
+    expect(inv.status).toBe(201);
+    expect(inv.body.data.status).not.toBe('DRAFT');
+    invoiceId = inv.body.data.id;
+    const draft = await api.post('/api/v1/invoices', { customerId: state.customerId, warehouse: state.warehouseId, items: [{ product: p.body.data.id, qty: 1 }] });
+    expect(draft.body.data.status).toBe('DRAFT');
+    draftId = draft.body.data.id;
+  });
+
+  test('the first print is the original, the next ones duplicates', async () => {
+    expect((await status(invoiceId)).nextIsOriginal).toBe(true);
+    const first = await pdf(`/api/v1/invoices/${invoiceId}/pdf`);
+    expect(first.status).toBe(200);
+    expect(first.body.subarray(0, 4).toString()).toBe('%PDF');
+    let s = await status(invoiceId);
+    expect(s).toMatchObject({ printCount: 1, originals: 1, nextIsOriginal: false });
+    await pdf(`/api/v1/invoices/${invoiceId}/pdf`);
+    s = await status(invoiceId);
+    expect(s).toMatchObject({ printCount: 2, duplicates: 1, nextIsOriginal: false });
+  });
+
+  test('an admin can allow one more original, used by the next print', async () => {
+    const res = await api.post(`/api/v1/print-control/INVOICE/${invoiceId}/grant`, { note: 'customer lost it' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.nextIsOriginal).toBe(true);
+    await pdf(`/api/v1/invoices/${invoiceId}/pdf`);
+    expect((await status(invoiceId)).nextIsOriginal).toBe(false);
+  });
+
+  test('an admin reprint of the original does not change what comes next', async () => {
+    const res = await pdf(`/api/v1/invoices/${invoiceId}/pdf?original=1`);
+    expect(res.status).toBe(200);
+    const s = await status(invoiceId);
+    expect(s.nextIsOriginal).toBe(false);
+    const log = await api.get('/api/v1/print-control?docType=INVOICE');
+    expect(log.status).toBe(200);
+    expect(log.body.data.some((r) => r.adminOriginal)).toBe(true);
+    expect(log.body.data.some((r) => r.action === 'GRANT' && r.note === 'customer lost it')).toBe(true);
+  });
+
+  test('drafts are not counted', async () => {
+    await pdf(`/api/v1/invoices/${draftId}/pdf`);
+    expect((await status(draftId)).printCount).toBe(0);
+  });
+
+  test('a purchase order prints as a PDF and is counted', async () => {
+    const p = await api.post('/api/v1/products', { name: 'PO Print Item', category: 'Snacks', unit: 'PCS', gstRate: 0, purchasePrice: 10 });
+    const po = await api.post('/api/v1/purchase-orders', { supplierId: state.supplierId, warehouse: state.warehouseId, send: true, items: [{ product: p.body.data.id, qty: 5, unitPrice: 10 }] });
+    expect(po.status).toBe(201);
+    const res = await pdf(`/api/v1/purchase-orders/${po.body.data.id}/pdf`);
+    expect(res.status).toBe(200);
+    expect(res.body.subarray(0, 4).toString()).toBe('%PDF');
+    const s = (await api.get(`/api/v1/print-control/status/PURCHASE_ORDER/${po.body.data.id}`)).body.data;
+    expect(s.printCount).toBe(1);
+  });
+
+  test('amounts are written in words the local way', async () => {
+    const { amountInWords } = await import('../src/utils/amountWords.js');
+    expect(amountInWords(125050.5, 'INR')).toBe('Rupees One Lakh Twenty Five Thousand Fifty and Fifty Paise Only');
+    expect(amountInWords(300000, 'KES')).toBe('Kenya Shillings Three Hundred Thousand Only');
+  });
+});

@@ -57,7 +57,7 @@ const loadRunnable = async (req) => {
 
 /** Cost columns are dropped for users who may not see costs. */
 /** Cost / stock-value figures stay hidden without "products.cost.view". */
-const STOCK_VALUE_KEYS = ['cost', 'value', 'valueIn', 'valueOut', 'openingValue', 'inValue', 'outValue', 'closingValue'];
+const STOCK_VALUE_KEYS = ['cost', 'value', 'valueIn', 'valueOut', 'openingValue', 'inValue', 'outValue', 'closingValue', 'rate', 'lineValue', 'runningValue', 'wtAvgCost'];
 const isCostKey = (key) => COST_FIELDS.includes(key) || STOCK_VALUE_KEYS.includes(key);
 const visibleColumns = (columns, ctx) => (ctx.can('products.cost.view') ? columns : columns.filter((c) => !isCostKey(c.key)));
 

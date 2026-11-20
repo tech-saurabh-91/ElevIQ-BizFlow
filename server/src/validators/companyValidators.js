@@ -78,6 +78,19 @@ const PASSWORD_RULES = z
 // ---------------------------------------------------------------------------
 export const idParamsSchema = z.object({ id: objectIdSchema });
 
+/** POST /:id/email on a sales document: 1-5 addresses and an optional note. */
+export const documentEmailSchema = z.object({
+  to: z.preprocess(
+    (v) => (typeof v === 'string' ? v.split(/[,;\s]+/) : v),
+    z
+      .array(z.string().trim().toLowerCase().email('Enter a valid email address'))
+      .transform((list) => [...new Set(list.filter(Boolean))])
+      .refine((list) => list.length >= 1, 'Enter at least one email address')
+      .refine((list) => list.length <= 5, 'At most 5 email addresses')
+  ),
+  message: softString(1000),
+});
+
 // ---------------------------------------------------------------------------
 // Customers
 // ---------------------------------------------------------------------------

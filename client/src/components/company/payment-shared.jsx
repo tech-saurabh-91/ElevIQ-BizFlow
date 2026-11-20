@@ -7,6 +7,7 @@ import { Field, Textarea } from '@/components/ui/input';
 import { ErrorAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { titleCase } from '@/utils/format';
+import { openDocumentPdf } from '@/components/company/print-control';
 
 /**
  * Shared Phase 6 payment helpers: status vocabularies, action availability,
@@ -176,20 +177,6 @@ export function PaymentActionDialog({ action, payment, open, onClose, onDone }) 
 // Downloads (bearer token is memory-only, so blobs go through Axios)
 // ---------------------------------------------------------------------------
 
-const openBlobInTab = async (path, mime, label) => {
-  const win = window.open('', '_blank');
-  try {
-    const { data } = await api.get(path, { responseType: 'blob' });
-    const url = URL.createObjectURL(new Blob([data], { type: mime }));
-    if (win) win.location.href = url;
-    else window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch (err) {
-    if (win) win.close();
-    toast.error(apiError(err).message || `Could not open the ${label}`);
-  }
-};
-
 const downloadBlob = async (path, params, filename, mime, successMessage) => {
   try {
     const { data } = await api.get(path, { params, responseType: 'blob' });
@@ -207,8 +194,7 @@ const downloadBlob = async (path, params, filename, mime, successMessage) => {
   }
 };
 
-export const openPaymentPdf = (payment) =>
-  openBlobInTab(`/v1/payments/${payment.id}/pdf`, 'application/pdf', 'receipt');
+export const openPaymentPdf = (payment) => openDocumentPdf(`/v1/payments/${payment.id}/pdf`);
 
 export const downloadPaymentsXlsx = (params = {}) =>
   downloadBlob(

@@ -255,8 +255,15 @@ export default function ReportViewer() {
               )}
             >
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{x.label}</p>
-              <p className={cn('mt-1 text-lg font-bold tabular-nums', TONE_TEXT[x.tone])}>{formatNumber(x.qty)}</p>
-              {x.value !== undefined && <p className="text-xs tabular-nums text-muted-foreground">{money(x.value)}</p>}
+              {x.qty === null || x.qty === undefined ? (
+                // Money-only tile (e.g. Profit & Loss).
+                x.value !== undefined && <p className={cn('mt-1 text-lg font-bold tabular-nums', TONE_TEXT[x.tone])}>{money(x.value)}</p>
+              ) : (
+                <>
+                  <p className={cn('mt-1 text-lg font-bold tabular-nums', TONE_TEXT[x.tone])}>{formatNumber(x.qty)}</p>
+                  {x.value !== undefined && <p className="text-xs tabular-nums text-muted-foreground">{money(x.value)}</p>}
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -294,7 +301,14 @@ export default function ReportViewer() {
             </TableHeader>
             <TableBody>
               {rows.map((r, i) => (
-                <TableRow key={i}>
+                <TableRow
+                  key={i}
+                  className={cn(
+                    r._style === 'opening' && 'bg-muted/50',
+                    r._style === 'head' && 'bg-brand-500/10 font-semibold',
+                    r._style === 'total' && 'font-semibold [&>td]:border-t'
+                  )}
+                >
                   {columns.map((c, j) => (
                     <TableCell
                       key={c.key}
@@ -307,7 +321,7 @@ export default function ReportViewer() {
                         c.tone && Number(r[c.key]) && TONE_TEXT[c.tone]
                       )}
                     >
-                      {cell(c, r[c.key])}
+                      {r._style === 'head' && (r[c.key] === null || r[c.key] === '') ? '' : cell(c, r[c.key])}
                     </TableCell>
                   ))}
                 </TableRow>

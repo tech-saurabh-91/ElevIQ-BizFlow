@@ -2,7 +2,9 @@ import { Router } from 'express';
 import * as ctrl from '../../controllers/company/creditNoteController.js';
 import { validate } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
-import { idParamsSchema } from '../../validators/companyValidators.js';
+import { idParamsSchema, documentEmailSchema } from '../../validators/companyValidators.js';
+import { emailDocument } from '../../services/documentMail.js';
+import CreditNote from '../../models/CreditNote.js';
 import {
   creditNoteCreateSchema,
   creditNoteUpdateSchema,
@@ -57,5 +59,13 @@ router
   .patch(authorize('creditnotes.update'), validate({ body: creditNoteUpdateSchema }), ctrl.update)
   .put(authorize('creditnotes.update'), validate({ body: creditNoteUpdateSchema }), ctrl.update)
   .delete(authorize('creditnotes.delete'), ctrl.remove);
+
+// Email the document with its PDF (same access as viewing it).
+router.post(
+  '/:id/email',
+  validate({ params: idParamsSchema, body: documentEmailSchema }),
+  authorize('creditnotes.view'),
+  emailDocument({ pdf: ctrl.pdf, model: CreditNote, noField: 'creditNoteNo', label: 'Credit note', entityType: 'CreditNote' })
+);
 
 export default router;

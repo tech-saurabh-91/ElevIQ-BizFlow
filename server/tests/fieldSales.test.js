@@ -53,7 +53,7 @@ beforeAll(async () => {
   state.van = (await admin.post('/api/v1/warehouses', { name: 'Van', code: 'VAN1', type: 'VAN', parent: state.main, vehicleNumber: 'MH12AB0001' })).body.data.id;
   await admin.post(`/api/v1/warehouses/${state.van}/assignments`, { executive: state.samId, dayCloseMandatory: false });
   const mk = async (name) =>
-    (await admin.post('/api/v1/products', { name, category: 'Snacks', unit: 'PCS', sellingPrice: 10, openingStock: 100, openingWarehouse: state.main })).body.data.id;
+    (await admin.post('/api/v1/products', { name, category: 'Snacks', unit: 'PCS', sellingPrice: 10, purchasePrice: 7, openingStock: 100, openingWarehouse: state.main })).body.data.id;
   state.chips = await mk('Chips');
   state.soda = await mk('Soda');
   state.route = (await admin.post('/api/v1/routes', { name: 'Camp Beat', code: 'CAMP', assignedTo: state.samId, beatDays: [weekday()] })).body.data.id;

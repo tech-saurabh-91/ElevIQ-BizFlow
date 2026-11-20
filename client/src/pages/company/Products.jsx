@@ -114,6 +114,9 @@ const buildSchema = ({ isIndia, units, creating, hasWarehouses }) =>
         if (n(v.openingStock) > 0 && hasWarehouses && !v.openingWarehouse) {
           issue(['openingWarehouse'], 'Choose the warehouse that holds it');
         }
+        if (n(v.openingStock) > 0 && !(n(v.purchasePrice) > 0)) {
+          issue(['purchasePrice'], 'Enter the purchase price: opening stock is valued at it');
+        }
       }
     });
 

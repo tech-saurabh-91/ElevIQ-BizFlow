@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
-import PDFDocument from 'pdfkit';
+import { renderDocumentPdf, companyBlock, addressText, dateText, lineColumns, lineRow, priceTotals, itemSummary } from '../../services/docPdf.js';
+import { notePrint } from '../../services/printControl.js';
+import { amountInWords } from '../../utils/amountWords.js';
 import { pdfLocale, taxRows, sellerSnapshot, sellerFor } from '../../utils/pdfLocale.js';
 import dayjs from 'dayjs';
 
@@ -807,154 +809,63 @@ export const exportXlsx = asyncHandler(async (req, res) => {
   res.end();
 });
 
-const money2 = (n) => Number(n || 0).toFixed(2);
-
 export const pdf = asyncHandler(async (req, res) => {
   const note = await loadCreditNote(req, req.params.id);
   const settings = await settingsOf(req);
   const company = sellerFor(note, req.company || {});
   const loc = await pdfLocale(settings, company);
   const customer = note.customerId || {};
-
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
-  const filename = `credit-note-${(note.creditNoteNo || note._id)
-    .toString()
-    .replace(/[^a-z0-9-]/gi, '')}.pdf`;
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-  doc.pipe(res);
-
-  const left = 40;
-  const right = 555;
-
-  doc.font('Helvetica-Bold').fontSize(18).text(company.businessName || 'ElevIQ SFA', left, 40);
-  doc.font('Helvetica').fontSize(8).fillColor('#555');
-  const companyLine = [
-    company.code ? `Code: ${company.code}` : '',
-    company.gstin && loc.showTaxId ? `${loc.taxIdLabel}: ${company.gstin}` : '',
-    company.phone || '',
-    company.email || '',
-  ]
-    .filter(Boolean)
-    .join('  |  ');
-  if (companyLine) doc.text(companyLine, left, 62);
-  doc.fillColor('#000');
-
-  doc.font('Helvetica-Bold').fontSize(14).text('CREDIT NOTE', right - 180, 40, { width: 180, align: 'right' });
-  doc.font('Helvetica').fontSize(9);
-  doc.text(`Credit Note No: ${note.creditNoteNo || '—'}`, right - 220, 62, { width: 220, align: 'right' });
-  doc.text(
-    `Date: ${note.creditNoteDate ? dayjs(note.creditNoteDate).format('DD MMM YYYY') : '—'}`,
-    right - 220,
-    75,
-    { width: 220, align: 'right' }
-  );
-  doc.text(`Against invoice: ${note.invoiceNo || '—'}`, right - 220, 88, { width: 220, align: 'right' });
-
-  doc.moveTo(left, 114).lineTo(right, 114).strokeColor('#cbd5e1').stroke();
-
-  doc.font('Helvetica-Bold').fontSize(9).text('CUSTOMER', left, 126);
-  doc.font('Helvetica').fontSize(9);
-  doc.text(note.customerName || customer.name || '—', left, 140, { width: 240 });
-  const addr = note.billingAddress || {};
-  const addrLines = [addr.line1, addr.line2, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ');
-  if (addrLines) doc.text(addrLines, left, 154, { width: 240 });
-  if (note.customerPhone || customer.phone) {
-    doc.text(`Phone: ${note.customerPhone || customer.phone}`, left, 168, { width: 240 });
-  }
-  if (note.customerGstin || customer.gstin) {
-    doc.text(`${loc.taxIdLabel}: ${note.customerGstin || customer.gstin}`, left, 182, { width: 240 });
-  }
-
-  doc.font('Helvetica-Bold').fontSize(9).text('REASON', 300, 126);
-  doc.font('Helvetica').fontSize(9);
-  doc.text(String(note.reason || '—').replace(/_/g, ' '), 300, 140, { width: 255 });
-  if (note.reasonNote) doc.text(note.reasonNote, 300, 154, { width: 255 });
-  doc.text(`Status: ${note.status}`, 300, 182, { width: 255 });
-
-  let y = 214;
-  const cols = [
-    { x: left, w: 26, label: '#' },
-    { x: left + 26, w: 200, label: 'Item' },
-    { x: left + 226, w: 55, label: loc.codeLabel },
-    { x: left + 281, w: 45, label: 'Qty', align: 'right' },
-    { x: left + 326, w: 62, label: 'Rate', align: 'right' },
-    { x: left + 388, w: 45, label: 'Disc', align: 'right' },
-    { x: left + 433, w: 42, label: `${loc.taxLabel}%`, align: 'right' },
-    { x: right - 80, w: 80, label: 'Amount', align: 'right' },
-  ];
-
-  const headerRow = () => {
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#111');
-    cols.forEach((c) => doc.text(c.label, c.x, y, { width: c.w, align: c.align || 'left' }));
-    y += 13;
-    doc.moveTo(left, y - 3).lineTo(right, y - 3).strokeColor('#cbd5e1').stroke();
-    doc.font('Helvetica').fontSize(8);
-  };
-  headerRow();
-
-  (note.items || []).forEach((item, index) => {
-    if (y > 640) {
-      doc.addPage();
-      y = 50;
-      headerRow();
-    }
-    doc.text(String(index + 1), cols[0].x, y, { width: cols[0].w });
-    doc.text(item.name || '—', cols[1].x, y, { width: cols[1].w });
-    doc.text(item.hsnCode || '—', cols[2].x, y, { width: cols[2].w });
-    doc.text(String(item.qty), cols[3].x, y, { width: cols[3].w, align: 'right' });
-    doc.text(money2(item.unitPrice), cols[4].x, y, { width: cols[4].w, align: 'right' });
-    doc.text(`${Number(item.discountPercent || 0)}%`, cols[5].x, y, { width: cols[5].w, align: 'right' });
-    doc.text(`${Number(item.taxRate || 0)}%`, cols[6].x, y, { width: cols[6].w, align: 'right' });
-    doc.text(money2(item.lineTotal), cols[7].x, y, { width: cols[7].w, align: 'right' });
-    y += 16;
+  const print = await notePrint(req, {
+    docType: 'CREDIT_NOTE',
+    docId: note._id,
+    docNo: note.creditNoteNo,
+    partyName: note.customerName,
+    draft: note.status === 'DRAFT',
   });
 
-  y += 8;
-  doc.moveTo(left, y).lineTo(right, y).strokeColor('#cbd5e1').stroke();
-  y += 10;
-
-  const totals = [
-    ['Subtotal', note.subtotal],
-    ['Discount', -Number(note.discountTotal || 0)],
-    ['Taxable', note.taxableTotal],
-    ...taxRows(note.taxTotal, note.taxBreakup, loc),
-    ['Round off', note.roundOff],
-    ['Credit total', note.total],
-  ];
-  doc.fontSize(9);
-  totals.forEach(([label, value]) => {
-    doc.text(label, 380, y, { width: 90, align: 'right' });
-    doc.text(money2(value), 475, y, { width: 80, align: 'right' });
-    y += 14;
+  await renderDocumentPdf(res, {
+    filename: `credit-note-${String(note.creditNoteNo || note._id).replace(/[^a-z0-9-]/gi, '')}.pdf`,
+    title: 'Credit Note',
+    company: companyBlock({ ...(req.company || {}), ...company }, loc),
+    copyLabel: print.copyLabel,
+    watermark: print.watermark,
+    printedBy: print.printedBy,
+    timezone: req.company?.timezone || settings?.timezone,
+    party: [
+      ['Customer', note.customerName || customer.name || ''],
+      ['Address', addressText(note.billingAddress)],
+      ['Phone', note.customerPhone || customer.phone],
+      [loc.taxIdLabel, note.customerGstin || customer.gstin],
+    ],
+    meta: [
+      ['Credit Note No.', note.creditNoteNo || 'DRAFT'],
+      ['Date', dateText(note.creditNoteDate)],
+      ['Against Invoice', note.invoiceNo],
+      ['Reason', String(note.reason || '').replace(/_/g, ' ').toLowerCase()],
+    ],
+    columns: lineColumns(loc),
+    rows: (note.items || []).map((item, i) => lineRow(item, i, loc)),
+    summary: itemSummary(note.items),
+    totals: [
+      ...priceTotals(note, loc, taxRows),
+      [`Credit Total (${loc.money})`, note.total, { strong: true }],
+      ['Applied to invoice', note.appliedAmount],
+      ['Unapplied credit', note.unappliedAmount],
+    ],
+    words: amountInWords(note.total, loc.currency),
+    sections: [
+      ['Reason details', note.reasonNote],
+      ['Notes', note.notes],
+    ],
+    signatures: ["Customer's signature", 'Authorised signatory'],
   });
-  doc.font('Helvetica-Bold').fontSize(11);
-  doc.text('Applied to invoice', 350, y + 2, { width: 120, align: 'right' });
-  doc.text(`${loc.money} ${money2(note.appliedAmount)}`, 475, y + 2, {
-    width: 80,
-    align: 'right',
-  });
-  y += 26;
-  doc.font('Helvetica').fontSize(9);
-  doc.text('Unapplied credit', 350, y, { width: 120, align: 'right' });
-  doc.text(money2(note.unappliedAmount), 475, y, { width: 80, align: 'right' });
-
-  const footerY = Math.max(y + 40, 700);
-  doc.font('Helvetica').fontSize(8).fillColor('#555');
-  if (note.notes) doc.text(`Notes: ${note.notes}`, left, footerY, { width: 340 });
-  doc.text(`Generated by ElevIQ SFA on ${dayjs().format('DD MMM YYYY HH:mm')}`, left, 790, {
-    width: 515,
-    align: 'center',
-  });
-
-  doc.end();
 
   audit(req, {
     action: AUDIT_ACTIONS.EXPORT,
     entityType: 'CreditNote',
     entityId: note._id,
     entityLabel: labelOf(note),
-    description: `Printed credit note ${labelOf(note)}`,
+    description: `Printed credit note ${labelOf(note)}${print.copyLabel ? ` (${print.copyLabel.toLowerCase()})` : ''}`,
   });
 });
 

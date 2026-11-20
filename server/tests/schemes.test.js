@@ -53,7 +53,7 @@ beforeAll(async () => {
 
   state.main = (await admin.post('/api/v1/warehouses', { name: 'Main', code: 'MAIN', type: 'MAIN', isDefault: true })).body.data.id;
   const product = async (name, category, brand, price) =>
-    (await admin.post('/api/v1/products', { name, category, brand, unit: 'PCS', sellingPrice: price, openingStock: 500, openingWarehouse: state.main })).body.data.id;
+    (await admin.post('/api/v1/products', { name, category, brand, unit: 'PCS', sellingPrice: price, purchasePrice: price * 0.7, openingStock: 500, openingWarehouse: state.main })).body.data.id;
   state.soap = await product('Soap', 'Home', 'Clean', 10);
   state.shampoo = await product('Shampoo', 'Home', 'Clean', 50);
   state.oil = await product('Oil', 'Food', 'Gold', 100);

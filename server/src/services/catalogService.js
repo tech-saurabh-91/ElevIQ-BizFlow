@@ -301,6 +301,11 @@ export const checkProduct = async (
     const opening = Number(data.openingStock || 0);
     if (opening < 0) add('openingStock', 'Opening stock cannot be negative');
     else if (whole && !isWhole(opening)) add('openingStock', `${data.unit} is counted in whole numbers`);
+    // Opening stock is valued at the purchase price: without one it would go
+    // in at zero value and spoil the average cost and the profit figures.
+    if (opening > 0 && !(Number(data.purchasePrice || 0) > 0)) {
+      add('purchasePrice', 'Enter the purchase price: opening stock is valued at it');
+    }
   }
 
   return { data, errors };

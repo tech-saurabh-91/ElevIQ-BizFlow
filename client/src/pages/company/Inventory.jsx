@@ -558,7 +558,10 @@ function AdjustmentsTab() {
   });
 
   const canCreate = can('inventory.adjustments.manage');
-  const linesValid = form.lines.length > 0 && form.lines.every((l) => l.product && l.qty !== '' && Number(l.qty) !== 0);
+  // Opening stock goes in at its cost, so every opening line needs one.
+  const missingCost = form.reason === 'OPENING' && form.lines.some((l) => l.product && Number(l.qty) > 0 && !(Number(l.unitCost) > 0));
+  const linesValid =
+    form.lines.length > 0 && form.lines.every((l) => l.product && l.qty !== '' && Number(l.qty) !== 0) && !missingCost;
 
   const submit = (post) => {
     createMutation.mutate({
@@ -751,6 +754,7 @@ function AdjustmentsTab() {
         dismissible={!createMutation.isPending}
         footer={
           <>
+            {missingCost && <span className="mr-auto text-xs text-destructive">Enter the unit cost of each opening stock line</span>}
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={createMutation.isPending}>
               Cancel
             </Button>
@@ -1368,9 +1372,11 @@ export function PurchaseOrdersTab() {
       lines: [],
     });
 
+  const missingPrice = form.lines.some((l) => l.product && !(Number(l.unitCost) > 0));
   const linesValid =
     form.lines.length > 0 &&
-    form.lines.every((l) => l.product && l.qty !== '' && Number(l.qty) > 0);
+    form.lines.every((l) => l.product && l.qty !== '' && Number(l.qty) > 0) &&
+    !missingPrice;
 
   const createMutation = useMutation({
     mutationFn: async (payload) => {
@@ -1628,6 +1634,7 @@ export function PurchaseOrdersTab() {
         dismissible={!createMutation.isPending}
         footer={
           <>
+            {missingPrice && <span className="mr-auto text-xs text-destructive">Enter the price of every line</span>}
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={createMutation.isPending}>
               Cancel
             </Button>
@@ -1965,11 +1972,16 @@ export function GoodsReceiptsTab() {
     if (fallback) setForm((f) => ({ ...f, warehouse: fallback }));
   }, [createOpen, masterForm, form.purchaseOrder, form.warehouse]);
 
+  // Accepted goods go into stock at their cost: each needs one above 0.
+  const missingCost = form.lines.some(
+    (l) => l.product && Number(l.receivedQty || 0) - Number(l.rejectedQty || 0) > 0 && !(Number(l.unitCost) > 0)
+  );
   const linesValid =
     form.lines.length > 0 &&
     form.lines.every(
       (l) => l.product && l.receivedQty !== '' && Number(l.receivedQty) >= 0
-    );
+    ) &&
+    !missingCost;
 
   const createMutation = useMutation({
     mutationFn: async (payload) => {
@@ -2193,6 +2205,7 @@ export function GoodsReceiptsTab() {
         dismissible={!createMutation.isPending}
         footer={
           <>
+            {missingCost && <span className="mr-auto text-xs text-destructive">Enter the unit cost of every accepted line</span>}
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={createMutation.isPending}>
               Cancel
             </Button>

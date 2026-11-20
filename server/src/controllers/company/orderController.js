@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
-import PDFDocument from 'pdfkit';
+import { renderDocumentPdf, companyBlock, addressText, dateText, lineColumns, lineRow, priceTotals, itemSummary } from '../../services/docPdf.js';
+import { amountInWords } from '../../utils/amountWords.js';
 import { pdfLocale, taxRows } from '../../utils/pdfLocale.js';
 import dayjs from 'dayjs';
 
@@ -978,165 +979,47 @@ export const exportXlsx = asyncHandler(async (req, res) => {
   res.end();
 });
 
-const money2 = (n) => Number(n || 0).toFixed(2);
-
 export const pdf = asyncHandler(async (req, res) => {
   const order = await loadOrder(req, req.params.id);
   const settings = await settingsOf(req);
   const company = req.company || {};
   const loc = await pdfLocale(settings, company);
-
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
-  const filename = `order-${(order.orderNo || order._id).toString().replace(/[^a-z0-9-]/gi, '')}.pdf`;
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-  doc.pipe(res);
-
-  const left = 40;
-  const right = 555;
-
-  // Header
-  doc.font('Helvetica-Bold').fontSize(18).text(company.businessName || 'ElevIQ SFA', left, 40);
-  doc.font('Helvetica').fontSize(8).fillColor('#555');
-  const companyLine = [
-    company.code ? `Code: ${company.code}` : '',
-    company.gstin && loc.showTaxId ? `${loc.taxIdLabel}: ${company.gstin}` : '',
-    company.phone || '',
-    company.email || '',
-  ]
-    .filter(Boolean)
-    .join('  |  ');
-  if (companyLine) doc.text(companyLine, left, 62);
-  doc.fillColor('#000');
-
-  doc.font('Helvetica-Bold').fontSize(14).text('SALES ORDER', right - 180, 40, {
-    width: 180,
-    align: 'right',
-  });
-  doc.font('Helvetica').fontSize(9);
-  doc.text(`Order No: ${order.orderNo || '—'}`, right - 200, 62, { width: 200, align: 'right' });
-  doc.text(
-    `Date: ${order.orderDate ? dayjs(order.orderDate).format('DD MMM YYYY') : '—'}`,
-    right - 200,
-    75,
-    { width: 200, align: 'right' }
-  );
-  doc.text(`Status: ${order.status}`, right - 200, 88, { width: 200, align: 'right' });
-
-  doc.moveTo(left, 104).lineTo(right, 104).strokeColor('#cbd5e1').stroke();
-
-  // Customer / delivery blocks
   const customer = order.customerId || {};
-  doc.font('Helvetica-Bold').fontSize(9).text('BILL TO', left, 116);
-  doc.font('Helvetica').fontSize(9);
-  doc.text(order.customerName || customer.name || '—', left, 130, { width: 240 });
-  const addr = order.billingAddress || {};
-  const addrLines = [addr.line1, addr.line2, addr.city, addr.state, addr.pincode]
-    .filter(Boolean)
-    .join(', ');
-  if (addrLines) doc.text(addrLines, left, 144, { width: 240 });
-  if (order.customerPhone || customer.phone) {
-    doc.text(`Phone: ${order.customerPhone || customer.phone}`, left, 158, { width: 240 });
-  }
-  if (order.customerGstin || customer.gstin) {
-    doc.text(`${loc.taxIdLabel}: ${order.customerGstin || customer.gstin}`, left, 172, { width: 240 });
-  }
+  const draft = order.status === 'DRAFT';
 
-  doc.font('Helvetica-Bold').fontSize(9).text('SHIP TO', 300, 116);
-  doc.font('Helvetica').fontSize(9);
-  const ship = order.shippingAddress || addr;
-  doc.text(order.customerName || customer.name || '—', 300, 130, { width: 255 });
-  const shipLines = [ship.line1, ship.line2, ship.city, ship.state, ship.pincode]
-    .filter(Boolean)
-    .join(', ');
-  if (shipLines) doc.text(shipLines, 300, 144, { width: 255 });
-  doc.text(`Payment: ${order.paymentMode || '—'} / ${order.paymentTerms || '—'}`, 300, 172, {
-    width: 255,
+  await renderDocumentPdf(res, {
+    filename: `order-${String(order.orderNo || order._id).replace(/[^a-z0-9-]/gi, '')}.pdf`,
+    title: 'Sales Order',
+    company: companyBlock(company, loc),
+    copyLabel: draft ? 'DRAFT' : null,
+    watermark: draft ? 'DRAFT' : null,
+    printedBy: req.user?.name || '',
+    timezone: req.company?.timezone || settings?.timezone,
+    party: [
+      ['Customer', order.customerName || customer.name || ''],
+      ['Bill to', addressText(order.billingAddress)],
+      ['Ship to', addressText(order.shippingAddress)],
+      ['Phone', order.customerPhone || customer.phone],
+      [loc.taxIdLabel, order.customerGstin || customer.gstin],
+    ],
+    meta: [
+      ['Order No.', order.orderNo || 'DRAFT'],
+      ['Order Date', dateText(order.orderDate)],
+      ['Delivery', dateText(order.expectedDeliveryDate)],
+      ['Payment Term', [order.paymentMode, String(order.paymentTerms || '').replace(/_/g, ' ')].filter(Boolean).join(' / ')],
+      ['Status', String(order.status || '').replace(/_/g, ' ').toLowerCase()],
+    ],
+    columns: lineColumns(loc),
+    rows: (order.items || []).map((item, i) => lineRow(item, i, loc)),
+    summary: itemSummary(order.items),
+    totals: [...priceTotals(order, loc, taxRows), [`Grand Total (${loc.money})`, order.total, { strong: true }]],
+    words: amountInWords(order.total, loc.currency),
+    sections: [
+      ['Terms and conditions', order.terms],
+      ['Notes', order.notes],
+    ],
+    signatures: ["Customer's signature", 'Authorised signatory'],
   });
-
-  // Items table
-  let y = 200;
-  const cols = [
-    { x: left, w: 26, label: '#' },
-    { x: left + 26, w: 200, label: 'Item' },
-    { x: left + 226, w: 55, label: loc.codeLabel },
-    { x: left + 281, w: 45, label: 'Qty', align: 'right' },
-    { x: left + 326, w: 62, label: 'Rate', align: 'right' },
-    { x: left + 388, w: 45, label: 'Disc', align: 'right' },
-    { x: left + 433, w: 42, label: `${loc.taxLabel}%`, align: 'right' },
-    { x: right - 80, w: 80, label: 'Amount', align: 'right' },
-  ];
-
-  const headerRow = () => {
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#111');
-    cols.forEach((c) => doc.text(c.label, c.x, y, { width: c.w, align: c.align || 'left' }));
-    y += 13;
-    doc.moveTo(left, y - 3).lineTo(right, y - 3).strokeColor('#cbd5e1').stroke();
-    doc.font('Helvetica').fontSize(8);
-  };
-  headerRow();
-
-  (order.items || []).forEach((item, index) => {
-    if (y > 680) {
-      doc.addPage();
-      y = 50;
-      headerRow();
-    }
-    doc.text(String(index + 1), cols[0].x, y, { width: cols[0].w });
-    doc.text(`${item.name || '—'}${item.isFree ? ' (FREE)' : ''}`, cols[1].x, y, { width: cols[1].w });
-    doc.text(item.hsnCode || '—', cols[2].x, y, { width: cols[2].w });
-    doc.text(String(item.qty), cols[3].x, y, { width: cols[3].w, align: 'right' });
-    doc.text(money2(item.unitPrice), cols[4].x, y, { width: cols[4].w, align: 'right' });
-    doc.text(`${Number(item.discountPercent || 0)}%`, cols[5].x, y, {
-      width: cols[5].w,
-      align: 'right',
-    });
-    doc.text(`${Number(item.taxRate || 0)}%`, cols[6].x, y, { width: cols[6].w, align: 'right' });
-    doc.text(money2(item.lineTotal), cols[7].x, y, { width: cols[7].w, align: 'right' });
-    y += 16;
-  });
-
-  y += 8;
-  doc.moveTo(left, y).lineTo(right, y).strokeColor('#cbd5e1').stroke();
-  y += 10;
-
-  const totals = [
-    ['Subtotal', order.subtotal],
-    ['Discount', -Number(order.discountTotal || 0)],
-    ['Taxable', order.taxableTotal],
-    ...taxRows(order.taxTotal, order.taxBreakup, loc),
-    ['Round off', order.roundOff],
-  ];
-  doc.fontSize(9);
-  totals.forEach(([label, value]) => {
-    doc.text(label, 380, y, { width: 90, align: 'right' });
-    doc.text(money2(value), 475, y, { width: 80, align: 'right' });
-    y += 14;
-  });
-  doc.font('Helvetica-Bold').fontSize(11);
-  doc.text('Total', 380, y + 2, { width: 90, align: 'right' });
-  doc.text(`${loc.money} ${money2(order.total)}`, 475, y + 2, {
-    width: 80,
-    align: 'right',
-  });
-
-  // Notes / footer
-  const footerY = Math.max(y + 36, 720);
-  doc.font('Helvetica').fontSize(8).fillColor('#555');
-  if (order.notes) {
-    doc.text(`Notes: ${order.notes}`, left, footerY, { width: 340 });
-  }
-  if (order.deliveryInstructions) {
-    doc.text(`Delivery: ${order.deliveryInstructions}`, left, footerY + 22, { width: 340 });
-  }
-  doc.text(
-    `Generated by ElevIQ SFA on ${dayjs().format('DD MMM YYYY HH:mm')}`,
-    left,
-    780,
-    { width: 515, align: 'center' }
-  );
-
-  doc.end();
 
   audit(req, {
     action: AUDIT_ACTIONS.EXPORT,

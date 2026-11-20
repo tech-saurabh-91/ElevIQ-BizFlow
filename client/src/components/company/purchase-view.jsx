@@ -5,6 +5,9 @@ import { Dialog } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/badge';
 import { formatDate, formatDateTime, formatMoney, formatNumber } from '@/utils/format';
+import { Printer } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { PrintStatus, openDocumentPdf } from '@/components/company/print-control';
 import { useTaxLabels } from '@/hooks/useLocations';
 
 /**
@@ -74,7 +77,13 @@ export function PurchaseDocDialog({ kind, id, onClose }) {
               <span className="text-muted-foreground">Received {Math.round((Number(doc.receiveProgress) || 0) * 100)}%</span>
             )}
             {doc.supplierGstin && <span className="text-muted-foreground">{taxIdLabel} {doc.supplierGstin}</span>}
+            {kind === 'po' && (
+              <Button size="sm" variant="outline" className="ml-auto" onClick={() => openDocumentPdf(`/v1/purchase-orders/${id}/pdf`)}>
+                <Printer className="h-4 w-4" /> Print / PDF
+              </Button>
+            )}
           </div>
+          {kind === 'po' && <PrintStatus docType="PURCHASE_ORDER" id={id} draft={doc.status === 'DRAFT'} />}
 
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl border bg-muted/30 p-3 sm:grid-cols-3">
             <Fact label="Supplier">{doc.supplierName}</Fact>

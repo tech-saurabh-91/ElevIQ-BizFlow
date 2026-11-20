@@ -217,6 +217,22 @@ export const GUIDES = [
     ],
   },
   {
+    id: 'printing',
+    title: 'Printing and sharing documents',
+    body: [
+      { h: 'Original and duplicate' },
+      { p: 'Invoices, credit notes, receipts and purchase orders are key documents. The first print is marked ORIGINAL. Every later print is marked DUPLICATE COPY with a COPY watermark, so only one original is ever in circulation.' },
+      { p: 'Under the document you can see how many times it was printed and whether the next print is the original or a duplicate. If you need the original again, ask your admin: an admin can print the original again or allow one more original from Print Control.' },
+      { p: 'Drafts print with a DRAFT watermark and do not count. Sales orders and other print-outs are not counted.' },
+      { h: 'Email and WhatsApp' },
+      { list: [
+        'Email sends the document as a PDF attachment to the customer (up to 5 addresses). An emailed PDF does not use up the original.',
+        'If email is not set up for your company, "Open in mail app" writes the same message in your own mail app.',
+        'WhatsApp opens a chat with the customer’s number and a short summary. To send the PDF itself, use Print / PDF and share the file.',
+      ] },
+    ],
+  },
+  {
     id: 'settings-locks',
     title: 'Why some settings are locked',
     roles: ADMIN,
@@ -250,36 +266,10 @@ export const FAQS = [
   { q: 'How do I add a new user?', a: 'Open Users & Teams, add the person with their email or phone and role. They get their first password and must change it when they first sign in.', roles: ADMIN, k: 'staff employee salesman add user invite' },
   { q: 'Why is a screen missing from my menu?', a: 'Your role does not include it. Ask your admin or manager if you need it.', k: 'menu missing access permission not showing' },
   { q: 'I forgot my password', a: 'On the sign-in page tap "Forgot password?" and follow the steps, or ask your admin to reset it.', k: 'password reset forgot login sign in' },
+  { q: 'Why does my print say DUPLICATE COPY?', a: 'The document was already printed once. Only the first print is the original; ask your admin if you need the original again.', k: 'duplicate copy original reprint watermark print' },
+  { q: 'How do I send an invoice to a customer?', a: 'Open the invoice and tap Email (sends the PDF) or WhatsApp (sends a short summary to the customer’s number).', k: 'email whatsapp share send invoice pdf' },
   { q: 'Can I use it on my phone?', a: 'Yes. Open it in the phone browser and use "Install" to add it to your home screen like an app.', k: 'mobile phone install app android' },
 ];
 
 /** Entries visible to a role (no role yet = show everything). */
 export const forRole = (items, role) => items.filter((i) => !i.roles || !role || i.roles.includes(role));
-
-const STOP = new Set('a an the i my me to do how what why when where can is are it of on in for and or with from at this that be does not you your we our get see'.split(' '));
-const words = (s) =>
-  String(s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]+/g, ' ')
-    .split(' ')
-    .filter((w) => w.length > 1 && !STOP.has(w));
-const stem = (w) => w.replace(/(ing|ed|es|s)$/, '');
-
-const guideText = (g) => [g.title, ...g.body.flatMap((b) => [b.p, b.h, ...(b.steps || []), ...(b.list || [])])].join(' ');
-
-/**
- * Answer a typed question from the FAQs and guides, best match first. Plain
- * word matching (no AI): question and keywords count most, guide text less.
- */
-export function search(question, role) {
-  const q = [...new Set(words(question).map(stem))];
-  if (!q.length) return [];
-  const score = (strong, weak) => {
-    const s = new Set(words(strong).map(stem));
-    const w = new Set(words(weak).map(stem));
-    return q.reduce((t, x) => t + (s.has(x) ? 3 : w.has(x) ? 1 : 0), 0);
-  };
-  const faqs = forRole(FAQS, role).map((f) => ({ kind: 'faq', item: f, score: score(`${f.q} ${f.k}`, f.a) }));
-  const guides = forRole(GUIDES, role).map((g) => ({ kind: 'guide', item: g, score: score(g.title, guideText(g)) * 0.6 }));
-  return [...faqs, ...guides].filter((r) => r.score >= 2).sort((a, b) => b.score - a.score).slice(0, 4);
-}

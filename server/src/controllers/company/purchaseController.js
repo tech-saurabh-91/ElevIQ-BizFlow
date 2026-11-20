@@ -29,6 +29,10 @@ import {
   assertPoTransition,
 } from '../../services/inventoryService.js';
 import { numberOutOfYear } from '../../utils/numberSeries.js';
+import { renderDocumentPdf, companyBlock, addressText, dateText, lineColumns, lineRow, priceTotals, itemSummary } from '../../services/docPdf.js';
+import { notePrint } from '../../services/printControl.js';
+import { amountInWords } from '../../utils/amountWords.js';
+import { pdfLocale, taxRows } from '../../utils/pdfLocale.js';
 
 /**
  * Phase 7 - Purchasing controller (Purchase Orders -> Goods Receipts).
@@ -90,6 +94,69 @@ export const listPos = asyncHandler(async (req, res) => {
   });
 
   return paginated(res, { data: result.data.map(toPlain), ...result.meta });
+});
+
+/** GET /purchase-orders/:id/pdf - the purchase order to send to the supplier. */
+export const poPdf = asyncHandler(async (req, res) => {
+  const po = await loadPo(req, req.params.id);
+  const settings = await settingsOf(req);
+  const company = req.company || {};
+  const loc = await pdfLocale(settings, company);
+  const supplier = po.supplierId || {};
+  const print = await notePrint(req, {
+    docType: 'PURCHASE_ORDER',
+    docId: po._id,
+    docNo: po.poNo,
+    partyName: po.supplierName || supplier.name,
+    draft: po.status === 'DRAFT',
+  });
+  const items = (po.items || []).map((line) => {
+    const i = typeof line.toObject === 'function' ? line.toObject() : line;
+    return { ...i, sku: i.sku || i.product?.sku || '', hsnCode: i.hsnCode || i.product?.hsnCode || '' };
+  });
+
+  await renderDocumentPdf(res, {
+    filename: `purchase-order-${String(po.poNo || po._id).replace(/[^a-z0-9-]/gi, '')}.pdf`,
+    title: 'Purchase Order',
+    company: companyBlock(company, loc),
+    copyLabel: print.copyLabel,
+    watermark: print.watermark,
+    printedBy: print.printedBy,
+    timezone: req.company?.timezone || settings?.timezone,
+    party: [
+      ['Supplier Name', po.supplierName || supplier.name || ''],
+      ['Address', addressText(supplier.address)],
+      ['Phone', supplier.phone],
+      ['Email', supplier.email],
+      [loc.taxIdLabel, supplier.gstin],
+    ],
+    meta: [
+      ['Order No.', po.poNo || 'DRAFT'],
+      ['Order Date', dateText(po.poDate)],
+      ['Delivery', dateText(po.expectedDate)],
+      ['Deliver to', po.warehouse?.name],
+      ['Payment Term', String(po.paymentTerms || '').replace(/_/g, ' ')],
+      ['Our Ref.', po.poReference],
+    ],
+    columns: lineColumns(loc),
+    rows: items.map((item, i) => lineRow(item, i, loc)),
+    summary: itemSummary(items),
+    totals: [...priceTotals(po, loc, taxRows), [`Grand Total (${loc.money})`, po.total, { strong: true }]],
+    words: amountInWords(po.total, loc.currency),
+    sections: [
+      ['Terms and conditions', po.terms],
+      ['Notes', po.notes],
+    ],
+    signatures: ['Prepared by', 'Authorised by'],
+  });
+
+  audit(req, {
+    action: AUDIT_ACTIONS.EXPORT,
+    entityType: 'PurchaseOrder',
+    entityId: po._id,
+    entityLabel: labelOf(po, 'poNo'),
+    description: `Printed purchase order ${labelOf(po, 'poNo')}${print.copyLabel ? ` (${print.copyLabel.toLowerCase()})` : ''}`,
+  });
 });
 
 export const getPo = asyncHandler(async (req, res) => {
@@ -834,6 +901,13 @@ const buildPoLines = async (raw = [], settings) => {
       input.taxRate === undefined || input.taxRate === null || input.taxRate === ''
         ? Number(product.gstRate || 0)
         : Number(input.taxRate);
+    if (!(unitPrice > 0)) {
+      throw new AppError(`${product.name}: enter the purchase price`, {
+        status: 422,
+        code: 'VALIDATION_ERROR',
+        errors: [{ field: `items.${index}.unitPrice`, message: 'Enter a price more than 0' }],
+      });
+    }
 
     return {
       product: product._id,
@@ -898,6 +972,15 @@ const buildGrnLines = async (raw = [], po) => {
     const accepted = Math.max(0, received - rejected);
 
     const poLine = poLineByProduct.get(String(input.product));
+    // Accepted goods go into stock at this cost: zero would value them at nothing.
+    const cost = Number(input.unitCost) > 0 ? Number(input.unitCost) : Number(poLine?.unitPrice || product.purchasePrice || 0);
+    if (accepted > 0 && !(cost > 0)) {
+      throw new AppError(`${product.name}: enter the unit cost`, {
+        status: 422,
+        code: 'VALIDATION_ERROR',
+        errors: [{ field: `items.${index}.unitCost`, message: 'Enter a cost more than 0' }],
+      });
+    }
     if (poLine) {
       const pending = Math.max(0, Number(poLine.qty || 0) - Number(poLine.receivedQty || 0));
       if (accepted > pending + 0.0001) {
@@ -925,7 +1008,7 @@ const buildGrnLines = async (raw = [], po) => {
       acceptedQty: accepted,
       rejectedQty: rejected,
       rejectReason: input.rejectReason || '',
-      unitCost: Number(input.unitCost ?? poLine?.unitPrice ?? product.purchasePrice ?? 0),
+      unitCost: cost,
       note: input.note || '',
     };
   });

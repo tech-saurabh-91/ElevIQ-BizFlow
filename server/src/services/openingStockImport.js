@@ -117,7 +117,7 @@ export const importOpeningStock = async (buffer, { warehouse, dryRun = true, use
     const cost = costText ? Number(costText) : Number(product.purchasePrice || 0);
     if (!Number.isFinite(qty) || qty <= 0) add('Opening qty', 'Enter a quantity more than 0');
     else if (!units.get(product.unit)?.allowDecimals && !Number.isInteger(qty)) add('Opening qty', `${product.unit} is counted in whole numbers`);
-    if (!Number.isFinite(cost) || cost < 0) add('Unit cost', 'Enter a cost of 0 or more');
+    if (!Number.isFinite(cost) || cost <= 0) add('Unit cost', 'Enter a cost more than 0 (or set the purchase price on the product)');
     const key = String(product._id);
     if (seen.has(key)) add('Product code', `Same product as row ${seen.get(key)}`);
     else seen.set(key, r);

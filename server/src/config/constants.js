@@ -535,6 +535,10 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
   'settings.view': [COMPANY_ROLES.COMPANY_ADMIN],
   'books.view': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
   'books.close': [COMPANY_ROLES.COMPANY_ADMIN],
+  // Key documents (invoice, credit note, receipt, purchase order): who may
+  // print them, and who may print the original again / allow another original.
+  'documents.print': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT, COMPANY_ROLES.SALESMAN, COMPANY_ROLES.WAREHOUSE],
+  'documents.print.original': [COMPANY_ROLES.COMPANY_ADMIN],
   'settings.update': [COMPANY_ROLES.COMPANY_ADMIN],
   'audit.view': [COMPANY_ROLES.COMPANY_ADMIN],
 });

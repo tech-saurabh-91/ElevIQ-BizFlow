@@ -2,7 +2,9 @@ import { Router } from 'express';
 import * as ctrl from '../../controllers/company/orderController.js';
 import { validate } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
-import { idParamsSchema } from '../../validators/companyValidators.js';
+import { idParamsSchema, documentEmailSchema } from '../../validators/companyValidators.js';
+import { emailDocument } from '../../services/documentMail.js';
+import Order from '../../models/Order.js';
 import {
   orderCreateSchema,
   orderUpdateSchema,
@@ -92,5 +94,13 @@ router
   .patch(authorize('orders.update'), validate({ body: orderUpdateSchema }), ctrl.update)
   .put(authorize('orders.update'), validate({ body: orderUpdateSchema }), ctrl.update)
   .delete(authorize('orders.delete'), ctrl.remove);
+
+// Email the document with its PDF (same access as viewing it).
+router.post(
+  '/:id/email',
+  validate({ params: idParamsSchema, body: documentEmailSchema }),
+  authorize('orders.view'),
+  emailDocument({ pdf: ctrl.pdf, model: Order, noField: 'orderNo', label: 'Order', entityType: 'Order' })
+);
 
 export default router;

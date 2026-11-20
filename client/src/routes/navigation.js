@@ -7,6 +7,7 @@
  */
 import {
   LayoutDashboard,
+  Printer,
   ShoppingBag,
   PackagePlus,
   ReceiptText,
@@ -166,6 +167,7 @@ export const companyNav = [
       { to: '/app/users', label: 'Users & Teams', icon: UserCog, permission: 'users.view' },
       { to: '/app/settings', label: 'Company Settings', icon: Settings, permission: 'settings.view' },
       { to: '/app/year-closing', label: 'Year Closing', icon: CalendarClock, permission: 'books.view' },
+      { to: '/app/print-control', label: 'Print Control', icon: Printer, permission: 'documents.print.original' },
       { to: '/app/audit-logs', label: 'Audit Trail', icon: ShieldCheck, permission: 'audit.view' },
     ],
   },

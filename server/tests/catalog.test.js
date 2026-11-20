@@ -277,7 +277,7 @@ describe('Product import', () => {
   });
 
   test('imports clean rows with generated codes and pack units', async () => {
-    const res = await upload([row(1), row(2, { 'Opening stock': 24, 'Opening warehouse code': 'MAIN' })], false);
+    const res = await upload([row(1), row(2, { 'Opening stock': 24, 'Purchase price': 12, 'Opening warehouse code': 'MAIN' })], false);
     expect(res.body.data).toMatchObject({ total: 2, imported: 2 });
     const list = await api.get('/api/v1/products?search=Imported Biscuit');
     expect(list.body.data).toHaveLength(2);

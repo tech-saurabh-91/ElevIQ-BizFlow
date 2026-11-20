@@ -439,6 +439,7 @@ export const createAdjustment = asyncHandler(async (req, res) => {
 
   const warehouse = await loadWarehouse(payload.warehouse, 'Warehouse');
   const items = await buildAdjustmentLines(payload.items || []);
+  assertOpeningCosts(items, payload.reason);
 
   const doc = new StockAdjustment({
     warehouse: warehouse._id,
@@ -497,6 +498,7 @@ export const updateAdjustment = asyncHandler(async (req, res) => {
   }
   if (payload.notes !== undefined) doc.notes = payload.notes;
   if (payload.items !== undefined) doc.items = await buildAdjustmentLines(payload.items);
+  assertOpeningCosts(doc.items, doc.reason);
 
   await doc.save();
 
@@ -545,6 +547,7 @@ const postAdjustmentDoc = async (req, doc, settings, text = '') => {
   }
   if (!doc.items.length) throw new BadRequestError('Adjustment has no lines', 'VALIDATION_ERROR');
 
+  assertOpeningCosts(doc.items, doc.reason);
   const opening = (line) => (line.reason || doc.reason) === 'OPENING';
   const negativeOpening = doc.items.find((line) => opening(line) && Number(line.qty) < 0);
   if (negativeOpening) {
@@ -994,6 +997,20 @@ export const formOptions = asyncHandler(async (req, res) => {
 // Line builders (validate referenced products, snapshot names)
 // ---------------------------------------------------------------------------
 
+/** Opening stock goes in at its cost: each opening line needs one above 0. */
+const assertOpeningCosts = (items = [], docReason) => {
+  const errors = [];
+  items.forEach((line, i) => {
+    const opening = (line.reason || docReason) === 'OPENING' && Number(line.qty) > 0;
+    if (opening && !(Number(line.unitCost) > 0)) {
+      errors.push({ field: `items.${i}.unitCost`, message: `${line.name || 'Line ' + (i + 1)}: enter the unit cost of the opening stock` });
+    }
+  });
+  if (errors.length) {
+    throw new AppError(errors[0].message, { status: 422, code: 'VALIDATION_ERROR', errors });
+  }
+};
+
 const buildAdjustmentLines = async (raw = []) => {
   const ids = [...new Set(raw.map((l) => String(l.product)).filter(Boolean))];
   const docs = ids.length ? await Product.find({ _id: { $in: ids } }) : [];
@@ -1010,7 +1027,8 @@ const buildAdjustmentLines = async (raw = []) => {
       sku: product.sku || '',
       unit: product.unit || 'PCS',
       qty: Number(line.qty),
-      unitCost: Number(line.unitCost ?? product.purchasePrice ?? 0),
+      // Blank or 0 falls back to the product's purchase price.
+      unitCost: Number(line.unitCost) > 0 ? Number(line.unitCost) : Number(product.purchasePrice || 0),
       reason: line.reason || '',
       note: line.note || '',
     };

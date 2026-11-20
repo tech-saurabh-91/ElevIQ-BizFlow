@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
-import PDFDocument from 'pdfkit';
-import { pdfLocale, taxRows } from '../../utils/pdfLocale.js';
+import { renderDocumentPdf, companyBlock, dateText, money2 } from '../../services/docPdf.js';
+import { notePrint } from '../../services/printControl.js';
+import { amountInWords } from '../../utils/amountWords.js';
+import { pdfLocale } from '../../utils/pdfLocale.js';
 import dayjs from 'dayjs';
 
 import Payment from '../../models/Payment.js';
@@ -647,111 +649,67 @@ export const exportXlsx = asyncHandler(async (req, res) => {
   res.end();
 });
 
-const money2 = (n) => Number(n || 0).toFixed(2);
-
 export const pdf = asyncHandler(async (req, res) => {
   const payment = await loadPayment(req, req.params.id);
   const settings = await settingsOf(req);
   const company = req.company || {};
   const loc = await pdfLocale(settings, company);
   const customer = payment.customerId || {};
-
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
-  const filename = `receipt-${(payment.paymentNo || payment._id).toString().replace(/[^a-z0-9-]/gi, '')}.pdf`;
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-  doc.pipe(res);
-
-  const left = 40;
-  const right = 555;
-
-  doc.font('Helvetica-Bold').fontSize(18).text(company.businessName || 'ElevIQ SFA', left, 40);
-  doc.font('Helvetica').fontSize(8).fillColor('#555');
-  const companyLine = [
-    company.code ? `Code: ${company.code}` : '',
-    company.gstin && loc.showTaxId ? `${loc.taxIdLabel}: ${company.gstin}` : '',
-    company.phone || '',
-    company.email || '',
-  ]
-    .filter(Boolean)
-    .join('  |  ');
-  if (companyLine) doc.text(companyLine, left, 62);
-  doc.fillColor('#000');
-
-  doc.font('Helvetica-Bold').fontSize(14).text('PAYMENT RECEIPT', right - 180, 40, { width: 180, align: 'right' });
-  doc.font('Helvetica').fontSize(9);
-  doc.text(`Receipt No: ${payment.paymentNo || '—'}`, right - 220, 62, { width: 220, align: 'right' });
-  doc.text(`Date: ${payment.paymentDate ? dayjs(payment.paymentDate).format('DD MMM YYYY') : '—'}`, right - 220, 75, {
-    width: 220,
-    align: 'right',
+  const print = await notePrint(req, {
+    docType: 'RECEIPT',
+    docId: payment._id,
+    docNo: payment.paymentNo,
+    partyName: payment.customerName,
+    draft: payment.status === 'DRAFT',
   });
-  doc.text(`Status: ${payment.status}`, right - 220, 88, { width: 220, align: 'right' });
+  const allocations = payment.allocations || [];
 
-  doc.moveTo(left, 114).lineTo(right, 114).strokeColor('#cbd5e1').stroke();
-
-  doc.font('Helvetica-Bold').fontSize(9).text('CUSTOMER', left, 126);
-  doc.font('Helvetica').fontSize(9);
-  doc.text(payment.customerName || customer.name || '—', left, 140, { width: 240 });
-  if (payment.customerPhone || customer.phone) {
-    doc.text(`Phone: ${payment.customerPhone || customer.phone}`, left, 154, { width: 240 });
-  }
-
-  doc.font('Helvetica-Bold').fontSize(9).text('PAYMENT DETAILS', 300, 126);
-  doc.font('Helvetica').fontSize(9);
-  doc.text(`Mode: ${String(payment.mode || '—').replace(/_/g, ' ')}`, 300, 140, { width: 255 });
-  if (payment.reference) doc.text(`Reference: ${payment.reference}`, 300, 154, { width: 255 });
-  if (payment.bankName) doc.text(`Bank: ${payment.bankName}`, 300, 168, { width: 255 });
-  doc.text(`Reason: ${String(payment.reason || '—').replace(/_/g, ' ')}`, 300, 182, { width: 255 });
-
-  let y = 214;
-  doc.font('Helvetica-Bold').fontSize(8);
-  doc.text('Invoice', left, y, { width: 260 });
-  doc.text('Amount applied', right - 120, y, { width: 120, align: 'right' });
-  y += 13;
-  doc.moveTo(left, y - 3).lineTo(right, y - 3).strokeColor('#cbd5e1').stroke();
-  doc.font('Helvetica').fontSize(9);
-
-  (payment.allocations || []).forEach((alloc) => {
-    doc.text(alloc.invoiceNo || String(alloc.invoice), left, y, { width: 260 });
-    doc.text(money2(alloc.amount), right - 120, y, { width: 120, align: 'right' });
-    y += 15;
+  await renderDocumentPdf(res, {
+    filename: `receipt-${String(payment.paymentNo || payment._id).replace(/[^a-z0-9-]/gi, '')}.pdf`,
+    title: 'Payment Receipt',
+    company: companyBlock(company, loc),
+    copyLabel: print.copyLabel,
+    watermark: print.watermark,
+    printedBy: print.printedBy,
+    timezone: req.company?.timezone || settings?.timezone,
+    party: [
+      ['Received from', payment.customerName || customer.name || ''],
+      ['Phone', payment.customerPhone || customer.phone],
+      [loc.taxIdLabel, customer.gstin],
+    ],
+    meta: [
+      ['Receipt No.', payment.paymentNo || 'DRAFT'],
+      ['Date', dateText(payment.paymentDate)],
+      ['Mode', String(payment.mode || '').replace(/_/g, ' ')],
+      ['Reference', payment.reference],
+      ['Bank', payment.bankName],
+      ['Cheque date', dateText(payment.chequeDate)],
+    ],
+    columns: [
+      { label: 'Sr.', w: 0.5 },
+      { label: 'Against invoice', w: 4 },
+      { label: 'Amount applied', w: 1.6, align: 'right' },
+    ],
+    rows: allocations.length
+      ? allocations.map((a, i) => [i + 1, a.invoiceNo || String(a.invoice || ''), money2(a.amount)])
+      : [['1', 'Advance (not set against an invoice)', money2(payment.amount)]],
+    summary: [['Invoices', String(allocations.length)]],
+    totals: [
+      [`Amount Received (${loc.money})`, payment.amount, { strong: true }],
+      ['Applied to invoices', payment.amountApplied],
+      ['Advance / unapplied', payment.unappliedAmount],
+    ],
+    words: amountInWords(payment.amount, loc.currency),
+    sections: [['Notes', payment.notes]],
+    signatures: ["Payer's signature", 'Received by'],
   });
-
-  if (!(payment.allocations || []).length) {
-    doc.text('Advance (no invoice allocated)', left, y, { width: 300 });
-    y += 15;
-  }
-
-  y += 8;
-  doc.moveTo(left, y).lineTo(right, y).strokeColor('#cbd5e1').stroke();
-  y += 10;
-
-  doc.font('Helvetica').fontSize(9);
-  doc.text('Total received', 350, y, { width: 120, align: 'right' });
-  doc.text(`${loc.money} ${money2(payment.amount)}`, 475, y, { width: 80, align: 'right' });
-  y += 14;
-  doc.text('Applied to invoices', 350, y, { width: 120, align: 'right' });
-  doc.text(money2(payment.amountApplied), 475, y, { width: 80, align: 'right' });
-  y += 14;
-  doc.text('Advance / unallocated', 350, y, { width: 120, align: 'right' });
-  doc.text(money2(payment.unappliedAmount), 475, y, { width: 80, align: 'right' });
-
-  const footerY = Math.max(y + 40, 700);
-  doc.font('Helvetica').fontSize(8).fillColor('#555');
-  if (payment.notes) doc.text(`Notes: ${payment.notes}`, left, footerY, { width: 340 });
-  doc.text(`Generated by ElevIQ SFA on ${dayjs().format('DD MMM YYYY HH:mm')}`, left, 790, {
-    width: 515,
-    align: 'center',
-  });
-
-  doc.end();
 
   audit(req, {
     action: AUDIT_ACTIONS.EXPORT,
     entityType: 'Payment',
     entityId: payment._id,
     entityLabel: labelOf(payment),
-    description: `Printed payment receipt ${labelOf(payment)}`,
+    description: `Printed payment receipt ${labelOf(payment)}${print.copyLabel ? ` (${print.copyLabel.toLowerCase()})` : ''}`,
   });
 });
 

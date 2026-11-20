@@ -16,6 +16,7 @@ import PurchaseBill from '../models/PurchaseBill.js';
 import PurchaseReturn from '../models/PurchaseReturn.js';
 import SupplierPayment from '../models/SupplierPayment.js';
 import Target from '../models/Target.js';
+import Expense from '../models/Expense.js';
 import { startOfDay, dayKey, DEFAULT_TZ } from './fieldForceService.js';
 import { lateMovementIds } from './yearCloseService.js';
 
@@ -479,75 +480,140 @@ const grnRegister = {
   },
 };
 
+const TYPE_LABEL = {
+  OPENING: 'Opening',
+  PURCHASE_RECEIPT: 'Purchase',
+  SALES_OUT: 'Sale',
+  SALES_RETURN: 'Sales return',
+  PURCHASE_RETURN: 'Purchase return',
+  ADJUSTMENT: 'Adjustment',
+  TRANSFER_IN: 'Transfer in',
+  TRANSFER_OUT: 'Transfer out',
+  DAMAGE: 'Damage',
+  COUNT: 'Stock count',
+};
+
+/**
+ * Stock ledger, item by item: an opening line per product, then every
+ * movement with its running quantity, running value and the weighted average
+ * cost after it (running value / running quantity) - the way ERP stock
+ * ledgers show it. Costs follow the moving average the stock is valued at.
+ */
 const stockRegister = {
   code: 'stock-register',
   group: 'REGISTER',
   title: 'Stock Movement Register',
-  description: 'Every stock in and out - purchases, sales, transfers, returns, adjustments - with opening, in, out and closing.',
+  description: 'Stock ledger item by item: opening, every receipt and issue, running balance, running value and weighted average cost.',
   icon: 'ArrowLeftRight',
   requires: ['inventory.view'],
   filters: ['dateRange', 'product', 'warehouse'],
   run: async (p, ctx) => {
     const { from, to } = windowOf(p, ctx.tz);
     const scope = { ...by(p, 'product'), ...by(p, 'warehouse') };
-    const docs = await StockMovement.find({ movedAt: { $gte: from, $lt: to }, ...scope })
-      .sort({ movedAt: 1, _id: 1 })
-      .limit(MAX_ROWS + 1)
-      .lean();
-    // In / out follows the sign of the quantity: a cancelled return putting
-    // goods back is stock IN, whatever its type.
-    const columns = [
-      col('date', 'Date', 'date'),
-      col('type', 'Type'),
-      col('reason', 'Note'),
-      col('docNo', 'Reference'),
-      col('product', 'Product'),
-      col('warehouse', 'Warehouse'),
-      { ...col('qtyIn', 'In', 'number'), tone: 'in' },
-      { ...col('qtyOut', 'Out', 'number'), tone: 'out' },
-      col('balance', 'Balance after', 'number'),
-      col('unitCost', 'Cost', 'money'),
-      { ...col('valueIn', 'In value', 'money'), tone: 'in' },
-      { ...col('valueOut', 'Out value', 'money'), tone: 'out' },
-    ];
-    columns.find((c) => c.key === 'balance').noTotal = true;
-    columns.find((c) => c.key === 'unitCost').noTotal = true;
-    const rows = docs.map((d) => ({
-      date: d.movedAt,
-      type: String(d.type || '').replace(/_/g, ' ').toLowerCase(),
-      reason: d.reason || '',
-      docNo: d.refNo,
-      product: d.productName,
-      warehouse: d.warehouseName || 'Company',
-      qtyIn: d.qty > 0 ? d.qty : 0,
-      qtyOut: d.qty < 0 ? -d.qty : 0,
-      balance: d.balanceAfter,
-      unitCost: d.unitCost,
-      valueIn: d.qty > 0 ? r2(Math.abs(d.value || 0)) : 0,
-      valueOut: d.qty < 0 ? r2(Math.abs(d.value || 0)) : 0,
-      _tone: d.qty > 0 ? 'in' : d.qty < 0 ? 'out' : '',
-    }));
-
-    // What was in hand before the period (same product / warehouse filter).
-    const [before] = await StockMovement.aggregate([
-      { $match: { companyId: oid(ctx.companyId), isDeleted: { $ne: true }, movedAt: { $lt: from }, ...scope } },
-      { $group: { _id: null, qty: { $sum: '$qty' }, value: { $sum: '$value' } } },
+    const match = { companyId: oid(ctx.companyId), isDeleted: { $ne: true }, ...scope };
+    if (match.product) match.product = oid(match.product);
+    if (match.warehouse) match.warehouse = oid(match.warehouse);
+    const [docs, before] = await Promise.all([
+      StockMovement.find({ movedAt: { $gte: from, $lt: to }, ...scope })
+        .sort({ movedAt: 1, _id: 1 })
+        .limit(MAX_ROWS + 1)
+        .lean(),
+      // What each product had in hand before the period (same filters).
+      StockMovement.aggregate([
+        { $match: { ...match, movedAt: { $lt: from } } },
+        { $group: { _id: '$product', qty: { $sum: '$qty' }, value: { $sum: '$value' }, name: { $last: '$productName' }, sku: { $last: '$productSku' } } },
+      ]),
     ]);
+
+    const columns = [
+      col('code', 'Item code'),
+      col('product', 'Item name'),
+      col('docNo', 'Document no'),
+      col('date', 'Date', 'date'),
+      col('type', 'Doc type'),
+      col('warehouse', 'Warehouse'),
+      { ...col('qtyIn', 'Receipt', 'number'), tone: 'in' },
+      { ...col('qtyOut', 'Issue', 'number'), tone: 'out' },
+      { ...col('runningQty', 'Running bal', 'number'), noTotal: true },
+      { ...col('rate', 'Rate', 'money'), noTotal: true },
+      col('lineValue', 'Line value', 'money'),
+      { ...col('runningValue', 'Running value', 'money'), noTotal: true },
+      { ...col('wtAvgCost', 'Wt. avg cost', 'money'), noTotal: true },
+      col('note', 'Note'),
+    ];
+
+    // Running figures per product, starting from its opening.
+    const run = new Map();
+    const openingRows = [];
+    before
+      .filter((b) => Math.abs(b.qty) > 1e-9 || Math.abs(b.value) > 0.004 || docs.some((d) => String(d.product) === String(b._id)))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+      .forEach((b) => {
+        const qty = r2(b.qty);
+        const value = r2(b.value);
+        run.set(String(b._id), { qty, value });
+        openingRows.push({
+          code: b.sku || '',
+          product: b.name,
+          docNo: 'Opening',
+          date: from,
+          type: 'Opening balance',
+          warehouse: p.warehouse ? '' : 'All',
+          qtyIn: 0,
+          qtyOut: 0,
+          runningQty: qty,
+          rate: null,
+          lineValue: 0,
+          runningValue: value,
+          wtAvgCost: qty > 0 ? r2(value / qty) : 0,
+          note: 'Brought forward',
+          _style: 'opening',
+        });
+      });
+
+    const rows = docs.map((d) => {
+      const key = String(d.product);
+      const cur = run.get(key) || { qty: 0, value: 0 };
+      cur.qty = r2(cur.qty + Number(d.qty || 0));
+      cur.value = r2(cur.value + Number(d.value || 0));
+      run.set(key, cur);
+      return {
+        code: d.productSku || '',
+        product: d.productName,
+        docNo: d.refNo || '',
+        date: d.movedAt,
+        type: TYPE_LABEL[d.type] || String(d.type || '').replace(/_/g, ' ').toLowerCase(),
+        warehouse: d.warehouseName || 'Company',
+        qtyIn: d.qty > 0 ? d.qty : 0,
+        qtyOut: d.qty < 0 ? -d.qty : 0,
+        runningQty: cur.qty,
+        rate: r2(d.unitCost),
+        lineValue: r2(d.value),
+        runningValue: cur.value,
+        wtAvgCost: cur.qty > 0 ? r2(cur.value / cur.qty) : 0,
+        note: [d.reason, d.note].filter(Boolean).join(' - '),
+        _tone: d.qty > 0 ? 'in' : d.qty < 0 ? 'out' : '',
+      };
+    });
+
+    const openQty = r2(before.reduce((t, b) => t + b.qty, 0));
+    const openValue = r2(before.reduce((t, b) => t + b.value, 0));
     const inQty = rows.reduce((t, x) => t + x.qtyIn, 0);
     const outQty = rows.reduce((t, x) => t + x.qtyOut, 0);
-    const inValue = rows.reduce((t, x) => t + x.valueIn, 0);
-    const outValue = rows.reduce((t, x) => t + x.valueOut, 0);
-    const openQty = r2(before?.qty);
-    const openValue = r2(before?.value);
-    const qtyNote = p.product ? '' : ' (all products together)';
-    return finish(columns, rows, {
+    const inValue = rows.reduce((t, x) => t + (x.lineValue > 0 ? x.lineValue : 0), 0);
+    const outValue = rows.reduce((t, x) => t + (x.lineValue < 0 ? -x.lineValue : 0), 0);
+    const qtyNote = p.product ? '' : ' Quantities of different products are added together in the tiles.';
+    return finish(columns, [...openingRows, ...rows], {
       summary: [
         { label: 'Opening stock', qty: openQty, value: openValue },
         { label: 'Total in', qty: r2(inQty), value: r2(inValue), tone: 'in' },
         { label: 'Total out', qty: r2(outQty), value: r2(outValue), tone: 'out' },
         { label: 'Net in hand', qty: r2(openQty + inQty - outQty), value: r2(openValue + inValue - outValue), strong: true },
       ],
-      note: `Green = stock came in, red = stock went out (by quantity, so a cancelled return putting goods back shows green). Net in hand = opening + in - out${qtyNote}.`,
+      note:
+        'Running balance, running value and weighted average cost are per item. Wt. avg cost = running value / running quantity (moving average). ' +
+        'Green = stock came in, red = stock went out.' +
+        qtyNote,
     });
   },
 };
@@ -644,6 +710,126 @@ const grossProfit = {
     out.totals.marginPercent = out.totals.sales ? r2((out.totals.grossProfit / out.totals.sales) * 100) : 0;
     out.note = 'Cost is the moving average cost when each invoice was issued. Returns (credit notes) are taken off at the cost they were sold at.';
     return out;
+  },
+};
+
+/**
+ * Trading and Profit & Loss account for a period, built from the documents:
+ *   Trading  Dr: opening stock, purchases (net of returns), stock gained on counts
+ *            Cr: sales (net of returns, before tax), closing stock, stock written off
+ *   P&L      Dr: stock written off, expenses      Cr: gross profit, stock gained
+ * Stock is valued at the moving average cost, so opening + purchases - closing
+ * - write-offs + gains is exactly the cost of the goods sold.
+ */
+const plFigures = async (ctx, from, to) => {
+  const company = oid(ctx.companyId);
+  const live = { companyId: company, isDeleted: { $ne: true } };
+  const sum = async (Model, match, field) => {
+    const [r] = await Model.aggregate([{ $match: { ...live, ...match } }, { $group: { _id: null, v: { $sum: field } } }]);
+    return r2(r?.v);
+  };
+  const stockAt = (date) => sum(StockMovement, { movedAt: { $lt: date } }, '$value');
+  const [openingBefore, openingAdded, closing, purchases, purchaseReturns, adjustments, sales, salesReturns, expenses] = await Promise.all([
+    stockAt(from),
+    // Stock brought in as opening stock during the period counts as opening.
+    sum(StockMovement, { movedAt: { $gte: from, $lt: to }, type: 'OPENING' }, '$value'),
+    stockAt(to),
+    sum(StockMovement, { movedAt: { $gte: from, $lt: to }, type: 'PURCHASE_RECEIPT' }, '$value'),
+    sum(StockMovement, { movedAt: { $gte: from, $lt: to }, type: 'PURCHASE_RETURN' }, '$value'),
+    StockMovement.aggregate([
+      { $match: { ...live, movedAt: { $gte: from, $lt: to }, type: { $in: ['ADJUSTMENT', 'DAMAGE', 'COUNT'] } } },
+      { $group: { _id: { $cond: [{ $gt: ['$value', 0] }, 'gain', 'loss'] }, v: { $sum: '$value' } } },
+    ]),
+    sum(Invoice, { invoiceDate: { $gte: from, $lt: to }, status: { $in: LIVE_INVOICE } }, '$taxableTotal'),
+    sum(CreditNote, { creditNoteDate: { $gte: from, $lt: to }, status: 'ISSUED' }, '$taxableTotal'),
+    Expense.aggregate([
+      { $match: { ...live, expenseDate: { $gte: from, $lt: to }, status: { $in: ['APPROVED', 'PAID'] } } },
+      { $group: { _id: '$category', v: { $sum: { $ifNull: ['$approvedAmount', '$amount'] } } } },
+      { $sort: { _id: 1 } },
+    ]),
+  ]);
+  const gain = r2(adjustments.find((a) => a._id === 'gain')?.v);
+  const loss = r2(-(adjustments.find((a) => a._id === 'loss')?.v || 0));
+  const opening = r2(openingBefore + openingAdded);
+  const netPurchases = r2(purchases + purchaseReturns); // returns are negative values
+  const netSales = r2(sales - salesReturns);
+  const cogs = r2(opening + netPurchases + gain - loss - closing);
+  const grossProfit = r2(netSales - cogs);
+  const expenseRows = expenses.map((e) => ({ name: String(e._id || 'Other').replace(/_/g, ' ').toLowerCase(), v: r2(e.v) }));
+  const expenseTotal = r2(expenseRows.reduce((t, e) => t + e.v, 0));
+  const netProfit = r2(grossProfit - loss + gain - expenseTotal);
+  return {
+    opening, purchases: r2(purchases), purchaseReturns: r2(-purchaseReturns), netPurchases,
+    sales, salesReturns, netSales, closing, gain, loss, cogs, grossProfit, expenseRows, expenseTotal, netProfit,
+  };
+};
+
+const profitLoss = {
+  code: 'profit-loss',
+  group: 'MIS',
+  title: 'Profit & Loss',
+  description: 'Trading and profit & loss account: sales, cost of goods sold from stock at weighted average cost, gross profit, expenses and net profit, against last year.',
+  icon: 'Scale',
+  requires: ['invoices.view', 'products.cost.view'],
+  filters: ['dateRange'],
+  run: async (p, ctx) => {
+    const { from, to } = windowOf(p, ctx.tz);
+    const prevFrom = dayjs(from).subtract(1, 'year').toDate();
+    const prevTo = dayjs(to).subtract(1, 'year').toDate();
+    const [cur, prev] = await Promise.all([plFigures(ctx, from, to), plFigures(ctx, prevFrom, prevTo)]);
+
+    const rows = [];
+    const head = (name) => rows.push({ section: name, particulars: '', current: null, previous: null, _style: 'head' });
+    const line = (section, particulars, key, opts = {}) =>
+      rows.push({
+        section,
+        particulars,
+        current: typeof key === 'function' ? key(cur) : cur[key],
+        previous: typeof key === 'function' ? key(prev) : prev[key],
+        ...(opts.strong ? { _style: 'total' } : {}),
+      });
+
+    head('Trading account');
+    line('Income', 'Sales (before tax)', 'sales');
+    line('Income', 'Less: sales returns', (f) => -f.salesReturns);
+    line('Income', 'Net sales', 'netSales', { strong: true });
+    line('Cost of goods sold', 'Opening stock', 'opening');
+    line('Cost of goods sold', 'Purchases (before tax)', 'purchases');
+    line('Cost of goods sold', 'Less: purchase returns', (f) => -f.purchaseReturns);
+    line('Cost of goods sold', 'Add: stock gained on counts', 'gain');
+    line('Cost of goods sold', 'Less: stock written off', (f) => -f.loss);
+    line('Cost of goods sold', 'Less: closing stock', (f) => -f.closing);
+    line('Cost of goods sold', 'Cost of goods sold', 'cogs', { strong: true });
+    line('Gross profit', 'Gross profit (net sales - cost of goods sold)', 'grossProfit', { strong: true });
+
+    head('Profit & loss account');
+    line('Expenses', 'Stock written off (damage, theft, expiry, shortage)', 'loss');
+    const names = [...new Set([...cur.expenseRows, ...prev.expenseRows].map((e) => e.name))].sort();
+    names.forEach((n) => line('Expenses', `Expense: ${n}`, (f) => f.expenseRows.find((e) => e.name === n)?.v || 0));
+    line('Expenses', 'Total expenses', (f) => r2(f.loss + f.expenseTotal), { strong: true });
+    line('Other income', 'Stock gained on counts', 'gain');
+    line('Net result', 'Net profit (negative = net loss)', 'netProfit', { strong: true });
+
+    const columns = [
+      col('section', 'Group'),
+      col('particulars', 'Particulars'),
+      col('current', 'This period', 'money'),
+      col('previous', 'Same period last year', 'money'),
+    ];
+    return {
+      columns,
+      rows,
+      totals: {},
+      summary: [
+        { label: 'Net sales', qty: null, value: cur.netSales },
+        { label: 'Cost of goods sold', qty: null, value: cur.cogs, tone: 'out' },
+        { label: 'Gross profit', qty: null, value: cur.grossProfit, tone: cur.grossProfit >= 0 ? 'in' : 'out' },
+        { label: cur.netProfit >= 0 ? 'Net profit' : 'Net loss', qty: null, value: cur.netProfit, tone: cur.netProfit >= 0 ? 'in' : 'out', strong: true },
+      ],
+      note:
+        'Amounts are before tax. Stock is valued at the moving weighted average cost, so cost of goods sold = opening + purchases + gains - write-offs - closing. ' +
+        'Expenses are approved or paid expense claims. Payments to suppliers and from customers are not income or expense: they settle bills and invoices already counted.',
+    };
   },
 };
 
@@ -1288,6 +1474,7 @@ export const REPORTS = [
   grnRegister,
   stockRegister,
   grossProfit,
+  profitLoss,
   receivableAgeing,
   payableAgeing,
   stockValuation,

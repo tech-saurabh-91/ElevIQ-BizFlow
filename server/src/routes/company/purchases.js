@@ -34,6 +34,7 @@ purchaseOrders.get('/export', authorize('purchases.export'), validate({ query: p
 purchaseOrders.post('/', authorize('purchases.create'), validate({ body: poCreateSchema }), ctrl.createPo);
 
 purchaseOrders.get('/:id', authorize('purchases.view'), validate({ params: idParamsSchema }), ctrl.getPo);
+purchaseOrders.get('/:id/pdf', authorize('purchases.view'), validate({ params: idParamsSchema }), ctrl.poPdf);
 purchaseOrders.patch(
   '/:id',
   authorize('purchases.update'),

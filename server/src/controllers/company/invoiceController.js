@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import ExcelJS from 'exceljs';
-import PDFDocument from 'pdfkit';
+import { renderDocumentPdf, companyBlock, addressText, dateText, lineColumns, lineRow, priceTotals, itemSummary } from '../../services/docPdf.js';
+import { notePrint } from '../../services/printControl.js';
+import { amountInWords } from '../../utils/amountWords.js';
 import logger from '../../utils/logger.js';
 import { pdfLocale, taxRows, sellerSnapshot, sellerFor } from '../../utils/pdfLocale.js';
 import dayjs from 'dayjs';
@@ -1262,183 +1264,87 @@ export const pdf = asyncHandler(async (req, res) => {
   const company = sellerFor(invoice, req.company || {});
   const loc = await pdfLocale(settings, company);
   const customer = invoice.customerId || {};
+  const print = await notePrint(req, {
+    docType: 'INVOICE',
+    docId: invoice._id,
+    docNo: invoice.invoiceNo,
+    partyName: invoice.customerName,
+    draft: invoice.status === 'DRAFT',
+  });
 
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
-  const filename = `invoice-${(invoice.invoiceNo || invoice._id)
-    .toString()
-    .replace(/[^a-z0-9-]/gi, '')}.pdf`;
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-  doc.pipe(res);
-
-  const left = 40;
-  const right = 555;
-
-  doc.font('Helvetica-Bold').fontSize(18).text(company.businessName || 'ElevIQ SFA', left, 40);
-  doc.font('Helvetica').fontSize(8).fillColor('#555');
-  const companyLine = [
-    company.code ? `Code: ${company.code}` : '',
-    company.gstin && loc.showTaxId ? `${loc.taxIdLabel}: ${company.gstin}` : '',
-    company.phone || '',
-    company.email || '',
-  ]
-    .filter(Boolean)
-    .join('  |  ');
-  if (companyLine) doc.text(companyLine, left, 62);
-  doc.fillColor('#000');
-
-  doc.font('Helvetica-Bold').fontSize(14).text(loc.regime === 'NONE' ? 'INVOICE' : 'TAX INVOICE', right - 180, 40, { width: 180, align: 'right' });
-  doc.font('Helvetica').fontSize(9);
-  doc.text(`Invoice No: ${invoice.invoiceNo || '—'}`, right - 220, 62, { width: 220, align: 'right' });
-  doc.text(
-    `Date: ${invoice.invoiceDate ? dayjs(invoice.invoiceDate).format('DD MMM YYYY') : '—'}`,
-    right - 220,
-    75,
-    { width: 220, align: 'right' }
-  );
-  doc.text(
-    `Due: ${invoice.dueDate ? dayjs(invoice.dueDate).format('DD MMM YYYY') : '—'}`,
-    right - 220,
-    88,
-    { width: 220, align: 'right' }
-  );
   // Order no. of each billed order (an invoice may bill several of one customer).
   const orderNos = invoice.orderNos?.length ? invoice.orderNos.filter(Boolean) : invoice.orderNo ? [invoice.orderNo] : [];
   const multiOrder = orderNos.length > 1;
   const orderNoOf = new Map((invoice.orders || []).map((id, i) => [String(id), invoice.orderNos?.[i] || '']));
-  if (orderNos.length) {
-    const label = orderNos.length > 2 ? `Orders: ${orderNos.slice(0, 2).join(', ')} +${orderNos.length - 2} more` : `Order${multiOrder ? 's' : ''}: ${orderNos.join(', ')}`;
-    doc.text(label, right - 260, 101, { width: 260, align: 'right', lineBreak: false, ellipsis: true });
-  }
-
-  doc.moveTo(left, 118).lineTo(right, 118).strokeColor('#cbd5e1').stroke();
-
-  doc.font('Helvetica-Bold').fontSize(9).text('BILL TO', left, 130);
-  doc.font('Helvetica').fontSize(9);
-  doc.text(invoice.customerName || customer.name || '—', left, 144, { width: 240 });
-  const addr = invoice.billingAddress || {};
-  const addrLines = [addr.line1, addr.line2, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ');
-  if (addrLines) doc.text(addrLines, left, 158, { width: 240 });
-  if (invoice.customerPhone || customer.phone) {
-    doc.text(`Phone: ${invoice.customerPhone || customer.phone}`, left, 172, { width: 240 });
-  }
-  if (invoice.customerGstin || customer.gstin) {
-    doc.text(`${loc.taxIdLabel}: ${invoice.customerGstin || customer.gstin}`, left, 186, { width: 240 });
-  }
-
-  doc.font('Helvetica-Bold').fontSize(9).text('PAYMENT', 300, 130);
-  doc.font('Helvetica').fontSize(9);
-  doc.text(`Mode: ${invoice.paymentMode || '—'}`, 300, 144, { width: 255 });
-  doc.text(`Terms: ${invoice.paymentTerms || '—'}`, 300, 157, { width: 255 });
-  doc.text(`Status: ${invoice.status}`, 300, 170, { width: 255 });
-  if (invoice.poReference) doc.text(`PO: ${invoice.poReference}`, 300, 183, { width: 255 });
-
-  let y = 214;
-  const cols = [
-    { x: left, w: 26, label: '#' },
-    { x: left + 26, w: 200, label: 'Item' },
-    { x: left + 226, w: 55, label: loc.codeLabel },
-    { x: left + 281, w: 45, label: 'Qty', align: 'right' },
-    { x: left + 326, w: 62, label: 'Rate', align: 'right' },
-    { x: left + 388, w: 45, label: 'Disc', align: 'right' },
-    { x: left + 433, w: 42, label: `${loc.taxLabel}%`, align: 'right' },
-    { x: right - 80, w: 80, label: 'Amount', align: 'right' },
-  ];
-
-  const headerRow = () => {
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#111');
-    cols.forEach((c) => doc.text(c.label, c.x, y, { width: c.w, align: c.align || 'left' }));
-    y += 13;
-    doc.moveTo(left, y - 3).lineTo(right, y - 3).strokeColor('#cbd5e1').stroke();
-    doc.font('Helvetica').fontSize(8);
-  };
-  headerRow();
-
-  (invoice.items || []).forEach((item, index) => {
-    if (y > 640) {
-      doc.addPage();
-      y = 50;
-      headerRow();
-    }
-    doc.text(String(index + 1), cols[0].x, y, { width: cols[0].w });
-    doc.text(`${item.name || '—'}${item.isFree ? ' (FREE)' : ''}`, cols[1].x, y, { width: cols[1].w });
-    const lineOrderNo = multiOrder ? orderNoOf.get(String(item.order || '')) : '';
-    doc.text(item.hsnCode || '—', cols[2].x, y, { width: cols[2].w });
-    doc.text(String(item.qty), cols[3].x, y, { width: cols[3].w, align: 'right' });
-    doc.text(money2(item.unitPrice), cols[4].x, y, { width: cols[4].w, align: 'right' });
-    doc.text(`${Number(item.discountPercent || 0)}%`, cols[5].x, y, { width: cols[5].w, align: 'right' });
-    doc.text(`${Number(item.taxRate || 0)}%`, cols[6].x, y, { width: cols[6].w, align: 'right' });
-    doc.text(money2(item.lineTotal), cols[7].x, y, { width: cols[7].w, align: 'right' });
-    if (lineOrderNo) {
-      doc.fontSize(7).fillColor('#666').text(`Order ${lineOrderNo}`, cols[1].x, y + 10, { width: cols[1].w });
-      doc.fontSize(8).fillColor('#000');
-      y += 9;
-    }
-    y += 16;
-  });
-
-  y += 8;
-  doc.moveTo(left, y).lineTo(right, y).strokeColor('#cbd5e1').stroke();
-  y += 10;
-
-  const totals = [
-    ['Subtotal', invoice.subtotal],
-    ['Discount', -Number(invoice.discountTotal || 0)],
-    ['Taxable', invoice.taxableTotal],
-    ...taxRows(invoice.taxTotal, invoice.taxBreakup, loc),
-    ['Round off', invoice.roundOff],
-    ['Total', invoice.total],
-    ['Paid', -Number(invoice.amountPaid || 0)],
-    ['Credit notes', -Number(invoice.creditNoteTotal || 0)],
-  ];
-  doc.fontSize(9);
-  totals.forEach(([label, value]) => {
-    doc.text(label, 380, y, { width: 90, align: 'right' });
-    doc.text(money2(value), 475, y, { width: 80, align: 'right' });
-    y += 14;
-  });
-  doc.font('Helvetica-Bold').fontSize(11);
-  doc.text('Balance due', 360, y + 2, { width: 110, align: 'right' });
-  doc.text(`${loc.money} ${money2(invoice.balanceDue)}`, 475, y + 2, {
-    width: 80,
-    align: 'right',
-  });
-
-  const footerY = Math.max(y + 36, 700);
 
   // UPI "scan to pay" QR for the open balance (India, when enabled in settings).
+  let qr = null;
   const vpa = settings?.invoice?.upiVpa;
-  if (settings?.invoice?.showQr !== false && vpa && loc.currency === 'INR' && Number(invoice.balanceDue) > 0) {
+  if (settings?.invoice?.showQr !== false && vpa && loc.currency === 'INR' && Number(invoice.balanceDue) > 0 && invoice.status !== 'DRAFT') {
     try {
       const { default: QRCode } = await import('qrcode');
       const upi =
         `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(company.businessName || '')}` +
         `&am=${money2(invoice.balanceDue)}&cu=INR&tn=${encodeURIComponent(invoice.invoiceNo || '')}`;
-      const png = await QRCode.toBuffer(upi, { margin: 1, width: 240 });
-      doc.image(png, right - 80, footerY - 6, { width: 80 });
-      doc.font('Helvetica').fontSize(7).fillColor('#555');
-      doc.text(`Scan to pay (UPI) ${vpa}`, right - 110, footerY + 76, { width: 110, align: 'center' });
+      qr = { png: await QRCode.toBuffer(upi, { margin: 1, width: 240 }), caption: `Scan to pay (UPI) ${vpa}` };
     } catch (err) {
       logger.warn(`UPI QR skipped for ${invoice.invoiceNo}: ${err.message}`);
     }
   }
-  doc.font('Helvetica').fontSize(8).fillColor('#555');
-  if (invoice.terms) doc.text(`Terms: ${invoice.terms}`, left, footerY, { width: 340 });
-  if (invoice.notes) doc.text(`Notes: ${invoice.notes}`, left, footerY + 22, { width: 340 });
-  if (invoice.footerNote) doc.text(invoice.footerNote, left, footerY + 44, { width: 340 });
-  doc.text(`Generated by ElevIQ SFA on ${dayjs().format('DD MMM YYYY HH:mm')}`, left, 790, {
-    width: 515,
-    align: 'center',
-  });
 
-  doc.end();
+  const paid = Number(invoice.amountPaid || 0);
+  const credited = Number(invoice.creditNoteTotal || 0);
+  await renderDocumentPdf(res, {
+    filename: `invoice-${String(invoice.invoiceNo || invoice._id).replace(/[^a-z0-9-]/gi, '')}.pdf`,
+    title: loc.regime === 'NONE' ? 'Invoice' : 'Tax Invoice',
+    company: companyBlock({ ...(req.company || {}), ...company }, loc),
+    copyLabel: print.copyLabel,
+    watermark: print.watermark,
+    printedBy: print.printedBy,
+    timezone: req.company?.timezone || settings?.timezone,
+    party: [
+      ['Customer', invoice.customerName || customer.name || ''],
+      ['Address', addressText(invoice.billingAddress)],
+      ['Phone', invoice.customerPhone || customer.phone],
+      [loc.taxIdLabel, invoice.customerGstin || customer.gstin],
+      ...(invoice.placeOfSupply ? [['Place of supply', invoice.placeOfSupply]] : []),
+    ],
+    meta: [
+      ['Invoice No.', invoice.invoiceNo || 'DRAFT'],
+      ['Invoice Date', dateText(invoice.invoiceDate)],
+      ['Due Date', dateText(invoice.dueDate)],
+      ['Order No.', orderNos.length > 3 ? `${orderNos.slice(0, 3).join(', ')} +${orderNos.length - 3}` : orderNos.join(', ')],
+      ['Customer PO', invoice.poReference],
+      ['Payment Term', String(invoice.paymentTerms || '').replace(/_/g, ' ')],
+    ],
+    columns: lineColumns(loc),
+    rows: (invoice.items || []).map((item, i) =>
+      lineRow(item, i, loc, multiOrder && orderNoOf.get(String(item.order || '')) ? `Order ${orderNoOf.get(String(item.order))}` : '')
+    ),
+    summary: itemSummary(invoice.items),
+    totals: [
+      ...priceTotals(invoice, loc, taxRows),
+      [`Grand Total (${loc.money})`, invoice.total, { strong: true }],
+      ...(paid ? [['Less: paid', -paid]] : []),
+      ...(credited ? [['Less: credit notes', -credited]] : []),
+      ...(paid || credited ? [[`Balance Due (${loc.money})`, invoice.balanceDue, { strong: true }]] : []),
+    ],
+    words: amountInWords(invoice.total, loc.currency),
+    sections: [
+      ['Terms and conditions', invoice.terms],
+      ['Notes', invoice.notes],
+      ['', invoice.footerNote],
+    ],
+    qr,
+    signatures: ["Customer's signature", 'Authorised signatory'],
+  });
 
   audit(req, {
     action: AUDIT_ACTIONS.EXPORT,
     entityType: 'Invoice',
     entityId: invoice._id,
     entityLabel: labelOf(invoice),
-    description: `Printed invoice ${labelOf(invoice)}`,
+    description: `Printed invoice ${labelOf(invoice)}${print.copyLabel ? ` (${print.copyLabel.toLowerCase()})` : ''}`,
   });
 });
 

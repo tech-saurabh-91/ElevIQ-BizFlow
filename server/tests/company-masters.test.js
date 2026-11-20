@@ -328,6 +328,7 @@ describe('Phase 3 - Products', () => {
         category: 'Personal Care',
         mrp: 65,
         sellingPrice: 58,
+        purchasePrice: 50,
         openingStock: 2,
         lowStockLevel: 10,
         gstRate: 18,

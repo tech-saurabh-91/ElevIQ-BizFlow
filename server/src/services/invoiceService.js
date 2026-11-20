@@ -6,7 +6,7 @@ import Customer from '../models/Customer.js';
 import { round2 } from '../models/helpers.js';
 import { AppError, BadRequestError, ConflictError } from '../utils/errors.js';
 import { nextSeries, getFinancialYearTag } from '../utils/numberSeries.js';
-import { priceLineValues, computeTotals, resolveLinePricing, assertPackQty, unitFieldsFrom } from './orderService.js';
+import { priceLineValues, computeTotals, resolveLinePricing, assertPackQty, unitFieldsFrom, assertPriced } from './orderService.js';
 
 /**
  * Invoice + credit-note domain rules.
@@ -262,6 +262,7 @@ export const buildDirectInvoiceLines = (items, { products, priceList, settings }
     }
 
     const pricing = resolveLinePricing(product, priceList, input);
+    assertPriced(product, pricing.unitPrice, index);
     assertPackQty(input.qty, pricing.unitFactor, product, pricing.unit, index);
     return {
       product: product._id,

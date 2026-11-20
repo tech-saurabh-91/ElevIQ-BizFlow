@@ -2,7 +2,9 @@ import { Router } from 'express';
 import * as ctrl from '../../controllers/company/paymentController.js';
 import { validate } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
-import { idParamsSchema } from '../../validators/companyValidators.js';
+import { idParamsSchema, documentEmailSchema } from '../../validators/companyValidators.js';
+import { emailDocument } from '../../services/documentMail.js';
+import Payment from '../../models/Payment.js';
 import {
   paymentCreateSchema,
   paymentUpdateSchema,
@@ -64,5 +66,13 @@ router
   .patch(authorize('payments.update'), validate({ body: paymentUpdateSchema }), ctrl.update)
   .put(authorize('payments.update'), validate({ body: paymentUpdateSchema }), ctrl.update)
   .delete(authorize('payments.delete'), ctrl.remove);
+
+// Email the document with its PDF (same access as viewing it).
+router.post(
+  '/:id/email',
+  validate({ params: idParamsSchema, body: documentEmailSchema }),
+  authorize('payments.view'),
+  emailDocument({ pdf: ctrl.pdf, model: Payment, noField: 'paymentNo', label: 'Receipt', entityType: 'Payment' })
+);
 
 export default router;

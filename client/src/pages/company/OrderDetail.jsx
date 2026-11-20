@@ -38,6 +38,7 @@ import {
 } from '@/components/company/order-shared';
 import { breakupRows } from '@/utils/tax';
 import { useTaxLabels } from '@/hooks/useLocations';
+import { ShareDocumentButtons } from '@/components/company/share-document';
 
 const ACTION_BUTTONS = {
   submit: { label: 'Submit order', icon: Send },
@@ -144,6 +145,7 @@ export default function OrderDetail() {
             <Button variant="outline" onClick={() => openOrderPdf(order)}>
               <Printer className="h-4 w-4" /> Print / PDF
             </Button>
+            <ShareDocumentButtons kind="order" doc={order} />
             {isDraft && can('orders.update') && (
               <Button variant="outline" onClick={() => navigate(`/app/orders/${order.id}/edit`)}>
                 <Pencil className="h-4 w-4" /> Edit draft
