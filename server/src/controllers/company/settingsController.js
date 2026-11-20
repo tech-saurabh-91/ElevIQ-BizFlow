@@ -7,6 +7,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, DEFAULT_PERMISSIONS, buildDefaultPermissions, COMPANY_ROLE_LIST } from '../../config/constants.js';
 import { toPlain, refOrNull } from './_helpers.js';
+import { matrixRoles } from '../../middlewares/rbac.js';
 import { assertAddresses } from '../../services/locationService.js';
 import { assertIdentity } from '../../services/identityRules.js';
 import { assertUnlocked, lockInfo } from '../../services/settingLocks.js';
@@ -52,7 +53,7 @@ const present = (doc, company) => {
     };
   }
   // Always return a complete matrix so the admin UI can render every toggle.
-  data.rolePermissions = { ...buildDefaultPermissions(), ...(doc.rolePermissions || {}) };
+  data.rolePermissions = fullMatrix(doc);
   data.permissionCatalog = DEFAULT_PERMISSIONS;
   data.roles = COMPANY_ROLE_LIST;
   return data;
@@ -224,6 +225,9 @@ export const update = asyncHandler(async (req, res) => {
   });
 });
 
+/** Every permission with its roles in this company (renamed keys keep the old choice). */
+const fullMatrix = (doc) => Object.fromEntries(Object.keys(DEFAULT_PERMISSIONS).map((key) => [key, [...(matrixRoles(doc, key) || [])]]));
+
 /** PUT /api/v1/settings/permissions - replace the role -> permission matrix. */
 export const updatePermissions = asyncHandler(async (req, res) => {
   const doc = await Setting.forCompany(req.companyId);
@@ -236,12 +240,9 @@ export const updatePermissions = asyncHandler(async (req, res) => {
     incoming[rawKey.replace(/_/g, '.')] = value;
   }
 
-  const defaults = buildDefaultPermissions();
-  const existing = doc.rolePermissions || {};
-
   const clean = {};
-  for (const key of Object.keys(defaults)) {
-    const source = Array.isArray(incoming[key]) ? incoming[key] : existing[key] || defaults[key];
+  for (const key of Object.keys(DEFAULT_PERMISSIONS)) {
+    const source = Array.isArray(incoming[key]) ? incoming[key] : matrixRoles(doc, key) || [];
     clean[key] = [...new Set(source.filter((role) => COMPANY_ROLE_LIST.includes(role)))];
   }
 
@@ -259,7 +260,7 @@ export const updatePermissions = asyncHandler(async (req, res) => {
     severity: 'WARN',
   });
 
-  return success(res, { message: 'Permissions updated', data: { rolePermissions: { ...buildDefaultPermissions(), ...clean } } });
+  return success(res, { message: 'Permissions updated', data: { rolePermissions: clean } });
 });
 
 /** POST /api/v1/settings/permissions/reset - restore the shipped defaults. */

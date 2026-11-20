@@ -143,9 +143,11 @@ export default function OrderDetail() {
             <Button variant="outline" className="max-sm:hidden" onClick={() => navigate('/app/orders')}>
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
-            <Button variant="outline" onClick={() => openOrderPdf(order)}>
-              <Printer className="h-4 w-4" /> Print / PDF
-            </Button>
+            {can('orders.print') && (
+              <Button variant="outline" onClick={() => openOrderPdf(order)}>
+                <Printer className="h-4 w-4" /> Print / PDF
+              </Button>
+            )}
             <ShareDocumentButtons kind="order" doc={order} />
             {isDraft && can('orders.update') && (
               <Button variant="outline" onClick={() => navigate(`/app/orders/${order.id}/edit`)}>

@@ -25,7 +25,7 @@ router.get(
   }),
   ctrl.list
 );
-router.get('/status/:docType/:id', authorize('documents.print'), validate({ params: docParams }), ctrl.status);
+router.get('/status/:docType/:id', authorize('invoices.print', 'creditnotes.print', 'payments.print', 'purchases.print'), validate({ params: docParams }), ctrl.status);
 router.post(
   '/:docType/:id/grant',
   authorize('documents.print.original'),

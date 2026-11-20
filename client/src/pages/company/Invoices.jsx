@@ -511,9 +511,11 @@ export default function Invoices() {
                                 <Pencil className="h-4 w-4" /> Edit draft
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem onClick={() => openInvoicePdf(row)}>
-                              <Printer className="h-4 w-4" /> Print / PDF
-                            </DropdownMenuItem>
+                            {can('invoices.print') && (
+                              <DropdownMenuItem onClick={() => openInvoicePdf(row)}>
+                                <Printer className="h-4 w-4" /> Print / PDF
+                              </DropdownMenuItem>
+                            )}
                             {canCredit && (
                               <DropdownMenuItem
                                 onClick={() =>

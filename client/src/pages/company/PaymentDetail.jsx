@@ -133,9 +133,11 @@ export default function PaymentDetail() {
             <Button variant="outline" className="max-sm:hidden" onClick={() => navigate('/app/payments')}>
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
-            <Button variant="outline" onClick={() => openPaymentPdf(payment)}>
-              <Printer className="h-4 w-4" /> Print / PDF
-            </Button>
+            {can('payments.print') && (
+              <Button variant="outline" onClick={() => openPaymentPdf(payment)}>
+                <Printer className="h-4 w-4" /> Print / PDF
+              </Button>
+            )}
             <ShareDocumentButtons kind="payment" doc={payment} />
             {isDraft && can('payments.update') && (
               <Button variant="outline" onClick={() => navigate(`/app/payments/${payment.id}/edit`)}>

@@ -142,9 +142,11 @@ export default function CreditNoteDetail() {
             <Button variant="outline" className="max-sm:hidden" onClick={() => navigate('/app/credit-notes')}>
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
-            <Button variant="outline" onClick={() => openCreditNotePdf(note)}>
-              <Printer className="h-4 w-4" /> Print / PDF
-            </Button>
+            {can('creditnotes.print') && (
+              <Button variant="outline" onClick={() => openCreditNotePdf(note)}>
+                <Printer className="h-4 w-4" /> Print / PDF
+              </Button>
+            )}
             <ShareDocumentButtons kind="creditNote" doc={note} />
             {isDraft && can('creditnotes.update') && (
               <Button

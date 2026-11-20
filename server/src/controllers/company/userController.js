@@ -9,7 +9,18 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { BadRequestError, AppError } from '../../utils/errors.js';
 import { listDocuments } from '../../utils/query.js';
 import { audit } from '../../middlewares/audit.js';
-import { AUDIT_ACTIONS } from '../../config/constants.js';
+import Setting from '../../models/Setting.js';
+import {
+  AUDIT_ACTIONS,
+  COMPANY_ROLES,
+  DEFAULT_PERMISSIONS,
+  ADMIN_ONLY_PERMISSIONS,
+  SALES_CHANNEL_PERMISSIONS,
+  MAX_ACCESS_DAYS,
+  isSensitivePermission,
+} from '../../config/constants.js';
+import { accessFor, matrixRoles, userOverride } from '../../middlewares/rbac.js';
+import { notifyUsers } from '../../services/notifyService.js';
 import { toPlain, loadDoc, assertRef, normalizeRefs, markSetup, assertLimit } from './_helpers.js';
 
 const REFS = ['reportingManager', 'warehouse'];
@@ -106,6 +117,34 @@ const assertAdminGuard = async (user, payload) => {
   }
 };
 
+/**
+ * Only a company admin may make someone an admin or touch an admin's account,
+ * even when the role matrix lets others manage users (else a manager could
+ * raise their own access through a second account).
+ */
+const assertNoEscalation = (req, target, payload = {}) => {
+  if (req.user.role === COMPANY_ROLES.COMPANY_ADMIN) return;
+  if (payload.role === COMPANY_ROLES.COMPANY_ADMIN) {
+    throw new AppError('Only a company admin can give the admin role', { status: 403, code: 'FORBIDDEN' });
+  }
+  if (target?.role === COMPANY_ROLES.COMPANY_ADMIN) {
+    throw new AppError('Only a company admin can change an admin account', { status: 403, code: 'FORBIDDEN' });
+  }
+};
+
+/** Overrides still in force (a lapsed temporary grant drops out). */
+const liveOverrides = (user, now = new Date()) =>
+  (user?.accessOverrides || []).filter((o) => !o.until || new Date(o.until) >= now);
+
+/** List rows: admins see how many own permissions each user has; nobody else sees the details. */
+const listRow = (req) => (doc) => {
+  const row = toPlain(doc);
+  row.customAccess = liveOverrides(doc).length;
+  if (req.user.role !== COMPANY_ROLES.COMPANY_ADMIN) delete row.accessOverrides;
+  delete row.permissionsOverride;
+  return row;
+};
+
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
@@ -128,7 +167,7 @@ export const list = asyncHandler(async (req, res) => {
     ],
   });
 
-  return paginated(res, { data: result.data.map(toPlain), ...result.meta });
+  return paginated(res, { data: result.data.map(listRow(req)), ...result.meta });
 });
 
 export const get = asyncHandler(async (req, res) => {
@@ -141,7 +180,7 @@ export const get = asyncHandler(async (req, res) => {
     ],
     label: 'User',
   });
-  return success(res, { data: toPlain(doc) });
+  return success(res, { data: listRow(req)(doc) });
 });
 
 export const create = asyncHandler(async (req, res) => {
@@ -154,6 +193,7 @@ export const create = asyncHandler(async (req, res) => {
     `User limit reached (${limit}). Upgrade your plan or deactivate a user.`
   );
 
+  assertNoEscalation(req, null, req.body);
   const payload = await validateRefs(req.body);
   await assertUniqueLogin(payload);
   let temporaryPassword = null;
@@ -188,6 +228,7 @@ export const create = asyncHandler(async (req, res) => {
 
 export const update = asyncHandler(async (req, res) => {
   const doc = await loadDoc(User, req.params.id, { label: 'User' });
+  assertNoEscalation(req, doc, req.body);
   const payload = await validateRefs(req.body);
   await assertUniqueLogin(payload, doc._id);
 
@@ -239,6 +280,7 @@ export const remove = asyncHandler(async (req, res) => {
   if (String(doc._id) === String(req.user.id)) {
     throw new BadRequestError('You cannot delete your own account', 'SELF_ACTION');
   }
+  assertNoEscalation(req, doc);
 
   await assertAdminGuard(doc, { isActive: doc.isActive });
 
@@ -260,6 +302,7 @@ export const remove = asyncHandler(async (req, res) => {
 
 export const resetPassword = asyncHandler(async (req, res) => {
   const doc = await loadDoc(User, req.params.id, { label: 'User' });
+  assertNoEscalation(req, doc);
 
   doc.password = req.body.newPassword;
   doc.mustChangePassword = true; // an admin-set password is replaced on next sign-in
@@ -311,4 +354,140 @@ export const stats = asyncHandler(async (req, res) => {
   });
 });
 
-export default { list, get, create, update, remove, resetPassword, stats };
+// ---------------------------------------------------------------------------
+// Per-user access (company admin only)
+// ---------------------------------------------------------------------------
+const ROLE_LABEL = (role) => role.charAt(0) + role.slice(1).toLowerCase().replace(/_/g, ' ');
+
+/** Every permission for this user: what the role gives, their own setting, and the result. */
+const accessView = (user, settings) => {
+  const now = new Date();
+  const permissions = Object.keys(DEFAULT_PERMISSIONS).map((key) => {
+    const own = (user.accessOverrides || []).find((o) => o.permission === key) || null;
+    const lapsed = own?.until && new Date(own.until) < now;
+    const result = accessFor(user, settings, key, now);
+    return {
+      key,
+      roleAllowed: user.role === COMPANY_ROLES.COMPANY_ADMIN || (matrixRoles(settings, key) || []).includes(user.role),
+      override: own ? { effect: own.effect, until: own.until || null, note: own.note || '', byName: own.byName || '', at: own.at || null, lapsed: Boolean(lapsed) } : null,
+      allowed: result.allowed,
+      source: result.source,
+      channel: SALES_CHANNEL_PERMISSIONS[key] || null,
+      sensitive: isSensitivePermission(key),
+      adminOnly: ADMIN_ONLY_PERMISSIONS.includes(key),
+    };
+  });
+  return {
+    user: { id: String(user._id), name: user.name, role: user.role, salesType: user.salesType || 'BOTH', isActive: user.isActive },
+    customCount: liveOverrides(user, now).length,
+    maxDays: MAX_ACCESS_DAYS,
+    permissions,
+  };
+};
+
+/** GET /users/:id/access */
+export const getAccess = asyncHandler(async (req, res) => {
+  const doc = await loadDoc(User, req.params.id, { label: 'User' });
+  const settings = await Setting.forCompany(req.companyId);
+  return success(res, { data: accessView(doc, settings) });
+});
+
+const describe = (list) =>
+  list.length
+    ? list.map((o) => `${o.effect === 'ALLOW' ? 'Allow' : 'Deny'} ${o.permission}${o.until ? ` until ${new Date(o.until).toISOString().slice(0, 10)}` : ''}`).join('; ')
+    : 'none';
+
+/** PUT /users/:id/access { overrides: [{ permission, effect, until?, note? }] } - replaces the user's own access. */
+export const saveAccess = asyncHandler(async (req, res) => {
+  const doc = await loadDoc(User, req.params.id, { label: 'User' });
+  if (String(doc._id) === String(req.user.id)) {
+    throw new BadRequestError('You cannot change your own access', 'SELF_ACTION');
+  }
+  if (doc.role === COMPANY_ROLES.COMPANY_ADMIN) {
+    throw new BadRequestError('A company admin always has full access; there is nothing to change', 'ADMIN_FULL_ACCESS');
+  }
+
+  const now = new Date();
+  const latest = new Date(now.getTime() + MAX_ACCESS_DAYS * 86400000);
+  const errors = [];
+  const seen = new Set();
+  const previous = new Map((doc.accessOverrides || []).map((o) => [o.permission, o]));
+  const next = [];
+
+  req.body.overrides.forEach((o, i) => {
+    const field = `body.overrides.${i}`;
+    if (!DEFAULT_PERMISSIONS[o.permission]) return errors.push({ field, message: `Unknown permission "${o.permission}"` });
+    if (seen.has(o.permission)) return errors.push({ field, message: `"${o.permission}" is listed twice` });
+    seen.add(o.permission);
+    if (o.effect === 'ALLOW' && ADMIN_ONLY_PERMISSIONS.includes(o.permission)) {
+      return errors.push({ field, message: `"${o.permission}" stays with company admins; it cannot be given to one user` });
+    }
+    if (o.until) {
+      if (o.until <= now) return errors.push({ field: `${field}.until`, message: 'The end date must be in the future' });
+      if (o.until > latest) return errors.push({ field: `${field}.until`, message: `A temporary setting can run at most ${MAX_ACCESS_DAYS} days` });
+    }
+    const old = previous.get(o.permission);
+    const same = old && old.effect === o.effect && String(old.until || '') === String(o.until || '') && (old.note || '') === (o.note || '');
+    next.push(
+      same
+        ? old
+        : { permission: o.permission, effect: o.effect, until: o.until || null, note: o.note || '', by: req.user.id, byName: req.user.name || '', at: now }
+    );
+    return null;
+  });
+  if (errors.length) {
+    throw new AppError('Some access settings are not valid', { status: 422, code: 'VALIDATION_ERROR', errors });
+  }
+
+  const before = liveOverrides(doc, now).map((o) => ({ permission: o.permission, effect: o.effect, until: o.until }));
+  doc.accessOverrides = next;
+  await doc.save();
+  const after = next.map((o) => ({ permission: o.permission, effect: o.effect, until: o.until }));
+
+  audit(req, {
+    action: AUDIT_ACTIONS.UPDATE,
+    entityType: 'User',
+    entityId: doc._id,
+    entityLabel: doc.name,
+    before: { accessOverrides: before },
+    after: { accessOverrides: after },
+    description: `Access of "${doc.name}" (${ROLE_LABEL(doc.role)}) changed: ${describe(after)}`,
+    severity: 'WARN',
+  });
+  if (describe(before) !== describe(after)) {
+    notifyUsers([doc._id], {
+      type: 'SYSTEM',
+      title: 'Your access was updated',
+      body: `${req.user.name || 'Your admin'} changed what you can do in the app. Some screens or buttons may have changed.`,
+      entityType: 'User',
+      entityId: doc._id,
+    });
+  }
+
+  const settings = await Setting.forCompany(req.companyId);
+  return success(res, { message: 'Access saved', data: accessView(doc, settings) });
+});
+
+/** GET /users/access/who?permission=invoices.print - who can do it, and why. */
+export const whoCan = asyncHandler(async (req, res) => {
+  const { permission } = req.query;
+  if (!DEFAULT_PERMISSIONS[permission]) throw new BadRequestError(`Unknown permission "${permission}"`, 'VALIDATION_ERROR');
+  const settings = await Setting.forCompany(req.companyId);
+  const users = await User.find({ isActive: true }).select('name email phone role salesType accessOverrides').sort({ name: 1 }).lean();
+  const now = new Date();
+  const rows = users.map((u) => {
+    const r = accessFor(u, settings, permission, now);
+    const own = userOverride(u, permission, now);
+    return { id: String(u._id), name: u.name, email: u.email || '', role: u.role, salesType: u.salesType || 'BOTH', allowed: r.allowed, source: r.source, until: own?.until || null };
+  });
+  return success(res, {
+    data: {
+      permission,
+      roles: matrixRoles(settings, permission) || [],
+      sensitive: isSensitivePermission(permission),
+      users: rows,
+    },
+  });
+});
+
+export default { list, get, create, update, remove, resetPassword, stats, getAccess, saveAccess, whoCan };

@@ -1,36 +1,51 @@
 import { ForbiddenError, AppError } from '../utils/errors.js';
-import { PLATFORM_ROLES, COMPANY_ROLES, DEFAULT_PERMISSIONS, blockedBySalesType } from '../config/constants.js';
+import { PLATFORM_ROLES, COMPANY_ROLES, DEFAULT_PERMISSIONS, LEGACY_PERMISSION_KEYS, blockedBySalesType } from '../config/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
-/** Whether the company user's role has `permission` (sales type, per-user, company, default). */
-const effectivePermission = (req, permission) => {
-  const user = req.user;
-  const role = user.role;
-  // 0. a salesman's sales type closes the other channel
-  if (blockedBySalesType(user, permission)) return false;
-  // 1. per-user explicit override
-  if (user.permissionsOverride && Array.isArray(user.permissionsOverride[permission])) {
-    return user.permissionsOverride[permission].includes(role);
-  }
-  // 2. per-company role matrix
-  const override = req.settings?.rolePermissions;
-  if (override && Array.isArray(override[permission])) {
-    return override[permission].includes(role);
-  }
-  // 3. global default matrix
-  if (Array.isArray(DEFAULT_PERMISSIONS[permission])) {
-    return DEFAULT_PERMISSIONS[permission].includes(role);
-  }
-  // Unknown permission -> deny by default (fail closed).
-  return false;
+/** The roles a permission is given to in this company (its matrix, then the defaults). */
+export const matrixRoles = (settings, permission) => {
+  const saved = settings?.rolePermissions;
+  if (saved && Array.isArray(saved[permission])) return saved[permission];
+  const legacy = LEGACY_PERMISSION_KEYS[permission];
+  if (legacy && saved && Array.isArray(saved[legacy])) return saved[legacy];
+  return Array.isArray(DEFAULT_PERMISSIONS[permission]) ? DEFAULT_PERMISSIONS[permission] : null;
 };
+
+/**
+ * The user's own Allow / Deny for a permission, if one is in force.
+ * `accessOverrides` is [{ permission, effect: 'ALLOW'|'DENY', until }];
+ * a lapsed temporary one no longer counts.
+ */
+export const userOverride = (user, permission, now = new Date()) => {
+  const list = Array.isArray(user?.accessOverrides) ? user.accessOverrides : [];
+  const row = list.find((o) => o?.permission === permission);
+  if (!row || !['ALLOW', 'DENY'].includes(row.effect)) return null;
+  if (row.until && new Date(row.until) < now) return null;
+  return row;
+};
+
+/**
+ * Whether a company user may do `permission`, and why:
+ * admin > sales type > the user's own Deny / Allow > the company's role
+ * matrix > the shipped defaults. Unknown permissions are refused.
+ * @returns {{ allowed: boolean, source: 'ADMIN'|'SALES_TYPE'|'USER_DENY'|'USER_ALLOW'|'ROLE'|'UNKNOWN', until?: Date|null }}
+ */
+export const accessFor = (user, settings, permission, now = new Date()) => {
+  if (user?.role === COMPANY_ROLES.COMPANY_ADMIN) return { allowed: true, source: 'ADMIN' };
+  const roles = matrixRoles(settings, permission);
+  if (!roles) return { allowed: false, source: 'UNKNOWN' };
+  if (blockedBySalesType(user, permission)) return { allowed: false, source: 'SALES_TYPE' };
+  const own = userOverride(user, permission, now);
+  if (own) return { allowed: own.effect === 'ALLOW', source: own.effect === 'ALLOW' ? 'USER_ALLOW' : 'USER_DENY', until: own.until || null };
+  return { allowed: roles.includes(user?.role), source: 'ROLE' };
+};
+
+const effectivePermission = (req, permission) => accessFor(req.user, req.settings, permission).allowed;
 
 /** Does a ROLE (not a particular user) have a permission under this company's matrix? */
 export const roleHasPermission = (settings, role, permission) => {
   if (role === COMPANY_ROLES.COMPANY_ADMIN) return true;
-  const override = settings?.rolePermissions;
-  if (override && Array.isArray(override[permission])) return override[permission].includes(role);
-  return Array.isArray(DEFAULT_PERMISSIONS[permission]) ? DEFAULT_PERMISSIONS[permission].includes(role) : false;
+  return (matrixRoles(settings, permission) || []).includes(role);
 };
 
 /** In-handler check, e.g. may this user change prices: hasPermission(req, 'pricing.override'). */
@@ -49,7 +64,8 @@ export const hasPermission = (req, permission) => {
  *
  * - COMPANY_ADMIN always passes (full access to own company).
  * - PLATFORM_SUPPORT has read-only platform access (handled in platform routes).
- * - Per-company overrides live in Setting.rolePermissions.
+ * - Per-company overrides live in Setting.rolePermissions; per-user Allow /
+ *   Deny in User.accessOverrides (see accessFor).
  */
 export const authorize =
   (...required) =>

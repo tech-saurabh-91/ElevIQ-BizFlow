@@ -16,10 +16,10 @@ import { formatDateTime } from '@/utils/format';
  */
 
 export const PRINT_KINDS = {
-  INVOICE: { path: 'invoices', label: 'Invoice' },
-  CREDIT_NOTE: { path: 'credit-notes', label: 'Credit note' },
-  RECEIPT: { path: 'payments', label: 'Receipt' },
-  PURCHASE_ORDER: { path: 'purchase-orders', label: 'Purchase order' },
+  INVOICE: { path: 'invoices', label: 'Invoice', permission: 'invoices.print' },
+  CREDIT_NOTE: { path: 'credit-notes', label: 'Credit note', permission: 'creditnotes.print' },
+  RECEIPT: { path: 'payments', label: 'Receipt', permission: 'payments.print' },
+  PURCHASE_ORDER: { path: 'purchase-orders', label: 'Purchase order', permission: 'purchases.print' },
 };
 
 const PRINTED_EVENT = 'document-printed';
@@ -66,7 +66,7 @@ export function PrintStatus({ docType, id, draft }) {
   const { data, refetch } = useQuery({
     queryKey: key,
     queryFn: async () => (await api.get(`/v1/print-control/status/${docType}/${id}`)).data?.data,
-    enabled: Boolean(id) && !draft && can('documents.print'),
+    enabled: Boolean(id) && !draft && can(PRINT_KINDS[docType]?.permission),
   });
   useEffect(() => {
     const onPrinted = () => setTimeout(() => refetch(), 800);

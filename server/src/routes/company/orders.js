@@ -47,6 +47,7 @@ router.get(
   '/:id/pdf',
   validate({ params: idParamsSchema }),
   authorize('orders.view'),
+  authorize('orders.print'),
   ctrl.pdf
 );
 
@@ -100,6 +101,7 @@ router.post(
   '/:id/email',
   validate({ params: idParamsSchema, body: documentEmailSchema }),
   authorize('orders.view'),
+  authorize('orders.print'),
   emailDocument({ pdf: ctrl.pdf, model: Order, noField: 'orderNo', label: 'Order', entityType: 'Order' })
 );
 

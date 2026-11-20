@@ -1,7 +1,7 @@
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import Setting from '../models/Setting.js';
-import { DEFAULT_PERMISSIONS } from '../config/constants.js';
+import { accessFor } from '../middlewares/rbac.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -37,15 +37,13 @@ export const notifyUsers = async (userIds, { type = 'SYSTEM', title, body = '', 
 };
 
 /**
- * Active users whose role holds `permission` in the company's matrix (company
- * overrides over the defaults). Company admins always qualify.
+ * Active users who may do `permission`: the company's role matrix, each
+ * user's own Allow / Deny and sales type (see accessFor). Admins always qualify.
  */
 export const usersWithPermission = async (companyId, permission) => {
   const settings = await Setting.forCompany(companyId);
-  const matrix = settings?.rolePermissions?.[permission] || DEFAULT_PERMISSIONS[permission] || [];
-  const roles = uniq(['COMPANY_ADMIN', ...matrix]);
-  const users = await User.find({ isActive: true, role: { $in: roles } }).select('_id').lean();
-  return users.map((u) => String(u._id));
+  const users = await User.find({ isActive: true }).select('_id role salesType accessOverrides').lean();
+  return users.filter((u) => accessFor(u, settings, permission).allowed).map((u) => String(u._id));
 };
 
 /** Notify everyone who may act on `permission` (e.g. the approvers). */

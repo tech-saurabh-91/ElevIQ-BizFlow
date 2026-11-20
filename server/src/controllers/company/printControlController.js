@@ -5,11 +5,12 @@ import PurchaseOrder from '../../models/PurchaseOrder.js';
 import PrintLog from '../../models/PrintLog.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { success, paginated } from '../../utils/apiResponse.js';
-import { NotFoundError } from '../../utils/errors.js';
+import { NotFoundError, ForbiddenError } from '../../utils/errors.js';
+import { hasPermission } from '../../middlewares/rbac.js';
 import { searchRegex } from '../../utils/query.js';
 import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS } from '../../config/constants.js';
-import { printCounts } from '../../services/printControl.js';
+import { printCounts, PRINT_PERMISSION } from '../../services/printControl.js';
 
 /**
  * /api/v1/print-control - who printed which key document and when, the
@@ -58,6 +59,9 @@ export const list = asyncHandler(async (req, res) => {
 
 /** GET /print-control/status/:docType/:id - prints so far and what the next one will be. */
 export const status = asyncHandler(async (req, res) => {
+  if (!hasPermission(req, PRINT_PERMISSION[req.params.docType])) {
+    throw new ForbiddenError('You are not allowed to print this document. Ask your admin.', 'PRINT_NOT_ALLOWED');
+  }
   await loadTarget(req.params.docType, req.params.id);
   return success(res, { data: await printCounts(req.params.docType, req.params.id) });
 });

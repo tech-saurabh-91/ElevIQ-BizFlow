@@ -34,8 +34,31 @@ const userSchema = new mongoose.Schema(
     /** Field salesmen: PRESALE (orders), VAN_SALE (spot invoices + van) or BOTH. */
     salesType: { type: String, enum: SALES_TYPES, default: 'BOTH' },
 
-    // Custom per-role permission overrides (COMPANY_ADMIN may edit).
+    // Old, never-used field (kept so existing documents still load).
     permissionsOverride: { type: Object, default: null },
+
+    /**
+     * This user's own access, over their role (Users -> Access; only a company
+     * admin may change it). DENY takes a permission away, ALLOW gives one the
+     * role does not have; `until` ends a temporary grant on that date.
+     */
+    accessOverrides: {
+      type: [
+        new mongoose.Schema(
+          {
+            permission: { type: String, required: true, trim: true },
+            effect: { type: String, enum: ['ALLOW', 'DENY'], required: true },
+            until: { type: Date, default: null },
+            note: { type: String, trim: true, maxlength: 200, default: '' },
+            by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+            byName: { type: String, default: '' },
+            at: { type: Date, default: Date.now },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
 
     reportingManager: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     teamMembers: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },

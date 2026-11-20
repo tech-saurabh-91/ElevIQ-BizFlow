@@ -38,7 +38,7 @@ router.get(
 
 router.post('/', authorize('payments.create'), validate({ body: paymentCreateSchema }), ctrl.create);
 
-router.get('/:id/pdf', validate({ params: idParamsSchema }), authorize('payments.view'), ctrl.pdf);
+router.get('/:id/pdf', validate({ params: idParamsSchema }), authorize('payments.view'), authorize('payments.print'), ctrl.pdf);
 
 router.post(
   '/:id/receive',
@@ -72,6 +72,7 @@ router.post(
   '/:id/email',
   validate({ params: idParamsSchema, body: documentEmailSchema }),
   authorize('payments.view'),
+  authorize('payments.print'),
   emailDocument({ pdf: ctrl.pdf, model: Payment, noField: 'paymentNo', label: 'Receipt', entityType: 'Payment' })
 );
 

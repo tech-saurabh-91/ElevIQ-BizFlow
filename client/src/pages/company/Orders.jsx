@@ -455,9 +455,11 @@ export default function Orders() {
                                 <Pencil className="h-4 w-4" /> Edit draft
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem onClick={() => openOrderPdf(row)}>
-                              <Printer className="h-4 w-4" /> Print / PDF
-                            </DropdownMenuItem>
+                            {can('orders.print') && (
+                              <DropdownMenuItem onClick={() => openOrderPdf(row)}>
+                                <Printer className="h-4 w-4" /> Print / PDF
+                              </DropdownMenuItem>
+                            )}
                             {available.length > 0 && <DropdownMenuSeparator />}
                             {available.includes('submit') && (
                               <DropdownMenuItem

@@ -1,12 +1,27 @@
 import env from '../../config/env.js';
-import { rolesWithReports } from '../company/reportHubController.js';
+import { rolesWithReports, userHasReports } from '../company/reportHubController.js';
+import { hasPermission, matrixRoles } from '../../middlewares/rbac.js';
 import * as authService from '../../services/authService.js';
 import { success, created } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { setRefreshCookie, clearRefreshCookie, verifyRefreshToken } from '../../utils/tokens.js';
 import { UnauthorizedError } from '../../utils/errors.js';
-import { buildDefaultPermissions } from '../../config/constants.js';
+import { DEFAULT_PERMISSIONS } from '../../config/constants.js';
 import { audit, AUDIT_ACTIONS_LOCAL } from './_audit.js';
+
+/** Role lists per permission as this user sees them (their role added or taken out by their own access). */
+const permissionsForUser = (req) => {
+  const role = req.user?.role;
+  const fold = (roles, allowed) => {
+    const rest = (roles || []).filter((r) => r !== role);
+    return allowed ? [...rest, role] : rest;
+  };
+  const out = {};
+  for (const key of Object.keys(DEFAULT_PERMISSIONS)) out[key] = fold(matrixRoles(req.settings, key), hasPermission(req, key));
+  // Roles that can open at least one report (the Reports menu).
+  out['reports.hub.view'] = fold(rolesWithReports(req.settings, req.company), userHasReports(req));
+  return out;
+};
 
 const pickUA = (req) => (req.headers['user-agent'] || '').slice(0, 300);
 
@@ -90,16 +105,9 @@ export const companyMe = asyncHandler(async (req, res) => {
             plan: req.company.plan,
           }
         : null,
-      // Defaults merged under the company's saved matrix, so permissions added
-      // after a company customised its matrix still resolve.
-      permissions: req.settings
-        ? {
-            ...buildDefaultPermissions(),
-            ...(req.settings.rolePermissions || {}),
-            // Roles that can open at least one report (the Reports menu).
-            'reports.hub.view': rolesWithReports(req.settings, req.company),
-          }
-        : null,
+      // The company's matrix (defaults under it), with this user's own Allow /
+      // Deny folded in: the client checks list.includes(user.role).
+      permissions: req.settings ? permissionsForUser(req) : null,
       settings: req.settings
         ? {
             currency: req.settings.currency,

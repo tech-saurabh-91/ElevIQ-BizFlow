@@ -4,6 +4,7 @@ import { Mail, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { apiError } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useCountries, findCountry } from '@/hooks/useLocations';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -22,10 +23,10 @@ import { formatDate, formatMoney } from '@/utils/format';
  */
 
 const KINDS = {
-  invoice: { path: 'invoices', label: 'Invoice', no: 'invoiceNo', date: 'invoiceDate' },
-  order: { path: 'orders', label: 'Order', no: 'orderNo', date: 'orderDate' },
-  payment: { path: 'payments', label: 'Receipt', no: 'paymentNo', date: 'paymentDate' },
-  creditNote: { path: 'credit-notes', label: 'Credit note', no: 'creditNoteNo', date: 'creditNoteDate' },
+  invoice: { path: 'invoices', label: 'Invoice', no: 'invoiceNo', date: 'invoiceDate', print: 'invoices.print' },
+  order: { path: 'orders', label: 'Order', no: 'orderNo', date: 'orderDate', print: 'orders.print' },
+  payment: { path: 'payments', label: 'Receipt', no: 'paymentNo', date: 'paymentDate', print: 'payments.print' },
+  creditNote: { path: 'credit-notes', label: 'Credit note', no: 'creditNoteNo', date: 'creditNoteDate', print: 'creditnotes.print' },
 };
 
 /** Customer phone as WhatsApp wants it: country code + number, digits only. */
@@ -124,8 +125,11 @@ function EmailDialog({ kind, doc, onClose }) {
 export function ShareDocumentButtons({ kind, doc }) {
   const [emailing, setEmailing] = useState(false);
   const { company } = useAuth();
+  const { can } = usePermissions();
   const { data: countries = [] } = useCountries();
   if (!doc?.id) return null;
+  // The email carries the PDF, so it needs the same permission as printing.
+  const canEmail = can(KINDS[kind].print);
 
   const whatsapp = () => {
     const country = findCountry(countries, company?.country);
@@ -139,9 +143,11 @@ export function ShareDocumentButtons({ kind, doc }) {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setEmailing(true)}>
-        <Mail className="h-4 w-4" /> Email
-      </Button>
+      {canEmail && (
+        <Button variant="outline" onClick={() => setEmailing(true)}>
+          <Mail className="h-4 w-4" /> Email
+        </Button>
+      )}
       <Button variant="outline" onClick={whatsapp}>
         <MessageCircle className="h-4 w-4" /> WhatsApp
       </Button>

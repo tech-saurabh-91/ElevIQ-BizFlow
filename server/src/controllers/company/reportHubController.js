@@ -232,4 +232,10 @@ export const rolesWithReports = (settings, company) =>
     return REPORTS.some((r) => canRun(r, { can, company, settings, role }));
   })];
 
+/** Whether this user (with their own Allow / Deny) can open at least one report. */
+export const userHasReports = (req) => {
+  const can = (perm) => hasPermission(req, perm);
+  return REPORTS.some((r) => canRun(r, { can, company: req.company, settings: req.settings, role: req.user?.role }));
+};
+
 export default { catalog, run, exportXlsx, getAccess, saveAccess, resetAccess };

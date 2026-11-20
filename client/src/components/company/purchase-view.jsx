@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Dialog } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/badge';
@@ -54,6 +55,7 @@ function TaxRows({ doc, money, label = 'Tax' }) {
 export function PurchaseDocDialog({ kind, id, onClose }) {
   const cfg = KINDS[kind];
   const { company } = useAuth();
+  const { can } = usePermissions();
   const { taxIdLabel, taxLabel } = useTaxLabels();
   const money = (v) => formatMoney(v || 0, company?.currency);
   const { data: doc, isLoading } = useQuery({
@@ -77,7 +79,7 @@ export function PurchaseDocDialog({ kind, id, onClose }) {
               <span className="text-muted-foreground">Received {Math.round((Number(doc.receiveProgress) || 0) * 100)}%</span>
             )}
             {doc.supplierGstin && <span className="text-muted-foreground">{taxIdLabel} {doc.supplierGstin}</span>}
-            {kind === 'po' && (
+            {kind === 'po' && can('purchases.print') && (
               <Button size="sm" variant="outline" className="ml-auto" onClick={() => openDocumentPdf(`/v1/purchase-orders/${id}/pdf`)}>
                 <Printer className="h-4 w-4" /> Print / PDF
               </Button>

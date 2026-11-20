@@ -37,7 +37,7 @@ router.get(
 
 router.post('/', authorize('invoices.create'), validate({ body: invoiceCreateSchema }), ctrl.create);
 
-router.get('/:id/pdf', validate({ params: idParamsSchema }), authorize('invoices.view'), ctrl.pdf);
+router.get('/:id/pdf', validate({ params: idParamsSchema }), authorize('invoices.view'), authorize('invoices.print'), ctrl.pdf);
 
 router.post(
   '/:id/issue',
@@ -65,6 +65,7 @@ router.post(
   '/:id/email',
   validate({ params: idParamsSchema, body: documentEmailSchema }),
   authorize('invoices.view'),
+  authorize('invoices.print'),
   emailDocument({ pdf: ctrl.pdf, model: Invoice, noField: 'invoiceNo', label: 'Invoice', entityType: 'Invoice' })
 );
 

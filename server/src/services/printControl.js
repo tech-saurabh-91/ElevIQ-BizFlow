@@ -5,7 +5,7 @@ import { ForbiddenError } from '../utils/errors.js';
 /**
  * Original / duplicate control for key documents.
  *
- * - Printing needs "documents.print".
+ * - Printing needs that document's print permission (PRINT_PERMISSION).
  * - The first print is the ORIGINAL; every later one is a DUPLICATE COPY with
  *   a COPY watermark.
  * - An admin ("documents.print.original") can print the original again
@@ -13,6 +13,14 @@ import { ForbiddenError } from '../utils/errors.js';
  * - Drafts print with a DRAFT watermark and are not counted; emailed PDFs are
  *   not prints either.
  */
+
+/** The permission that lets a user print / PDF / email each key document. */
+export const PRINT_PERMISSION = Object.freeze({
+  INVOICE: 'invoices.print',
+  CREDIT_NOTE: 'creditnotes.print',
+  RECEIPT: 'payments.print',
+  PURCHASE_ORDER: 'purchases.print',
+});
 
 const isTrue = (v) => v === '1' || v === 'true' || v === true;
 
@@ -41,7 +49,7 @@ export const notePrint = async (req, { docType, docId, docNo = '', partyName = '
   if (draft) return { copyLabel: 'DRAFT', watermark: 'DRAFT', printedBy };
   if (!PRINT_DOC_TYPES.includes(docType)) return { copyLabel: null, watermark: null, printedBy };
 
-  if (!hasPermission(req, 'documents.print')) {
+  if (!hasPermission(req, PRINT_PERMISSION[docType])) {
     throw new ForbiddenError('You are not allowed to print this document. Ask your admin.', 'PRINT_NOT_ALLOWED');
   }
   let copy;
@@ -63,4 +71,4 @@ export const notePrint = async (req, { docType, docId, docNo = '', partyName = '
   };
 };
 
-export default { notePrint, printCounts };
+export default { notePrint, printCounts, PRINT_PERMISSION };

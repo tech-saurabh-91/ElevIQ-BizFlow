@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, KeyRound, Power, UserCog, UserRoundCheck, UserRoundX, Users as UsersIcon } from 'lucide-react';
+import { Copy, KeyRound, Power, ShieldCheck, ShieldQuestion, UserCog, UserRoundCheck, UserRoundX, Users as UsersIcon } from 'lucide-react';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
@@ -21,6 +21,8 @@ import { useLookups } from '@/hooks/useLookups';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatDate, timeAgo } from '@/utils/format';
 import { SALES_TYPES, salesTypeLabel } from '@/utils/salesType';
+import { UserAccessDialog, WhoCanDialog } from '@/components/company/user-access';
+import { useAuthStore } from '@/store/authStore';
 
 const ROLES = ['COMPANY_ADMIN', 'MANAGER', 'SALESMAN', 'ACCOUNTANT', 'WAREHOUSE'];
 const ROLE_LABEL = {
@@ -103,6 +105,9 @@ function UserForm({ mode, initial, onClose, onSaved }) {
   const [formError, setFormError] = useState('');
   const [serverErrors, setServerErrors] = useState([]);
   const { lookups } = useLookups();
+  const { isAdmin } = usePermissions();
+  // Only a company admin can make someone an admin (the server checks too).
+  const roleOptions = isAdmin || initial?.role === 'COMPANY_ADMIN' ? ROLES : ROLES.filter((r) => r !== 'COMPANY_ADMIN');
 
   const {
     register,
@@ -174,7 +179,7 @@ function UserForm({ mode, initial, onClose, onSaved }) {
         </Field>
         <Field label="Role" required error={errors.role?.message}>
           <Select {...register('role')}>
-            {ROLES.map((r) => (
+            {roleOptions.map((r) => (
               <option key={r} value={r}>
                 {ROLE_LABEL[r]}
               </option>
@@ -412,6 +417,9 @@ export default function Users() {
   const queryClient = useQueryClient();
   const [temp, setTemp] = useState(null);
   const [resetTarget, setResetTarget] = useState(null);
+  const [accessTarget, setAccessTarget] = useState(null);
+  const [whoCan, setWhoCan] = useState(false);
+  const permissionKeys = Object.keys(useAuthStore((st) => st.permissions) || {}).filter((k) => k !== 'reports.hub.view');
 
   const { data: statsData } = useQuery({
     queryKey: ['company', 'users', 'stats'],
@@ -482,7 +490,14 @@ export default function Users() {
       sortable: 'role',
       render: (row) => (
         <div className="space-y-1">
-          <Badge tone={ROLE_TONE[row.role] || 'secondary'}>{ROLE_LABEL[row.role] || row.role}</Badge>
+          <div className="flex flex-wrap items-center gap-1">
+            <Badge tone={ROLE_TONE[row.role] || 'secondary'}>{ROLE_LABEL[row.role] || row.role}</Badge>
+            {row.customAccess > 0 && row.role !== 'COMPANY_ADMIN' && (
+              <Badge tone="warning" title="This user's access differs from their role">
+                {row.customAccess} custom
+              </Badge>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
             {row.role === 'SALESMAN' ? `${salesTypeLabel(row.salesType || 'BOTH')} · ` : ''}
             {row.designation || row.title || '—'}
@@ -575,6 +590,13 @@ export default function Users() {
         formDescription="Roles control the permission matrix configured in Company Settings."
         formSize="xl"
         header={header}
+        headerActions={
+          isAdmin ? (
+            <Button variant="outline" onClick={() => setWhoCan(true)}>
+              <ShieldQuestion className="h-4 w-4" /> Who can do what
+            </Button>
+          ) : null
+        }
         renderForm={(props) => <UserForm {...props} />}
         onSaved={(saved, mode) => {
           if (mode === 'create' && saved?.temporaryPassword) {
@@ -585,6 +607,19 @@ export default function Users() {
           if (row.id === currentUser?.id) return null;
           return (
             <>
+              {isAdmin && row.role !== 'COMPANY_ADMIN' && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm hover:bg-accent focus-ring"
+                  onClick={() => {
+                    close();
+                    setAccessTarget(row);
+                  }}
+                >
+                  <ShieldCheck className="h-4 w-4" /> Access
+                </button>
+              )}
               {canUpdate && (
                 <button
                   type="button"
@@ -663,6 +698,8 @@ export default function Users() {
       </Dialog>
 
       <ResetPasswordDialog target={resetTarget} onClose={() => setResetTarget(null)} />
+      {accessTarget && <UserAccessDialog target={accessTarget} onClose={() => setAccessTarget(null)} />}
+      <WhoCanDialog open={whoCan} onClose={() => setWhoCan(false)} catalog={permissionKeys} />
     </>
   );
 }

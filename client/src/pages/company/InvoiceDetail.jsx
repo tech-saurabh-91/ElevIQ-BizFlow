@@ -180,9 +180,11 @@ export default function InvoiceDetail() {
             <Button variant="outline" className="max-sm:hidden" onClick={() => navigate('/app/invoices')}>
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
-            <Button variant="outline" onClick={() => openInvoicePdf(invoice)}>
-              <Printer className="h-4 w-4" /> Print / PDF
-            </Button>
+            {can('invoices.print') && (
+              <Button variant="outline" onClick={() => openInvoicePdf(invoice)}>
+                <Printer className="h-4 w-4" /> Print / PDF
+              </Button>
+            )}
             <ShareDocumentButtons kind="invoice" doc={invoice} />
             {isDraft && can('invoices.update') && (
               <Button variant="outline" onClick={() => navigate(`/app/invoices/${invoice.id}/edit`)}>

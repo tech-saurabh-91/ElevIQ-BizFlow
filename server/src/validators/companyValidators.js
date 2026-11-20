@@ -432,6 +432,24 @@ export const userResetPasswordSchema = z.object({
   newPassword: PASSWORD_RULES,
 });
 
+/** PUT /users/:id/access - the user's whole list of own Allow / Deny (replaces it). */
+export const userAccessSchema = z.object({
+  overrides: z
+    .array(
+      z.object({
+        permission: z.string().trim().min(3).max(80),
+        effect: z.enum(['ALLOW', 'DENY']),
+        until: z.coerce.date().nullable().optional(),
+        note: z.string().trim().max(200).optional(),
+      })
+    )
+    .max(300),
+});
+
+export const userAccessWhoSchema = z.object({
+  permission: z.string().trim().min(3).max(80),
+});
+
 // ---------------------------------------------------------------------------
 // Company settings
 // ---------------------------------------------------------------------------
@@ -626,6 +644,8 @@ export default {
   userUpdateSchema,
   userListQuerySchema,
   userResetPasswordSchema,
+  userAccessSchema,
+  userAccessWhoSchema,
   settingsUpdateSchema,
   rolePermissionsSchema,
   auditListQuerySchema,

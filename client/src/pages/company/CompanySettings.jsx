@@ -26,6 +26,7 @@ import { useCountries, useStates, findCountry } from '@/hooks/useLocations';
 import { formatDate } from '@/utils/format';
 import { cn } from '@/utils/cn';
 import { SALES_CHANNEL_PERMISSIONS } from '@/utils/salesType';
+import { groupPermissions, moduleLabel, permissionLabel } from '@/utils/permissionLabels';
 import { taxIdWording } from '@/hooks/useLocations';
 
 const REGIME_LABELS = { GST: 'GST', VAT: 'VAT', SALES_TAX: 'Sales tax', NONE: 'No tax' };
@@ -985,65 +986,6 @@ function SettingsForm({ data, canUpdate, tab }) {
     </form>
   );
 }
-// Human names for the permission keys ("creditnotes.cancel" -> Credit notes / Cancel).
-const MODULE_LABELS = {
-  bills: 'Supplier bills',
-  supplierpayments: 'Supplier payments',
-  purchasereturns: 'Purchase returns',
-  dashboard: 'Dashboard',
-  users: 'Users & teams',
-  customers: 'Customers',
-  products: 'Products',
-  discounts: 'Discounts (master)',
-  schemes: 'Schemes',
-  pricing: 'Pricing',
-  orders: 'Sales orders',
-  invoices: 'Invoices',
-  creditnotes: 'Credit notes',
-  payments: 'Payments & collections',
-  inventory: 'Inventory',
-  purchases: 'Purchase orders',
-  grn: 'Goods receipts (GRN)',
-  fieldforce: 'Field force',
-  reports: 'Reports',
-  settings: 'Company settings',
-  audit: 'Audit trail',
-};
-const AREA_LABELS = {
-  register: 'Register reports',
-  mis: 'MIS reports',
-  listing: 'Listing reports',
-  cost: 'Cost & margin',
-  adjustments: 'Stock adjustments',
-  transfers: 'Stock transfers',
-  attendance: 'Attendance',
-  visits: 'Visits',
-  expenses: 'Expenses',
-  targets: 'Targets',
-};
-const ACTION_LABELS = {
-  view: 'View',
-  create: 'Create',
-  update: 'Edit',
-  delete: 'Delete',
-  export: 'Export',
-  approve: 'Approve',
-  cancel: 'Cancel',
-  manage: 'Manage',
-  post: 'Post',
-  dispatch: 'Dispatch & deliver',
-  override: 'Type price / discount by hand',
-};
-const ACTION_ORDER = ['view', 'create', 'update', 'delete', 'manage', 'approve', 'dispatch', 'post', 'cancel', 'export'];
-const humanize = (word) => word.charAt(0).toUpperCase() + word.slice(1).replace(/([A-Z])/g, ' $1').toLowerCase();
-const moduleLabel = (module) => MODULE_LABELS[module] || humanize(module);
-const permissionLabel = (key) => {
-  const [, ...rest] = key.split('.');
-  const action = rest.pop();
-  const area = rest.length ? `${AREA_LABELS[rest[0]] || humanize(rest[0])} · ` : '';
-  return `${area}${ACTION_LABELS[action] || humanize(action || '')}`;
-};
-
 function PermissionsEditor({ data, canUpdate }) {
   const queryClient = useQueryClient();
   const [matrix, setMatrix] = useState(() => data.rolePermissions || {});
@@ -1054,27 +996,7 @@ function PermissionsEditor({ data, canUpdate }) {
   const roles = data.roles || [];
   const catalog = data.permissionCatalog || {};
 
-  const groups = useMemo(() => {
-    const out = {};
-    Object.keys(catalog)
-      .sort()
-      .forEach((key) => {
-        const module = key.split('.')[0];
-        out[module] = out[module] || [];
-        out[module].push(key);
-      });
-    // Within a module: module-level actions first, then each area; actions in
-    // a natural order (View, Create, Edit, Delete, ...).
-    const rank = (key) => {
-      const parts = key.split('.');
-      const action = parts[parts.length - 1];
-      const area = parts.length > 2 ? parts[1] : '';
-      const i = ACTION_ORDER.indexOf(action);
-      return `${area}|${String(i === -1 ? 99 : i).padStart(2, '0')}`;
-    };
-    Object.values(out).forEach((keys) => keys.sort((a, b) => rank(a).localeCompare(rank(b))));
-    return out;
-  }, [catalog]);
+  const groups = useMemo(() => groupPermissions(Object.keys(catalog)), [catalog]);
 
   const toggle = (permission, role) => {
     setMatrix((prev) => {
@@ -1120,7 +1042,7 @@ function PermissionsEditor({ data, canUpdate }) {
           <div>
             <CardTitle>Role permissions</CardTitle>
             <CardDescription>
-              COMPANY_ADMIN always has full access. Changes apply the next time a user signs in.
+              COMPANY_ADMIN always has full access. Changes apply at once. To give or take one permission for a single user, use Users &amp; Teams → Access.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">

@@ -520,9 +520,11 @@ export default function CreditNotes() {
                                 <Pencil className="h-4 w-4" /> Edit draft
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem onClick={() => openCreditNotePdf(row)}>
-                              <Printer className="h-4 w-4" /> Print / PDF
-                            </DropdownMenuItem>
+                            {can('creditnotes.print') && (
+                              <DropdownMenuItem onClick={() => openCreditNotePdf(row)}>
+                                <Printer className="h-4 w-4" /> Print / PDF
+                              </DropdownMenuItem>
+                            )}
                             {available.length > 0 && <DropdownMenuSeparator />}
                             {available.includes('issue') && (
                               <DropdownMenuItem

@@ -6,6 +6,7 @@ import Topbar from '@/components/shell/Topbar';
 import BottomNav from '@/components/shell/BottomNav';
 import { LoadingState, Progress } from '@/components/ui/misc';
 import { useAuth } from '@/hooks/useAuth';
+import { useAccessRefresh } from '@/hooks/useAccessRefresh';
 import { usePermissions } from '@/hooks/usePermissions';
 import { companyNav, filterNav, mobileTabs } from '@/routes/navigation';
 import { useCountries, findCountry } from '@/hooks/useLocations';
@@ -20,7 +21,8 @@ import { useInventoryMode } from '@/components/company/cost-margin';
  * (see Topbar -> WorkspaceBadge), and again in the footer.
  */
 export default function CompanyLayout() {
-  const { user, company, settings, logout, bootstrapping } = useAuth();
+  const { user, company, settings, logout, bootstrapping, loadCompanyContext } = useAuth();
+  useAccessRefresh(loadCompanyContext, Boolean(user) && user?.role !== 'COMPANY_ADMIN');
   const { can } = usePermissions();
   const { purchase } = useInventoryMode();
   const location = useLocation();

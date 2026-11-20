@@ -393,6 +393,9 @@ export const AUDIT_ACTIONS = Object.freeze({
 // ---------------------------------------------------------------------------
 const ALL_ROLES = Object.values(COMPANY_ROLES);
 
+// Everyone who printed before printing was split per document type.
+const PRINT_ROLES = [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT, COMPANY_ROLES.SALESMAN, COMPANY_ROLES.WAREHOUSE];
+
 export const DEFAULT_PERMISSIONS = Object.freeze({
   'dashboard.view': ALL_ROLES,
 
@@ -535,13 +538,44 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
   'settings.view': [COMPANY_ROLES.COMPANY_ADMIN],
   'books.view': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
   'books.close': [COMPANY_ROLES.COMPANY_ADMIN],
-  // Key documents (invoice, credit note, receipt, purchase order): who may
-  // print them, and who may print the original again / allow another original.
-  'documents.print': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT, COMPANY_ROLES.SALESMAN, COMPANY_ROLES.WAREHOUSE],
+  // Print / PDF / email of each document type (the user also needs its view
+  // permission), and who may print the original of a key document again /
+  // allow another original.
+  'orders.print': PRINT_ROLES,
+  'invoices.print': PRINT_ROLES,
+  'creditnotes.print': PRINT_ROLES,
+  'payments.print': PRINT_ROLES,
+  'purchases.print': PRINT_ROLES,
   'documents.print.original': [COMPANY_ROLES.COMPANY_ADMIN],
   'settings.update': [COMPANY_ROLES.COMPANY_ADMIN],
   'audit.view': [COMPANY_ROLES.COMPANY_ADMIN],
 });
+
+/**
+ * Permissions renamed since a company may have saved its matrix: a company
+ * that customised the old key keeps that choice for the new ones.
+ */
+export const LEGACY_PERMISSION_KEYS = Object.freeze({
+  'orders.print': 'documents.print',
+  'invoices.print': 'documents.print',
+  'creditnotes.print': 'documents.print',
+  'payments.print': 'documents.print',
+  'purchases.print': 'documents.print',
+});
+
+/**
+ * Per-user access (Users -> Access).
+ * - ADMIN_ONLY: never granted to a non-admin user one by one (managing users,
+ *   their access and company settings would let them raise their own access).
+ * - SENSITIVE: may be granted, with a warning (money, deletes, closing books).
+ */
+export const ADMIN_ONLY_PERMISSIONS = Object.freeze(['users.create', 'users.update', 'users.delete', 'settings.update']);
+export const isSensitivePermission = (key) =>
+  /\.delete$/.test(key) ||
+  ['books.close', 'audit.view', 'settings.view', 'documents.print.original', 'pricing.override', 'products.cost.view'].includes(key) ||
+  /\.(cancel|approve)$/.test(key);
+/** How long a temporary grant may run. */
+export const MAX_ACCESS_DAYS = 366;
 
 // Build a fully-populated default matrix (every action -> explicit role list).
 export const buildDefaultPermissions = () => {

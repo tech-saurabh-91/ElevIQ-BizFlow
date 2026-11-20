@@ -37,7 +37,7 @@ router.get(
 
 router.post('/', authorize('creditnotes.create'), validate({ body: creditNoteCreateSchema }), ctrl.create);
 
-router.get('/:id/pdf', validate({ params: idParamsSchema }), authorize('creditnotes.view'), ctrl.pdf);
+router.get('/:id/pdf', validate({ params: idParamsSchema }), authorize('creditnotes.view'), authorize('creditnotes.print'), ctrl.pdf);
 
 router.post(
   '/:id/issue',
@@ -65,6 +65,7 @@ router.post(
   '/:id/email',
   validate({ params: idParamsSchema, body: documentEmailSchema }),
   authorize('creditnotes.view'),
+  authorize('creditnotes.print'),
   emailDocument({ pdf: ctrl.pdf, model: CreditNote, noField: 'creditNoteNo', label: 'Credit note', entityType: 'CreditNote' })
 );
 
