@@ -16,7 +16,12 @@ watchCardTables();
 
 const queryClient = new QueryClient({
   defaultOptions: {
+    // 'always': offline requests fail into the screen's error state instead of
+    // being paused. A paused query looked like an empty list, and a paused
+    // mutation (an order, a payment) fired on its own once the signal returned,
+    // long after the user had given up on it.
     queries: {
+      networkMode: 'always',
       staleTime: 30_000,
       gcTime: 5 * 60_000,
       refetchOnWindowFocus: false,
@@ -27,8 +32,14 @@ const queryClient = new QueryClient({
         return failureCount < 2;
       },
     },
-    mutations: { retry: false },
+    mutations: { retry: false, networkMode: 'always' },
   },
+});
+
+// Back online: reload the screens that failed while offline. (Reads only -
+// a failed save is never replayed; the user decides whether to submit again.)
+window.addEventListener('online', () => {
+  queryClient.refetchQueries({ type: 'active', predicate: (q) => q.state.status === 'error' });
 });
 
 ReactDOM.createRoot(document.getElementById('root')).render(

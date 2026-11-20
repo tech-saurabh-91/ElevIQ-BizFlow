@@ -358,7 +358,7 @@ export default function Targets() {
     keepPreviousData: true,
   });
 
-  const { data: progress, isLoading: progressLoading } = useQuery({
+  const { data: progress, isLoading: progressLoading, isError: progressFailed } = useQuery({
     queryKey: ['company', 'targets', 'progress', { periodType }],
     queryFn: async () => {
       const { data: body } = await api.get('/v1/field-force/targets/progress', {
@@ -522,6 +522,7 @@ export default function Targets() {
           value={`${progress?.overallPercent ?? 0}%`}
           hint={`${formatNumber(progress?.total ?? 0)} targets in scope`}
           loading={progressLoading}
+          unavailable={progressFailed && !progress}
           tone="brand"
         />
         <StatCard
@@ -530,6 +531,7 @@ export default function Targets() {
           value={money(progress?.totalAchieved ?? 0)}
           hint={`of ${money(progress?.totalTarget ?? 0)} targeted`}
           loading={progressLoading}
+          unavailable={progressFailed && !progress}
           tone="info"
         />
         <StatCard
@@ -538,6 +540,7 @@ export default function Targets() {
           value={formatNumber(progress?.achievedCount ?? 0)}
           hint={`${formatNumber(progress?.activeCount ?? 0)} still active`}
           loading={progressLoading}
+          unavailable={progressFailed && !progress}
           tone="success"
         />
         <StatCard
@@ -546,6 +549,7 @@ export default function Targets() {
           value={formatNumber(progress?.missedCount ?? 0)}
           hint="Closed below goal"
           loading={progressLoading}
+          unavailable={progressFailed && !progress}
           tone="warning"
         />
       </div>

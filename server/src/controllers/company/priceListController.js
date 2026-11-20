@@ -71,7 +71,7 @@ const crud = buildCrudController({
   beforeCreate: async (payload, req) => {
     assertValidFrom(payload.validFrom, req);
     const out = await clean(payload);
-    out.code = await autoCode(req, 'PRICELIST', 'PL', 4);
+    out.code = await autoCode(req, 'PRICELIST', 'PL', 4, PriceList);
     out.currency = req.company?.currency || 'INR';
     return out;
   },

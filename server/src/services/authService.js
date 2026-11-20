@@ -611,10 +611,13 @@ export const forgotPassword = async ({ email, scope }) => {
     logger.info(`Password reset requested for ${email} (scope=${scope}) but the account has no email on file.`);
   }
 
-  // The raw token is only echoed back outside production so QA can complete
-  // the flow without an SMTP server (and tests can drive the reset endpoint).
-  logger.info(`Password reset requested for ${email} (scope=${scope}). Token: ${env.isProd ? '[hidden]' : raw}`);
-  return { ok: true, devToken: env.isProd ? undefined : raw };
+  // The raw token is echoed back only where nobody else can be on the other
+  // end: the test suite, or local development without SMTP (so QA can finish
+  // the flow). Never in production, staging or any environment that emails.
+  const { isMailConfigured } = await import('./mailer.js');
+  const echo = env.isTest || (env.isDev && !isMailConfigured());
+  logger.info(`Password reset requested for ${email} (scope=${scope}). Token: ${echo ? raw : '[hidden]'}`);
+  return { ok: true, devToken: echo ? raw : undefined };
 };
 
 export const resetPassword = async ({ token, password, scope }) => {

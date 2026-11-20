@@ -30,7 +30,7 @@ const crud = buildCrudController({
     const out = normalizeRefs({ ...payload }, ['warehouse', 'assignedTo']);
     if (out.warehouse) out.warehouse = await assertRef(Warehouse, out.warehouse, 'Warehouse');
     if (out.assignedTo) out.assignedTo = await assertRef(User, out.assignedTo, 'Salesman');
-    if (!out.code) out.code = await autoCode(req, 'ROUTE', 'RTE', 4);
+    if (!out.code) out.code = await autoCode(req, 'ROUTE', 'RTE', 4, Route);
     return out;
   },
   beforeUpdate: async (payload) => {

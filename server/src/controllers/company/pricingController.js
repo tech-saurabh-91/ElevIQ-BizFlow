@@ -69,7 +69,7 @@ const discountCrud = buildCrudController({
   label: 'Discount',
   beforeCreate: async (payload, req) => {
     const out = await cleanScope({ customerScope: 'ALL', productScope: 'ALL', ...payload });
-    if (!out.code) out.code = await autoCode(req, 'DISCOUNT', 'DR', 4);
+    if (!out.code) out.code = await autoCode(req, 'DISCOUNT', 'DR', 4, DiscountRule);
     return out;
   },
   beforeUpdate: async (payload, req) => cleanScope(payload, await DiscountRule.findById(req.params.id).lean()),
@@ -107,7 +107,7 @@ const schemeCrud = buildCrudController({
   },
   beforeCreate: async (payload, req) => {
     const out = await cleanScheme({ customerScope: 'ALL', productScope: 'PRODUCT', ...payload });
-    if (!out.code) out.code = await autoCode(req, 'SCHEME', 'SCH', 4);
+    if (!out.code) out.code = await autoCode(req, 'SCHEME', 'SCH', 4, Scheme);
     return out;
   },
   beforeUpdate: async (payload, req) => cleanScheme(payload, await Scheme.findById(req.params.id).lean()),

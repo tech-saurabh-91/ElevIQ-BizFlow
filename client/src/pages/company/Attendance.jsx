@@ -344,7 +344,7 @@ export default function Attendance() {
   });
 
   const canSeeSummary = can('fieldforce.view');
-  const { data: summary } = useQuery({
+  const { data: summary, isError: summaryFailed } = useQuery({
     queryKey: ['company', 'attendance', 'summary', { dateFrom, dateTo }],
     queryFn: async () => {
       const { data: body } = await api.get('/v1/field-force/attendance/summary', {
@@ -490,7 +490,8 @@ export default function Attendance() {
           label="Days logged"
           value={formatNumber(totals.days)}
           hint="Across the selected period"
-          loading={!summary && canSeeSummary}
+          loading={!summary && canSeeSummary && !summaryFailed}
+          unavailable={summaryFailed && !summary}
           tone="brand"
         />
         <StatCard
@@ -498,7 +499,8 @@ export default function Attendance() {
           label="Present days"
           value={formatNumber(totals.presentDays)}
           hint={`${users.length} rep${users.length === 1 ? '' : 's'} with attendance`}
-          loading={!summary && canSeeSummary}
+          loading={!summary && canSeeSummary && !summaryFailed}
+          unavailable={summaryFailed && !summary}
           tone="success"
         />
         <StatCard
@@ -506,7 +508,8 @@ export default function Attendance() {
           label="Hours worked"
           value={minutesToHm(totals.workedMinutes)}
           hint="Total across the team"
-          loading={!summary && canSeeSummary}
+          loading={!summary && canSeeSummary && !summaryFailed}
+          unavailable={summaryFailed && !summary}
           tone="info"
         />
         <StatCard
@@ -514,7 +517,8 @@ export default function Attendance() {
           label="Overtime"
           value={minutesToHm(totals.overtimeMinutes)}
           hint="Beyond the configured work day"
-          loading={!summary && canSeeSummary}
+          loading={!summary && canSeeSummary && !summaryFailed}
+          unavailable={summaryFailed && !summary}
           tone="warning"
         />
       </div>

@@ -2427,7 +2427,7 @@ export default function Inventory() {
     setParams(next, { replace: true });
   };
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsFailed } = useQuery({
     queryKey: ['company', 'inventory', 'stats'],
     queryFn: async () => {
       const { data: body } = await api.get('/v1/inventory/stats');
@@ -2459,6 +2459,7 @@ export default function Inventory() {
           value={money(stats?.stockValue ?? 0, company?.currency)}
           hint={`${formatNumber(stats?.totalLines ?? 0)} balance lines · ${formatNumber(stats?.warehouseCount ?? 0)} warehouses`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="brand"
         />
         <StatCard
@@ -2467,6 +2468,7 @@ export default function Inventory() {
           value={formatNumber(stats?.totalQty ?? 0)}
           hint={`${formatNumber(stats?.reservedQty ?? 0)} reserved for confirmed orders`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="info"
         />
         <StatCard
@@ -2475,6 +2477,7 @@ export default function Inventory() {
           value={formatNumber(stats?.lowStockCount ?? 0)}
           hint={`${formatNumber(stats?.outOfStockCount ?? 0)} out of stock`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="warning"
         />
         <StatCard
@@ -2485,6 +2488,7 @@ export default function Inventory() {
           )}
           hint="Ledger entries recorded"
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="success"
         />
       </div>

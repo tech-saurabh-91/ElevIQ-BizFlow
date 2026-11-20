@@ -7,6 +7,7 @@ import mongoSanitize from 'express-mongo-sanitize';
 import rateLimit from 'express-rate-limit';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
+import { AppError } from '../utils/errors.js';
 
 /** Security headers (helmet). */
 export const securityHeaders = helmet({
@@ -33,7 +34,7 @@ export const corsMiddleware = cors({
     if (!origin) return cb(null, true);
     if (env.corsOrigins.includes(origin)) return cb(null, true);
     if (env.isDev && /^http:\/\/localhost:\d+$/.test(origin)) return cb(null, true);
-    return cb(new Error(`CORS: origin ${origin} not allowed`));
+    return cb(new AppError(`CORS: origin ${origin} not allowed`, { status: 403, code: 'CORS_FORBIDDEN' }));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

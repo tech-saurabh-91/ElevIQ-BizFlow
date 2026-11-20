@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import PageErrorBoundary from '@/components/shell/PageErrorBoundary';
 import { usePermissions } from '@/hooks/usePermissions';
 import { LoadingState } from '@/components/ui/misc';
 
@@ -156,6 +157,7 @@ function RootRedirect() {
 
 export default function App() {
   return (
+    <PageErrorBoundary>
     <Suspense fallback={<FullPageLoader />}>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
@@ -316,5 +318,6 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>
+    </PageErrorBoundary>
   );
 }

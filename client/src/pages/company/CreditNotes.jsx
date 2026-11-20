@@ -131,7 +131,7 @@ export default function CreditNotes() {
     keepPreviousData: true,
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsFailed } = useQuery({
     queryKey: ['company', 'credit-notes', 'stats'],
     queryFn: async () => {
       const { data: body } = await api.get('/v1/credit-notes/stats');
@@ -284,6 +284,7 @@ export default function CreditNotes() {
           value={formatNumber(stats?.total ?? 0)}
           hint={`${formatNumber(stats?.draftCount ?? 0)} drafts awaiting issue`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="brand"
         />
         <StatCard
@@ -292,6 +293,7 @@ export default function CreditNotes() {
           value={formatNumber(stats?.issuedCount ?? 0)}
           hint={`${money(stats?.issuedValue ?? 0)} credited`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="success"
         />
         <StatCard
@@ -300,6 +302,7 @@ export default function CreditNotes() {
           value={money(stats?.appliedValue ?? 0)}
           hint="Knocked off invoice balances"
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="warning"
         />
         <StatCard
@@ -308,6 +311,7 @@ export default function CreditNotes() {
           value={money(stats?.unappliedValue ?? 0)}
           hint={`${money(stats?.month?.value ?? 0)} credited this month`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="destructive"
         />
       </div>

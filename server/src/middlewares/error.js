@@ -34,6 +34,14 @@ const normalize = (err) => {
     );
   }
 
+  // Upload limits (multer): too big -> 413, other upload problems -> 400
+  if (err.name === 'MulterError') {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return new AppError('The file is too large. Upload a smaller file.', { status: 413, code: 'FILE_TOO_LARGE' });
+    }
+    return new AppError(err.message || 'The upload could not be read', { status: 400, code: err.code || 'UPLOAD_ERROR' });
+  }
+
   // JWT errors
   if (err.name === 'JsonWebTokenError') {
     return new AppError('Invalid token', { status: 401, code: 'TOKEN_INVALID' });

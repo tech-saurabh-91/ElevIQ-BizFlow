@@ -123,7 +123,7 @@ export default function Orders() {
     keepPreviousData: true,
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsFailed } = useQuery({
     queryKey: ['company', 'orders', 'stats'],
     queryFn: async () => {
       const { data: body } = await api.get('/v1/orders/stats');
@@ -261,6 +261,7 @@ export default function Orders() {
           value={formatNumber(stats?.total ?? 0)}
           hint={`${formatNumber(stats?.pendingApprovals ?? 0)} awaiting approval`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="brand"
         />
         <StatCard
@@ -269,6 +270,7 @@ export default function Orders() {
           value={formatNumber(stats?.pendingApprovals ?? 0)}
           hint="Needs a manager decision"
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="warning"
         />
         <StatCard
@@ -277,6 +279,7 @@ export default function Orders() {
           value={money(stats?.month?.value ?? 0)}
           hint={`${formatNumber(stats?.month?.count ?? 0)} orders`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="success"
         />
         <StatCard
@@ -287,6 +290,7 @@ export default function Orders() {
             stats?.averageValue ?? 0
           )}`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="muted"
         />
       </div>

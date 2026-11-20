@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { NotFoundError, BadRequestError, AppError } from '../../utils/errors.js';
-import { nextSeries } from '../../utils/numberSeries.js';
+import { nextSeries, nextFreeSeries } from '../../utils/numberSeries.js';
 import Setting from '../../models/Setting.js';
 import { getCompanyId } from '../../middlewares/tenantContext.js';
 
@@ -99,8 +99,10 @@ export const normalizeRefs = (payload, keys = []) => {
 };
 
 /** Atomic, tenant-safe auto code (CUS-00001, PRD-00001, ...). */
-export const autoCode = (req, key, prefix, pad = 5) =>
-  nextSeries(req.companyId, key, { prefix, pad });
+export const autoCode = (req, key, prefix, pad = 5, model = null) =>
+  model
+    ? nextFreeSeries(req.companyId, key, { prefix, pad }, { model, field: 'code' })
+    : nextSeries(req.companyId, key, { prefix, pad });
 
 /** Flip an onboarding checklist item once real data exists. */
 export const markSetup = async (flag) => {

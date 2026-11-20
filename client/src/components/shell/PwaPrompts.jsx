@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { Download, RefreshCw, Share, SquarePlus, X } from 'lucide-react';
+import { Download, RefreshCw, Share, SquarePlus, WifiOff, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
@@ -197,10 +197,36 @@ function UpdateBanner() {
   );
 }
 
+/** "You're offline" strip, so failed screens are not mistaken for missing data. */
+function OfflineBanner() {
+  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && navigator.onLine === false);
+  useEffect(() => {
+    const on = () => setOffline(false);
+    const off = () => setOffline(true);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
+  if (!offline) return null;
+
+  return (
+    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-[65] flex justify-center p-2 lg:bottom-4" role="status">
+      <div className="flex items-center gap-2 rounded-full bg-amber-600 px-4 py-2 text-sm font-medium text-white shadow-lg">
+        <WifiOff className="h-4 w-4 shrink-0" />
+        You&apos;re offline. Nothing is saved until the connection is back.
+      </div>
+    </div>
+  );
+}
+
 /** Mounted once at the app root. */
 export default function PwaPrompts() {
   return (
     <>
+      <OfflineBanner />
       <UpdateBanner />
       <InstallSheet />
     </>

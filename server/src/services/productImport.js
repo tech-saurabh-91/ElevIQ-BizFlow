@@ -5,7 +5,7 @@ import ProductCategory from '../models/ProductCategory.js';
 import Warehouse from '../models/Warehouse.js';
 import { productCreateSchema } from '../validators/companyValidators.js';
 import { AppError } from '../utils/errors.js';
-import { checkProduct, ensureCatalog, nextProductCode, GST_RATES_IN } from './catalogService.js';
+import { checkProduct, ensureCatalog, nextProductCodes, GST_RATES_IN } from './catalogService.js';
 
 /**
  * Bulk product import from the downloadable Excel template. Same contract as
@@ -219,6 +219,11 @@ export const importProducts = async (buffer, { company, isIndia, dryRun = true, 
   const errors = [];
   const ready = [];
   const seen = { name: new Map(), customCode: new Map(), barcode: new Map() };
+  // Names already in the catalogue (one query), so uploading the same file
+  // twice is refused instead of creating a second copy of every product.
+  const existingNames = new Set(
+    (await Product.find({}).select('name').lean()).map((p) => String(p.name).trim().toLowerCase())
+  );
   let total = 0;
 
   for (let r = 2; r <= sheet.rowCount; r += 1) {
@@ -243,6 +248,8 @@ export const importProducts = async (buffer, { company, isIndia, dryRun = true, 
       add('openingWarehouse', 'Give the warehouse that holds the opening stock');
     }
 
+    if (existingNames.has(String(data.name).trim().toLowerCase())) add('name', 'A product with this name already exists');
+
     // Duplicates inside the file.
     [
       ['name', String(data.name).toLowerCase(), 'Same product name as row'],
@@ -262,8 +269,10 @@ export const importProducts = async (buffer, { company, isIndia, dryRun = true, 
   if (dryRun || errors.length) return result;
 
   const { recordMovement } = await import('./inventoryService.js');
-  for (const data of ready) {
-    const doc = await Product.create({ ...data, companyId: company._id, sku: await nextProductCode(company._id), stock: 0 });
+  const skus = await nextProductCodes(company._id, ready.length);
+  const docs = await Product.insertMany(ready.map((data, i) => ({ ...data, companyId: company._id, sku: skus[i], stock: 0 })));
+  for (const [i, doc] of docs.entries()) {
+    const data = ready[i];
     if (Number(data.openingStock || 0) > 0) {
       await recordMovement({
         product: doc._id,

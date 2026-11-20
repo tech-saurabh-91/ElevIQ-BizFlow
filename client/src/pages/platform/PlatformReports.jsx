@@ -202,6 +202,7 @@ export default function PlatformReports() {
           value={isLoading ? '—' : formatNumber(s.totalCompanies)}
           hint={`${formatNumber(s.activeCompanies || 0)} active · ${formatNumber(s.trialCompanies || 0)} trial`}
           loading={isLoading}
+          unavailable={isError && !data}
         />
         <StatCard
           icon={TrendingUp}
@@ -210,6 +211,7 @@ export default function PlatformReports() {
           hint={`${formatNumber(s.suspended || 0)} suspended · ${formatNumber(s.expired || 0)} expired`}
           tone="info"
           loading={isLoading}
+          unavailable={isError && !data}
         />
         <StatCard
           icon={Users}
@@ -218,6 +220,7 @@ export default function PlatformReports() {
           hint={`${formatNumber(s.activeUsers || 0)} active · ${formatNumber(s.inactiveUsers || 0)} disabled`}
           tone="muted"
           loading={isLoading}
+          unavailable={isError && !data}
         />
         <StatCard
           icon={ShieldCheck}
@@ -226,6 +229,7 @@ export default function PlatformReports() {
           hint="Active users of all platform users"
           tone={Number(s.activationRate || 0) >= 80 ? 'success' : 'warning'}
           loading={isLoading}
+          unavailable={isError && !data}
         />
       </div>
 

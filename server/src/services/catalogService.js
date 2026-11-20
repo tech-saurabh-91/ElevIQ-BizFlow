@@ -2,7 +2,7 @@ import Product from '../models/Product.js';
 import Unit, { DEFAULT_UNITS } from '../models/Unit.js';
 import ProductCategory from '../models/ProductCategory.js';
 import Setting from '../models/Setting.js';
-import { nextSeries } from '../utils/numberSeries.js';
+import { nextFreeSeries, reserveFreeSeries } from '../utils/numberSeries.js';
 import { escapeRegex } from '../utils/query.js';
 import { BadRequestError } from '../utils/errors.js';
 
@@ -87,11 +87,18 @@ export const ensureCatalog = async () => {
   }
 };
 
-export const nextProductCode = async (companyId) => {
+const productSeries = async (companyId) => {
   const settings = await Setting.forCompany(companyId);
   const series = settings?.series?.product || {};
-  return nextSeries(companyId, 'PRODUCT', { prefix: series.prefix || 'PRD', pad: Number(series.pad) || 5 });
+  return { prefix: series.prefix || 'PRD', pad: Number(series.pad) || 5 };
 };
+
+export const nextProductCode = async (companyId) =>
+  nextFreeSeries(companyId, 'PRODUCT', await productSeries(companyId), { model: Product, field: 'sku' });
+
+/** `count` product codes in one go (bulk import). */
+export const nextProductCodes = async (companyId, count) =>
+  reserveFreeSeries(companyId, 'PRODUCT', count, await productSeries(companyId), { model: Product, field: 'sku' });
 
 // ---------------------------------------------------------------------------
 // Pack units
@@ -311,4 +318,4 @@ export const checkProduct = async (
   return { data, errors };
 };
 
-export default { ensureCatalog, nextProductCode, unitOptions, lineUnit, baseQtyOf, describeQty, checkProduct };
+export default { ensureCatalog, nextProductCode, nextProductCodes, unitOptions, lineUnit, baseQtyOf, describeQty, checkProduct };

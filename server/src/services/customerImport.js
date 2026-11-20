@@ -8,7 +8,7 @@ import State from '../models/State.js';
 import { CUSTOMER_TYPES, PAYMENT_TERMS } from '../config/constants.js';
 import { customerCreateSchema } from '../validators/companyValidators.js';
 import { AppError } from '../utils/errors.js';
-import { checkCustomer, nextCustomerCode } from './customerService.js';
+import { checkCustomer, nextCustomerCodes } from './customerService.js';
 import { ensureLocations, findCountry } from './locationService.js';
 
 /**
@@ -272,6 +272,7 @@ export const importCustomers = async (buffer, { company, isIndia, dryRun = true,
   const header = (key) => COLUMNS.find((c) => c.key === key)?.header || key;
   const errors = [];
   const ready = [];
+  const cache = {}; // country/state lookups shared by every row of this file
   const seenGstin = new Map();
   const seenNamePhone = new Map();
   let total = 0;
@@ -295,7 +296,7 @@ export const importCustomers = async (buffer, { company, isIndia, dryRun = true,
       parsed.error.issues.forEach((i) => add(i.path.join('.'), i.message));
       continue;
     }
-    const { data, errors: ruleErrors } = await checkCustomer(parsed.data, { isIndia });
+    const { data, errors: ruleErrors } = await checkCustomer(parsed.data, { isIndia, cache });
     ruleErrors.forEach((e) => add(e.field, e.message));
 
     // Duplicates inside the file itself.
@@ -327,15 +328,13 @@ export const importCustomers = async (buffer, { company, isIndia, dryRun = true,
   const result = { total, valid: ready.length, errors, imported: 0 };
   if (dryRun || errors.length) return result;
 
-  const docs = [];
-  for (const data of ready) {
-    docs.push({
-      ...data,
-      companyId: company._id,
-      code: await nextCustomerCode(company._id),
-      outstanding: data.openingBalance ?? 0,
-    });
-  }
+  const codes = await nextCustomerCodes(company._id, ready.length);
+  const docs = ready.map((data, i) => ({
+    ...data,
+    companyId: company._id,
+    code: codes[i],
+    outstanding: data.openingBalance ?? 0,
+  }));
   await Customer.insertMany(docs);
   result.imported = docs.length;
   return result;

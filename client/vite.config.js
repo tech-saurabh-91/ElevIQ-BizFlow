@@ -39,6 +39,10 @@ export default defineConfig(({ mode }) => {
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//, /^\/health/, /^\/ready/],
           cleanupOutdatedCaches: true,
+          // Control the page as soon as the first install finishes, so pages not
+          // opened yet still load from the cache if the signal drops. (Updates
+          // still wait for "Update now": there is no skipWaiting.)
+          clientsClaim: true,
           runtimeCaching: [
             {
               urlPattern: ({ url }) => url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com',

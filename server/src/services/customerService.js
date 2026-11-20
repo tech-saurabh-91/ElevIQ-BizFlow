@@ -1,7 +1,7 @@
 import Customer from '../models/Customer.js';
 import State from '../models/State.js';
 import Setting from '../models/Setting.js';
-import { nextSeries } from '../utils/numberSeries.js';
+import { nextFreeSeries, reserveFreeSeries } from '../utils/numberSeries.js';
 import { ensureLocations, findCountry, postalCodeError } from './locationService.js';
 import { escapeRegex } from '../utils/query.js';
 
@@ -36,30 +36,48 @@ export const creditDaysFor = (terms, entered) => {
 };
 
 /** Next customer code from the company's numbering settings (Settings -> Document numbering). */
-export const nextCustomerCode = async (companyId) => {
+const customerSeries = async (companyId) => {
   const settings = await Setting.forCompany(companyId);
   const series = settings?.series?.customer || {};
-  return nextSeries(companyId, 'CUSTOMER', { prefix: series.prefix || 'CUS', pad: Number(series.pad) || 5 });
+  return { prefix: series.prefix || 'CUS', pad: Number(series.pad) || 5 };
 };
+
+export const nextCustomerCode = async (companyId) =>
+  nextFreeSeries(companyId, 'CUSTOMER', await customerSeries(companyId), { model: Customer, field: 'code' });
+
+/** `count` customer codes in one go (bulk import). */
+export const nextCustomerCodes = async (companyId, count) =>
+  reserveFreeSeries(companyId, 'CUSTOMER', count, await customerSeries(companyId), { model: Customer, field: 'code' });
 
 /**
  * Check an address against the location master: known country, a state of
  * that country, a city and a postal code in the country's format. Returns the
  * address with canonical country/state names.
  */
-const checkAddress = async (address = {}, path, errors) => {
+/** Memoise a lookup in an optional per-import cache (the same state 1,000 times is one query). */
+const cached = (cache, bucket, key, load) => {
+  if (!cache) return load();
+  cache[bucket] ??= new Map();
+  // Cache the result promise, not the Mongoose query (a query runs only once).
+  if (!cache[bucket].has(key)) cache[bucket].set(key, Promise.resolve(load()));
+  return cache[bucket].get(key);
+};
+
+const checkAddress = async (address = {}, path, errors, cache) => {
   const out = { ...address };
-  const country = await findCountry(address.country);
+  const country = await cached(cache, 'country', String(address.country || '').trim().toLowerCase(), () => findCountry(address.country));
   if (!address.country) errors.push({ field: `${path}.country`, message: 'Country is required' });
   else if (!country) errors.push({ field: `${path}.country`, message: `Unknown country "${address.country}"` });
   else out.country = country.name;
 
   if (!address.state) errors.push({ field: `${path}.state`, message: 'State is required' });
   else if (country) {
-    const state = await State.findOne({
-      country: country.code,
-      $or: [{ name: new RegExp(`^${escapeRegex(String(address.state).trim())}$`, 'i') }, { code: String(address.state).toUpperCase() }],
-    }).lean();
+    const state = await cached(cache, 'state', `${country.code}|${String(address.state).trim().toLowerCase()}`, () =>
+      State.findOne({
+        country: country.code,
+        $or: [{ name: new RegExp(`^${escapeRegex(String(address.state).trim())}$`, 'i') }, { code: String(address.state).toUpperCase() }],
+      }).lean()
+    );
     if (!state) errors.push({ field: `${path}.state`, message: `"${address.state}" is not a state of ${country.name}` });
     else out.state = state.name;
   }
@@ -73,11 +91,11 @@ const checkAddress = async (address = {}, path, errors) => {
 /**
  * Validate and normalise one customer payload.
  * @param {object} input   - already schema-validated payload (create, or merged update)
- * @param {object} opts    - { isIndia, existingId }
+ * @param {object} opts    - { isIndia, existingId, cache } (cache: a {} shared across one import)
  * @returns {{ data: object, errors: {field: string, message: string}[] }}
  */
-export const checkCustomer = async (input, { isIndia = false, existingId = null } = {}) => {
-  await ensureLocations();
+export const checkCustomer = async (input, { isIndia = false, existingId = null, cache = null } = {}) => {
+  await cached(cache, 'locations', 'ready', () => ensureLocations());
   const errors = [];
   const data = { ...input };
 
@@ -109,7 +127,7 @@ export const checkCustomer = async (input, { isIndia = false, existingId = null 
   }
 
   // ---- addresses ----------------------------------------------------------------
-  data.address = await checkAddress(data.address, 'address', errors);
+  data.address = await checkAddress(data.address, 'address', errors, cache);
   if (isIndia && data.gstin && GSTIN_IN.test(data.gstin) && data.address.state) {
     const code = GST_STATE_CODES[String(data.address.state).toLowerCase()];
     if (code && data.gstin.slice(0, 2) !== code) {
@@ -120,7 +138,7 @@ export const checkCustomer = async (input, { isIndia = false, existingId = null 
     data.shippingSameAsBilling = true;
     data.shippingAddress = { ...data.address };
   } else {
-    data.shippingAddress = await checkAddress(data.shippingAddress, 'shippingAddress', errors);
+    data.shippingAddress = await checkAddress(data.shippingAddress, 'shippingAddress', errors, cache);
   }
 
   // ---- credit -------------------------------------------------------------------
@@ -147,4 +165,4 @@ export const checkCustomer = async (input, { isIndia = false, existingId = null 
   return { data, errors };
 };
 
-export default { checkCustomer, nextCustomerCode, creditDaysFor };
+export default { checkCustomer, nextCustomerCode, nextCustomerCodes, creditDaysFor };

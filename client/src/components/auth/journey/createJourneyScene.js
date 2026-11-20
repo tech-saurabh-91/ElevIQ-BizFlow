@@ -840,7 +840,8 @@ export function createJourneyScene(
   let last = performance.now();
   let clock = 0;
   const tick = (now) => {
-    const dt = Math.min(0.1, (now - last) / 1000);
+    // rAF's timestamp can precede the performance.now() read in start(): never run the clock backwards.
+    const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
     last = now;
     clock += dt;
     render(clock, dt);

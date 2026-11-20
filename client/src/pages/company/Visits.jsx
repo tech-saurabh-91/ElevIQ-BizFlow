@@ -127,7 +127,7 @@ export default function Visits() {
     keepPreviousData: true,
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsFailed } = useQuery({
     queryKey: ['company', 'visits', 'stats'],
     queryFn: async () => {
       const { data: body } = await api.get('/v1/field-force/visits/stats');
@@ -276,6 +276,7 @@ export default function Visits() {
           value={formatNumber(stats?.total ?? 0)}
           hint={`${formatNumber(stats?.today?.planned ?? 0)} planned today`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="brand"
         />
         <StatCard
@@ -284,6 +285,7 @@ export default function Visits() {
           value={formatNumber(stats?.today?.completed ?? 0)}
           hint={`${formatNumber(stats?.today?.inProgress ?? 0)} in progress now`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="success"
         />
         <StatCard
@@ -292,6 +294,7 @@ export default function Visits() {
           value={formatNumber(stats?.month?.visits ?? 0)}
           hint={`${money(stats?.month?.orderValue ?? 0)} booked from visits`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="info"
         />
         <StatCard
@@ -300,6 +303,7 @@ export default function Visits() {
           value={formatNumber(stats?.today?.skipped ?? 0)}
           hint={`${formatNumber(stats?.outcomeCounts?.PAYMENT_COLLECTED ?? 0)} collections recorded`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="warning"
         />
       </div>

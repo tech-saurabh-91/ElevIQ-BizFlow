@@ -131,7 +131,7 @@ export default function Payments() {
     keepPreviousData: true,
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsFailed } = useQuery({
     queryKey: ['company', 'payments', 'stats'],
     queryFn: async () => {
       const { data: body } = await api.get('/v1/payments/stats');
@@ -273,6 +273,7 @@ export default function Payments() {
           value={formatNumber(stats?.total ?? 0)}
           hint={`${formatNumber(stats?.draftCount ?? 0)} drafts awaiting confirmation`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="brand"
         />
         <StatCard
@@ -281,6 +282,7 @@ export default function Payments() {
           value={money(stats?.receivedValue ?? 0)}
           hint={`${formatNumber(stats?.receivedCount ?? 0)} received payments`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="success"
         />
         <StatCard
@@ -289,6 +291,7 @@ export default function Payments() {
           value={money(stats?.appliedValue ?? 0)}
           hint={`${money(stats?.advanceValue ?? 0)} held as advance`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="info"
         />
         <StatCard
@@ -297,6 +300,7 @@ export default function Payments() {
           value={money(stats?.month?.value ?? 0)}
           hint={`${formatNumber(stats?.month?.count ?? 0)} payments`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="warning"
         />
       </div>

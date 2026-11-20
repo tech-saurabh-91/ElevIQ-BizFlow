@@ -16,7 +16,13 @@ const tones = {
   muted: 'from-slate-600 to-slate-500',
 };
 
-export function StatCard({ label, value, hint, icon: Icon, tone = 'brand', loading, className }) {
+/**
+ * `unavailable`: the figures could not be loaded (e.g. offline). Show a dash
+ * rather than a made-up 0 that reads like real business data.
+ */
+export function StatCard({ label, value, hint, icon: Icon, tone = 'brand', loading, unavailable = false, className }) {
+  const shownValue = unavailable ? '—' : value;
+  const shownHint = unavailable ? "Couldn't load" : hint;
   return (
     <div
       className={cn(
@@ -38,11 +44,11 @@ export function StatCard({ label, value, hint, icon: Icon, tone = 'brand', loadi
         <Skeleton className="relative mt-2.5 h-6 w-20 bg-white/25 sm:mt-3 sm:h-8 sm:w-24" />
       ) : (
         <p className="relative mt-1.5 text-lg font-bold leading-tight tracking-tight tabular-nums [overflow-wrap:anywhere] sm:mt-2 sm:text-2xl">
-          {value}
+          {shownValue}
         </p>
       )}
-      {hint && !loading && (
-        <p className="relative mt-1 line-clamp-2 text-[11px] leading-snug text-white/85 sm:text-xs">{hint}</p>
+      {shownHint && !loading && (
+        <p className="relative mt-1 line-clamp-2 text-[11px] leading-snug text-white/85 sm:text-xs">{shownHint}</p>
       )}
     </div>
   );

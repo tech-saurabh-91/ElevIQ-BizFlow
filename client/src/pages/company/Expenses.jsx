@@ -394,7 +394,7 @@ export default function Expenses() {
     keepPreviousData: true,
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsFailed } = useQuery({
     queryKey: ['company', 'expenses', 'stats'],
     queryFn: async () => {
       const { data: body } = await api.get('/v1/field-force/expenses/stats');
@@ -568,6 +568,7 @@ export default function Expenses() {
           value={formatNumber(stats?.total ?? 0)}
           hint={`${formatNumber(stats?.byStatus?.DRAFT ?? 0)} drafts`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="brand"
         />
         <StatCard
@@ -576,6 +577,7 @@ export default function Expenses() {
           value={money(stats?.pendingValue ?? 0)}
           hint={`${formatNumber(stats?.pendingCount ?? 0)} awaiting review`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="warning"
         />
         <StatCard
@@ -584,6 +586,7 @@ export default function Expenses() {
           value={money(stats?.approvedValue ?? 0)}
           hint="Ready to reimburse"
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="info"
         />
         <StatCard
@@ -592,6 +595,7 @@ export default function Expenses() {
           value={money(stats?.month?.value ?? 0)}
           hint={`${formatNumber(stats?.month?.count ?? 0)} claims this month`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="success"
         />
       </div>

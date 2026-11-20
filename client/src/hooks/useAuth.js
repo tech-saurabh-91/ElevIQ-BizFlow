@@ -7,6 +7,8 @@ import { DASHBOARD_KEY, fetchDashboardSummary } from '@/api/dashboard';
 
 // Several components mount useAuth() at once; they share one /auth/me call.
 let meInFlight = null;
+// One app-wide "back online" listener, however many components use the hook.
+let retryOnOnlineHooked = false;
 
 /**
  * Authentication hook.
@@ -50,8 +52,12 @@ export const useAuth = () => {
         }
         await loadCompanyContext();
       }
-    } catch {
-      clear();
+    } catch (err) {
+      // Only the server refusing the refresh ends the session. Offline, a
+      // timeout or a 5xx keeps the saved profile: the refresh cookie is still
+      // valid, and the first API call after reconnecting refreshes on its 401.
+      const status = err?.response?.status;
+      if (status && status < 500) clear();
     } finally {
       setBootstrapping(false);
     }
@@ -94,6 +100,15 @@ export const useAuth = () => {
       if (cancelled) return;
       await bootstrap();
     })();
+    // Opened offline: the profile was kept but nothing was loaded. Finish the
+    // sign-in (token, permissions, settings) as soon as the network is back.
+    if (!retryOnOnlineHooked) {
+      retryOnOnlineHooked = true;
+      window.addEventListener('online', () => {
+        const { user, accessToken } = useAuthStore.getState();
+        if (user && !accessToken) bootstrap();
+      });
+    }
     return () => {
       cancelled = true;
     };

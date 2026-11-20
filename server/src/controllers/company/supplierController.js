@@ -51,7 +51,7 @@ const crud = buildCrudController({
   beforeCreate: async (payload, req) => {
     await assertIdentity(valuesOf(payload, req), PATHS);
     const out = normalise({ ...payload });
-    if (!out.code) out.code = await autoCode(req, 'SUPPLIER', 'SUP', 5);
+    if (!out.code) out.code = await autoCode(req, 'SUPPLIER', 'SUP', 5, Supplier);
     if (out.outstanding === undefined) out.outstanding = out.openingBalance ?? 0;
     return out;
   },

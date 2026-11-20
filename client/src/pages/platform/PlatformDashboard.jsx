@@ -96,6 +96,7 @@ export default function PlatformDashboard() {
           value={formatNumber(stats.totalCompanies)}
           hint={`${formatNumber(stats.activeCompanies || 0)} active · ${formatNumber(stats.trialCompanies || 0)} on trial`}
           loading={isLoading}
+          unavailable={!!error && !data}
         />
         <StatCard
           icon={Users}
@@ -104,6 +105,7 @@ export default function PlatformDashboard() {
           hint={`${formatNumber(stats.newSignups || 0)} new signups (30d)`}
           tone="muted"
           loading={isLoading}
+          unavailable={!!error && !data}
         />
         <StatCard
           icon={TrendingUp}
@@ -112,6 +114,7 @@ export default function PlatformDashboard() {
           hint={`${formatNumber(stats.revenueYtd || 0)} YTD`}
           tone="success"
           loading={isLoading}
+          unavailable={!!error && !data}
         />
         <StatCard
           icon={AlertTriangle}
@@ -120,6 +123,7 @@ export default function PlatformDashboard() {
           hint={`${formatNumber(stats.suspended || 0)} suspended`}
           tone="warning"
           loading={isLoading}
+          unavailable={!!error && !data}
         />
       </div>
 

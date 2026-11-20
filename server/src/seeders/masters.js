@@ -288,7 +288,7 @@ const seedCustomers = (routes, warehouses, priceLists, users) => {
         contactPerson,
         phone,
         email: `${name.toLowerCase().replace(/[^a-z]+/g, '.')}@example.test`,
-        gstin: `27AAAC${String(1000 + idx)}D1Z${idx % 9}`,
+        gstin: `27AAACD${String(1000 + idx)}D1Z${idx % 9}`,
         territory,
         creditLimit,
         creditDays: paymentTerms === 'IMMEDIATE' ? 0 : Number(String(paymentTerms).replace('NET_', '')),
@@ -447,6 +447,15 @@ const run = async (company, users = []) => {
       Customer.insertMany(seedCustomers(routes, warehouses, priceLists, users))
     );
     logger.info(`Seeded ${customers.length} customers.`);
+  } else {
+    // Older seeds wrote 14-character GSTINs (27AAAC1000D1Z0), which fail
+    // validation the moment such a customer is edited. Repair them in place.
+    const fixed = await inTenant(company, () =>
+      Customer.updateMany({ gstin: /^27AAAC\d{4}D1Z\d$/ }, [
+        { $set: { gstin: { $concat: ['27AAACD', { $substrCP: ['$gstin', 6, 8] }] } } },
+      ])
+    );
+    if (fixed.modifiedCount) logger.info(`Repaired ${fixed.modifiedCount} seeded customer GSTINs.`);
   }
 
   const admin = users.find((u) => u.role === 'COMPANY_ADMIN') || null;

@@ -126,7 +126,7 @@ export default function Invoices() {
     keepPreviousData: true,
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsFailed } = useQuery({
     queryKey: ['company', 'invoices', 'stats'],
     queryFn: async () => {
       const { data: body } = await api.get('/v1/invoices/stats');
@@ -297,6 +297,7 @@ export default function Invoices() {
           value={formatNumber(stats?.total ?? 0)}
           hint={`${formatNumber(stats?.draftCount ?? 0)} drafts awaiting issue`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="brand"
         />
         <StatCard
@@ -305,6 +306,7 @@ export default function Invoices() {
           value={money(stats?.outstanding ?? 0)}
           hint={`${formatNumber(stats?.overdueCount ?? 0)} overdue invoices`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="warning"
         />
         <StatCard
@@ -313,6 +315,7 @@ export default function Invoices() {
           value={money(stats?.overdueAmount ?? 0)}
           hint="Past the due date and unpaid"
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="destructive"
         />
         <StatCard
@@ -323,6 +326,7 @@ export default function Invoices() {
             stats?.creditNoteTotal ?? 0
           )}`}
           loading={statsLoading}
+          unavailable={statsFailed && !stats}
           tone="success"
         />
       </div>

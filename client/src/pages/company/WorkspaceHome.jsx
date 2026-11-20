@@ -77,7 +77,7 @@ export default function WorkspaceHome() {
   const { user, company } = useAuth();
   const { can } = usePermissions();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError: homeFailed } = useQuery({
     queryKey: DASHBOARD_KEY,
     queryFn: fetchDashboardSummary,
     retry: 1,
@@ -192,6 +192,7 @@ export default function WorkspaceHome() {
           value={money(summary.outstanding)}
           hint="To be collected"
           loading={isLoading}
+          unavailable={homeFailed && !data}
           tone="muted"
         />
         <StatCard
@@ -200,6 +201,7 @@ export default function WorkspaceHome() {
           value={formatNumber(summary.overdueCount ?? 0)}
           hint="Past their due date"
           loading={isLoading}
+          unavailable={homeFailed && !data}
           tone="destructive"
         />
       </div>
@@ -210,6 +212,7 @@ export default function WorkspaceHome() {
           value={formatMoney(summary.salesToday ?? 0, company?.currency || 'INR')}
           hint={`${formatNumber(summary.ordersToday ?? 0)} orders booked`}
           loading={isLoading}
+          unavailable={homeFailed && !data}
           tone="brand"
         />
         <StatCard
@@ -218,6 +221,7 @@ export default function WorkspaceHome() {
           value={formatMoney(summary.salesMtd ?? 0, company?.currency || 'INR')}
           hint={`Invoiced: ${formatMoney(summary.invoicedMtd ?? 0, company?.currency || 'INR')}`}
           loading={isLoading}
+          unavailable={homeFailed && !data}
           tone="success"
         />
         <StatCard
@@ -226,6 +230,7 @@ export default function WorkspaceHome() {
           value={formatMoney(summary.collectionsMtd ?? 0, company?.currency || 'INR')}
           hint={`${formatNumber(summary.paymentsMtd ?? 0)} receipts`}
           loading={isLoading}
+          unavailable={homeFailed && !data}
           tone="warning"
         />
         <StatCard
@@ -234,6 +239,7 @@ export default function WorkspaceHome() {
           value={formatMoney(summary.outstanding ?? 0, company?.currency || 'INR')}
           hint={`${formatNumber(summary.overdueCount ?? 0)} overdue invoices`}
           loading={isLoading}
+          unavailable={homeFailed && !data}
           tone="muted"
         />
       </div>

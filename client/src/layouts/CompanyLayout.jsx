@@ -5,6 +5,7 @@ import Sidebar from '@/components/shell/Sidebar';
 import Topbar from '@/components/shell/Topbar';
 import BottomNav from '@/components/shell/BottomNav';
 import { LoadingState, Progress } from '@/components/ui/misc';
+import PageErrorBoundary from '@/components/shell/PageErrorBoundary';
 import { useAuth } from '@/hooks/useAuth';
 import { useAccessRefresh } from '@/hooks/useAccessRefresh';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -89,11 +90,13 @@ export default function CompanyLayout() {
       <div className="flex min-w-0 flex-1 flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
         <Topbar />
         <main className="mx-auto w-full max-w-[1600px] flex-1 px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-          <Suspense fallback={<LoadingState />}>
-            <FieldDayGate pathname={location.pathname}>
-              <Outlet key={location.pathname} />
-            </FieldDayGate>
-          </Suspense>
+          <PageErrorBoundary key={location.pathname}>
+            <Suspense fallback={<LoadingState />}>
+              <FieldDayGate pathname={location.pathname}>
+                <Outlet key={location.pathname} />
+              </FieldDayGate>
+            </Suspense>
+          </PageErrorBoundary>
         </main>
         <footer className="border-t px-4 py-3 text-center text-[11px] text-muted-foreground sm:px-6">
           {company?.name ? `${company.name} · ` : ''}Powered by <span className="font-semibold">ElevIQ SFA</span> ·

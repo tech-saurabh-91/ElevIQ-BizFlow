@@ -19,21 +19,22 @@ export const usePayablesSummary = (enabled = true) =>
 
 /** Payable / overdue / billed / paid this month. */
 export function PayablesStats({ currency }) {
-  const { data = {}, isLoading } = usePayablesSummary();
+  const { data = {}, isLoading, isError } = usePayablesSummary();
+  const failed = isError && !Object.keys(data).length;
   const money = (v) => formatMoney(v || 0, currency);
   return (
     <div className={STAT_GRID}>
-      <StatCard label="We owe suppliers" value={money(data.payable)} hint={`${data.openBills || 0} open bill(s)`} icon={Wallet} loading={isLoading} />
+      <StatCard label="We owe suppliers" value={money(data.payable)} hint={`${data.openBills || 0} open bill(s)`} icon={Wallet} loading={isLoading} unavailable={failed} />
       <StatCard
         label="Overdue"
         value={money(data.overdueAmount)}
         hint={`${data.overdueBills || 0} bill(s) past due`}
         icon={AlertTriangle}
         tone={data.overdueBills ? 'destructive' : 'muted'}
-        loading={isLoading}
+        loading={isLoading} unavailable={failed}
       />
-      <StatCard label="Billed this month" value={money(data.billedThisMonth)} hint={`Input tax ${money(data.inputTaxThisMonth)}`} icon={ReceiptIndianRupee} tone="info" loading={isLoading} />
-      <StatCard label="Paid this month" value={money(data.paidThisMonth)} icon={CalendarClock} tone="success" loading={isLoading} />
+      <StatCard label="Billed this month" value={money(data.billedThisMonth)} hint={`Input tax ${money(data.inputTaxThisMonth)}`} icon={ReceiptIndianRupee} tone="info" loading={isLoading} unavailable={failed} />
+      <StatCard label="Paid this month" value={money(data.paidThisMonth)} icon={CalendarClock} tone="success" loading={isLoading} unavailable={failed} />
     </div>
   );
 }
