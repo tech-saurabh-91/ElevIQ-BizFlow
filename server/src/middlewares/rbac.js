@@ -24,11 +24,18 @@ export const userOverride = (user, permission, now = new Date()) => {
   return row;
 };
 
+/** The profile's Allow / Deny for a permission (profiles have no end date). */
+export const profileOverride = (user, permission) => {
+  const list = user?.profile?.isActive === false ? [] : user?.profile?.overrides || [];
+  const row = list.find((o) => o?.permission === permission);
+  return row && ['ALLOW', 'DENY'].includes(row.effect) ? row : null;
+};
+
 /**
  * Whether a company user may do `permission`, and why:
- * admin > sales type > the user's own Deny / Allow > the company's role
- * matrix > the shipped defaults. Unknown permissions are refused.
- * @returns {{ allowed: boolean, source: 'ADMIN'|'SALES_TYPE'|'USER_DENY'|'USER_ALLOW'|'ROLE'|'UNKNOWN', until?: Date|null }}
+ * admin > sales type > the user's own Deny / Allow > their access profile >
+ * the company's role matrix > the shipped defaults. Unknown permissions are refused.
+ * @returns {{ allowed: boolean, source: 'ADMIN'|'SALES_TYPE'|'USER_DENY'|'USER_ALLOW'|'PROFILE_DENY'|'PROFILE_ALLOW'|'ROLE'|'UNKNOWN', until?: Date|null }}
  */
 export const accessFor = (user, settings, permission, now = new Date()) => {
   if (user?.role === COMPANY_ROLES.COMPANY_ADMIN) return { allowed: true, source: 'ADMIN' };
@@ -37,7 +44,34 @@ export const accessFor = (user, settings, permission, now = new Date()) => {
   if (blockedBySalesType(user, permission)) return { allowed: false, source: 'SALES_TYPE' };
   const own = userOverride(user, permission, now);
   if (own) return { allowed: own.effect === 'ALLOW', source: own.effect === 'ALLOW' ? 'USER_ALLOW' : 'USER_DENY', until: own.until || null };
+  const prof = profileOverride(user, permission);
+  if (prof) return { allowed: prof.effect === 'ALLOW', source: prof.effect === 'ALLOW' ? 'PROFILE_ALLOW' : 'PROFILE_DENY' };
   return { allowed: roles.includes(user?.role), source: 'ROLE' };
+};
+
+/** Whose records a role sees when nothing else is set. */
+export const ROLE_DATA_SCOPE = Object.freeze({ SALESMAN: 'OWN', MANAGER: 'TEAM' });
+
+/**
+ * Whose records this user sees: 'OWN' | 'TEAM' | 'ALL', and where that came
+ * from (the user, their profile or their role). Admins see everything.
+ */
+export const dataScopeFor = (user) => {
+  if (!user || user.role === COMPANY_ROLES.COMPANY_ADMIN) return { level: 'ALL', source: 'ADMIN' };
+  if (user.dataScope) return { level: user.dataScope, source: 'USER' };
+  const fromProfile = user.profile?.isActive === false ? '' : user.profile?.dataScope;
+  if (fromProfile) return { level: fromProfile, source: 'PROFILE' };
+  return { level: ROLE_DATA_SCOPE[user.role] || 'ALL', source: 'ROLE' };
+};
+
+/** Ceilings for this user: their own, else their profile's; null = none. Admins have none. */
+export const limitsFor = (user) => {
+  const keys = ['maxDiscountPercent', 'maxApproveAmount'];
+  if (!user || user.role === COMPANY_ROLES.COMPANY_ADMIN) return Object.fromEntries(keys.map((k) => [k, null]));
+  const own = user.limits || {};
+  const prof = user.profile?.isActive === false ? {} : user.profile?.limits || {};
+  const pick = (k) => (own[k] !== null && own[k] !== undefined ? Number(own[k]) : prof[k] !== null && prof[k] !== undefined ? Number(prof[k]) : null);
+  return Object.fromEntries(keys.map((k) => [k, pick(k)]));
 };
 
 const effectivePermission = (req, permission) => accessFor(req.user, req.settings, permission).allowed;

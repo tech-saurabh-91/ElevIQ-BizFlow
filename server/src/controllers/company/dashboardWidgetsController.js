@@ -22,7 +22,7 @@ export const myWidgets = asyncHandler(async (req, res) => {
     role: req.user.role,
     companyId: req.companyId,
     tz: req.company?.timezone || settings?.timezone || DEFAULT_TZ,
-    user: { id: req.user.id, role: req.user.role, teamIds: req.dataScope?.teamIds || [] },
+    user: { id: req.user.id, role: req.user.role, teamIds: req.dataScope?.teamIds || [], ...(req.dataScope && 'ids' in req.dataScope ? { scopeIds: req.dataScope.ids } : {}) },
   };
   const mine = DASHBOARD_WIDGETS.filter((w) => widgetOn(w, ctx));
   // One slow or failing widget must not take the dashboard down.

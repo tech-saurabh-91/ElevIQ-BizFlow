@@ -19,7 +19,10 @@ import {
   MAX_ACCESS_DAYS,
   isSensitivePermission,
 } from '../../config/constants.js';
-import { accessFor, matrixRoles, userOverride } from '../../middlewares/rbac.js';
+import { accessFor, matrixRoles, userOverride, profileOverride, dataScopeFor, limitsFor, ROLE_DATA_SCOPE } from '../../middlewares/rbac.js';
+import { withProfiles } from '../../services/accessService.js';
+import AccessProfile from '../../models/AccessProfile.js';
+import mongoose from 'mongoose';
 import { notifyUsers } from '../../services/notifyService.js';
 import { toPlain, loadDoc, assertRef, normalizeRefs, markSetup, assertLimit } from './_helpers.js';
 
@@ -132,6 +135,23 @@ const assertNoEscalation = (req, target, payload = {}) => {
   }
 };
 
+/** Allow / Deny lines: known permissions, each once, nothing admin-only allowed. */
+const checkOverrides = (list, path) => {
+  const errors = [];
+  const seen = new Set();
+  (list || []).forEach((o, i) => {
+    const field = `${path}.${i}`;
+    if (!DEFAULT_PERMISSIONS[o.permission]) return errors.push({ field, message: `Unknown permission "${o.permission}"` });
+    if (seen.has(o.permission)) return errors.push({ field, message: `"${o.permission}" is listed twice` });
+    seen.add(o.permission);
+    if (o.effect === 'ALLOW' && ADMIN_ONLY_PERMISSIONS.includes(o.permission)) {
+      errors.push({ field, message: `"${o.permission}" stays with company admins; it cannot be given to one user` });
+    }
+    return null;
+  });
+  return errors;
+};
+
 /** Overrides still in force (a lapsed temporary grant drops out). */
 const liveOverrides = (user, now = new Date()) =>
   (user?.accessOverrides || []).filter((o) => !o.until || new Date(o.until) >= now);
@@ -164,6 +184,7 @@ export const list = asyncHandler(async (req, res) => {
       { path: 'reportingManager', select: 'name email role' },
       { path: 'warehouse', select: 'name code' },
       { path: 'routes', select: 'name code' },
+      { path: 'accessProfile', select: 'name isActive' },
     ],
   });
 
@@ -358,17 +379,20 @@ export const stats = asyncHandler(async (req, res) => {
 // Per-user access (company admin only)
 // ---------------------------------------------------------------------------
 const ROLE_LABEL = (role) => role.charAt(0) + role.slice(1).toLowerCase().replace(/_/g, ' ');
+const SCOPE_LABEL = { OWN: 'Own records', TEAM: 'Own + team', ALL: 'Whole company' };
 
-/** Every permission for this user: what the role gives, their own setting, and the result. */
+/** Every permission for this user: role, profile, their own setting, and the result. */
 const accessView = (user, settings) => {
   const now = new Date();
   const permissions = Object.keys(DEFAULT_PERMISSIONS).map((key) => {
     const own = (user.accessOverrides || []).find((o) => o.permission === key) || null;
     const lapsed = own?.until && new Date(own.until) < now;
+    const fromProfile = profileOverride(user, key);
     const result = accessFor(user, settings, key, now);
     return {
       key,
       roleAllowed: user.role === COMPANY_ROLES.COMPANY_ADMIN || (matrixRoles(settings, key) || []).includes(user.role),
+      profileEffect: fromProfile?.effect || null,
       override: own ? { effect: own.effect, until: own.until || null, note: own.note || '', byName: own.byName || '', at: own.at || null, lapsed: Boolean(lapsed) } : null,
       allowed: result.allowed,
       source: result.source,
@@ -377,27 +401,48 @@ const accessView = (user, settings) => {
       adminOnly: ADMIN_ONLY_PERMISSIONS.includes(key),
     };
   });
+  const scope = dataScopeFor(user);
   return {
     user: { id: String(user._id), name: user.name, role: user.role, salesType: user.salesType || 'BOTH', isActive: user.isActive },
     customCount: liveOverrides(user, now).length,
     maxDays: MAX_ACCESS_DAYS,
+    profile: user.profile ? { id: String(user.profile._id), name: user.profile.name, isActive: user.profile.isActive !== false } : null,
+    dataScope: { own: user.dataScope || '', level: scope.level, source: scope.source, roleDefault: ROLE_DATA_SCOPE[user.role] || 'ALL' },
+    limits: {
+      own: { maxDiscountPercent: user.limits?.maxDiscountPercent ?? null, maxApproveAmount: user.limits?.maxApproveAmount ?? null },
+      profile: user.profile ? { maxDiscountPercent: user.profile.limits?.maxDiscountPercent ?? null, maxApproveAmount: user.profile.limits?.maxApproveAmount ?? null } : null,
+      effective: limitsFor(user),
+    },
+    hasTeam: (user.teamMembers || []).length > 0,
     permissions,
   };
 };
 
+const loadWithProfile = async (id) => {
+  const doc = await loadDoc(User, id, { label: 'User' });
+  const [withProfile] = await withProfiles([doc]);
+  return { doc, view: withProfile };
+};
+
 /** GET /users/:id/access */
 export const getAccess = asyncHandler(async (req, res) => {
-  const doc = await loadDoc(User, req.params.id, { label: 'User' });
+  const { view } = await loadWithProfile(req.params.id);
   const settings = await Setting.forCompany(req.companyId);
-  return success(res, { data: accessView(doc, settings) });
+  return success(res, { data: accessView(view, settings) });
 });
 
 const describe = (list) =>
   list.length
     ? list.map((o) => `${o.effect === 'ALLOW' ? 'Allow' : 'Deny'} ${o.permission}${o.until ? ` until ${new Date(o.until).toISOString().slice(0, 10)}` : ''}`).join('; ')
     : 'none';
+const describeExtras = (x) =>
+  `profile ${x.profile || 'none'}; data scope ${x.dataScope ? SCOPE_LABEL[x.dataScope] : 'by role'}; discount limit ${x.maxDiscountPercent ?? 'none'}; approval limit ${x.maxApproveAmount ?? 'none'}`;
 
-/** PUT /users/:id/access { overrides: [{ permission, effect, until?, note? }] } - replaces the user's own access. */
+/**
+ * PUT /users/:id/access { overrides, profileId?, dataScope?, limits? }
+ * Replaces the user's own Allow / Deny; profile, data scope and limits change
+ * only when sent.
+ */
 export const saveAccess = asyncHandler(async (req, res) => {
   const doc = await loadDoc(User, req.params.id, { label: 'User' });
   if (String(doc._id) === String(req.user.id)) {
@@ -409,19 +454,12 @@ export const saveAccess = asyncHandler(async (req, res) => {
 
   const now = new Date();
   const latest = new Date(now.getTime() + MAX_ACCESS_DAYS * 86400000);
-  const errors = [];
-  const seen = new Set();
+  const errors = checkOverrides(req.body.overrides, 'body.overrides');
   const previous = new Map((doc.accessOverrides || []).map((o) => [o.permission, o]));
   const next = [];
 
   req.body.overrides.forEach((o, i) => {
     const field = `body.overrides.${i}`;
-    if (!DEFAULT_PERMISSIONS[o.permission]) return errors.push({ field, message: `Unknown permission "${o.permission}"` });
-    if (seen.has(o.permission)) return errors.push({ field, message: `"${o.permission}" is listed twice` });
-    seen.add(o.permission);
-    if (o.effect === 'ALLOW' && ADMIN_ONLY_PERMISSIONS.includes(o.permission)) {
-      return errors.push({ field, message: `"${o.permission}" stays with company admins; it cannot be given to one user` });
-    }
     if (o.until) {
       if (o.until <= now) return errors.push({ field: `${field}.until`, message: 'The end date must be in the future' });
       if (o.until > latest) return errors.push({ field: `${field}.until`, message: `A temporary setting can run at most ${MAX_ACCESS_DAYS} days` });
@@ -435,26 +473,56 @@ export const saveAccess = asyncHandler(async (req, res) => {
     );
     return null;
   });
+
+  let profile = undefined;
+  if (req.body.profileId !== undefined) {
+    if (req.body.profileId === null) profile = null;
+    else {
+      profile = await AccessProfile.findById(req.body.profileId).lean();
+      if (!profile) errors.push({ field: 'body.profileId', message: 'Access profile not found' });
+      else if (profile.isActive === false) errors.push({ field: 'body.profileId', message: 'This access profile is switched off' });
+    }
+  }
   if (errors.length) {
     throw new AppError('Some access settings are not valid', { status: 422, code: 'VALIDATION_ERROR', errors });
   }
 
+  const [beforeView] = await withProfiles([doc]);
+  const extrasOf = (u, p) => ({
+    profile: p?.name || null,
+    dataScope: u.dataScope || '',
+    maxDiscountPercent: u.limits?.maxDiscountPercent ?? null,
+    maxApproveAmount: u.limits?.maxApproveAmount ?? null,
+  });
+  const beforeExtras = extrasOf(doc, beforeView.profile);
   const before = liveOverrides(doc, now).map((o) => ({ permission: o.permission, effect: o.effect, until: o.until }));
+
   doc.accessOverrides = next;
+  if (profile !== undefined) doc.accessProfile = profile ? profile._id : null;
+  if (req.body.dataScope !== undefined) doc.dataScope = req.body.dataScope || '';
+  if (req.body.limits) {
+    ['maxDiscountPercent', 'maxApproveAmount'].forEach((k) => {
+      if (req.body.limits[k] !== undefined) doc.set(`limits.${k}`, req.body.limits[k]);
+    });
+  }
   await doc.save();
+
+  const { view } = await loadWithProfile(doc._id);
   const after = next.map((o) => ({ permission: o.permission, effect: o.effect, until: o.until }));
+  const afterExtras = extrasOf(doc, view.profile);
+  const changed = describe(before) !== describe(after) || describeExtras(beforeExtras) !== describeExtras(afterExtras);
 
   audit(req, {
     action: AUDIT_ACTIONS.UPDATE,
     entityType: 'User',
     entityId: doc._id,
     entityLabel: doc.name,
-    before: { accessOverrides: before },
-    after: { accessOverrides: after },
-    description: `Access of "${doc.name}" (${ROLE_LABEL(doc.role)}) changed: ${describe(after)}`,
+    before: { accessOverrides: before, ...beforeExtras },
+    after: { accessOverrides: after, ...afterExtras },
+    description: `Access of "${doc.name}" (${ROLE_LABEL(doc.role)}) changed: ${describe(after)}; ${describeExtras(afterExtras)}`,
     severity: 'WARN',
   });
-  if (describe(before) !== describe(after)) {
+  if (changed) {
     notifyUsers([doc._id], {
       type: 'SYSTEM',
       title: 'Your access was updated',
@@ -465,7 +533,7 @@ export const saveAccess = asyncHandler(async (req, res) => {
   }
 
   const settings = await Setting.forCompany(req.companyId);
-  return success(res, { message: 'Access saved', data: accessView(doc, settings) });
+  return success(res, { message: 'Access saved', data: accessView(view, settings) });
 });
 
 /** GET /users/access/who?permission=invoices.print - who can do it, and why. */
@@ -473,12 +541,24 @@ export const whoCan = asyncHandler(async (req, res) => {
   const { permission } = req.query;
   if (!DEFAULT_PERMISSIONS[permission]) throw new BadRequestError(`Unknown permission "${permission}"`, 'VALIDATION_ERROR');
   const settings = await Setting.forCompany(req.companyId);
-  const users = await User.find({ isActive: true }).select('name email phone role salesType accessOverrides').sort({ name: 1 }).lean();
+  const users = await withProfiles(
+    await User.find({ isActive: true }).select('name email phone role salesType accessOverrides accessProfile').sort({ name: 1 }).lean()
+  );
   const now = new Date();
   const rows = users.map((u) => {
     const r = accessFor(u, settings, permission, now);
     const own = userOverride(u, permission, now);
-    return { id: String(u._id), name: u.name, email: u.email || '', role: u.role, salesType: u.salesType || 'BOTH', allowed: r.allowed, source: r.source, until: own?.until || null };
+    return {
+      id: String(u._id),
+      name: u.name,
+      email: u.email || '',
+      role: u.role,
+      salesType: u.salesType || 'BOTH',
+      profile: u.profile?.name || null,
+      allowed: r.allowed,
+      source: r.source,
+      until: own?.until || null,
+    };
   });
   return success(res, {
     data: {
@@ -490,4 +570,131 @@ export const whoCan = asyncHandler(async (req, res) => {
   });
 });
 
-export default { list, get, create, update, remove, resetPassword, stats, getAccess, saveAccess, whoCan };
+// ---------------------------------------------------------------------------
+// Access profiles (company admin only)
+// ---------------------------------------------------------------------------
+const profileRow = (p, userCount = 0) => ({
+  id: String(p._id),
+  name: p.name,
+  description: p.description || '',
+  overrides: (p.overrides || []).map((o) => ({ permission: o.permission, effect: o.effect })),
+  dataScope: p.dataScope || '',
+  limits: { maxDiscountPercent: p.limits?.maxDiscountPercent ?? null, maxApproveAmount: p.limits?.maxApproveAmount ?? null },
+  isActive: p.isActive !== false,
+  userCount,
+  updatedAt: p.updatedAt,
+});
+
+/** GET /access-profiles */
+export const listProfiles = asyncHandler(async (req, res) => {
+  const [profiles, counts] = await Promise.all([
+    AccessProfile.find({}).sort({ name: 1 }).lean(),
+    User.aggregate([
+      { $match: { companyId: new mongoose.Types.ObjectId(String(req.companyId)), isDeleted: { $ne: true }, accessProfile: { $ne: null } } },
+      { $group: { _id: '$accessProfile', n: { $sum: 1 } } },
+    ]),
+  ]);
+  const byId = new Map(counts.map((c) => [String(c._id), c.n]));
+  return success(res, { data: profiles.map((p) => profileRow(p, byId.get(String(p._id)) || 0)) });
+});
+
+const profilePayload = (body) => {
+  const errors = checkOverrides(body.overrides || [], 'body.overrides');
+  if (errors.length) throw new AppError('Some access settings are not valid', { status: 422, code: 'VALIDATION_ERROR', errors });
+  const out = {};
+  ['name', 'description', 'dataScope', 'isActive'].forEach((k) => {
+    if (body[k] !== undefined) out[k] = body[k];
+  });
+  if (body.overrides) out.overrides = body.overrides.map((o) => ({ permission: o.permission, effect: o.effect }));
+  if (body.limits) {
+    ['maxDiscountPercent', 'maxApproveAmount'].forEach((k) => {
+      if (body.limits[k] !== undefined) out[`limits.${k}`] = body.limits[k];
+    });
+  }
+  return out;
+};
+
+const assertProfileName = async (name, excludeId = null) => {
+  if (!name) return;
+  const filter = { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') };
+  if (excludeId) filter._id = { $ne: excludeId };
+  if (await AccessProfile.exists(filter)) {
+    throw new AppError('An access profile with this name already exists', { status: 409, code: 'DUPLICATE', errors: [{ field: 'body.name', message: 'Name already used' }] });
+  }
+};
+
+/** POST /access-profiles */
+export const createProfile = asyncHandler(async (req, res) => {
+  const payload = profilePayload(req.body);
+  await assertProfileName(payload.name);
+  const doc = new AccessProfile({ createdBy: req.user.id, updatedBy: req.user.id });
+  doc.set(payload);
+  await doc.save();
+  audit(req, {
+    action: AUDIT_ACTIONS.CREATE,
+    entityType: 'AccessProfile',
+    entityId: doc._id,
+    entityLabel: doc.name,
+    after: profileRow(doc.toObject()),
+    description: `Access profile "${doc.name}" created`,
+    severity: 'WARN',
+  });
+  return created(res, { message: 'Access profile created', data: profileRow(doc.toObject()) });
+});
+
+/** PATCH /access-profiles/:id - applies to everyone on it at once. */
+export const updateProfile = asyncHandler(async (req, res) => {
+  const doc = await loadDoc(AccessProfile, req.params.id, { label: 'Access profile' });
+  const payload = profilePayload(req.body);
+  await assertProfileName(payload.name, doc._id);
+  const before = profileRow(doc.toObject());
+  doc.set({ ...payload, updatedBy: req.user.id });
+  await doc.save();
+  const users = await User.find({ accessProfile: doc._id, isActive: true }).select('_id').lean();
+  audit(req, {
+    action: AUDIT_ACTIONS.UPDATE,
+    entityType: 'AccessProfile',
+    entityId: doc._id,
+    entityLabel: doc.name,
+    before,
+    after: profileRow(doc.toObject()),
+    description: `Access profile "${doc.name}" changed (${users.length} user${users.length === 1 ? '' : 's'} on it)`,
+    severity: 'WARN',
+  });
+  if (users.length) {
+    notifyUsers(
+      users.map((u) => u._id),
+      { type: 'SYSTEM', title: 'Your access was updated', body: `${req.user.name || 'Your admin'} changed the "${doc.name}" access profile you are on.`, entityType: 'AccessProfile', entityId: doc._id }
+    );
+  }
+  return success(res, { message: 'Access profile saved', data: profileRow(doc.toObject(), users.length) });
+});
+
+/** DELETE /access-profiles/:id - only when nobody is on it. */
+export const removeProfile = asyncHandler(async (req, res) => {
+  const doc = await loadDoc(AccessProfile, req.params.id, { label: 'Access profile' });
+  const inUse = await User.countDocuments({ accessProfile: doc._id });
+  if (inUse) {
+    throw new AppError(`${inUse} user${inUse === 1 ? ' is' : 's are'} on this profile. Move them to another profile first, or switch it off.`, {
+      status: 409,
+      code: 'PROFILE_IN_USE',
+    });
+  }
+  const snapshot = profileRow(doc.toObject());
+  // Soft delete (kept for the audit trail); the name is freed for a new profile.
+  doc.name = `${doc.name} (deleted ${String(doc._id).slice(-6)})`.slice(0, 60);
+  await doc.save();
+  await doc.softDelete();
+  audit(req, {
+    action: AUDIT_ACTIONS.DELETE,
+    entityType: 'AccessProfile',
+    entityId: doc._id,
+    entityLabel: snapshot.name,
+    before: snapshot,
+    description: `Access profile "${snapshot.name}" deleted`,
+    severity: 'WARN',
+  });
+  return success(res, { message: 'Access profile deleted', data: { id: String(doc._id) } });
+});
+
+export default { list, get, create, update, remove, resetPassword, stats, getAccess, saveAccess, whoCan, listProfiles, createProfile, updateProfile, removeProfile };

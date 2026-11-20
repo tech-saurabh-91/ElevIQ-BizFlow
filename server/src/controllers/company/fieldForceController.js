@@ -20,7 +20,7 @@ import {
   NO_ORDER_REASONS,
 } from '../../config/constants.js';
 import { AppError, BadRequestError, ConflictError, NotFoundError } from '../../utils/errors.js';
-import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
+import { toPlain, loadDoc, refOrNull, dateOrNull, scopeIds } from './_helpers.js';
 import {
   distanceMeters,
   withinGeofence,
@@ -95,13 +95,8 @@ const round2 = (n) => Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
 
 /** Restrict to own records (SALESMAN) or team records (MANAGER). */
 const activityScope = (req, field) => {
-  const role = req.user?.role;
-  if (role === 'SALESMAN') return { [field]: req.user.id };
-  if (role === 'MANAGER') {
-    const ids = [req.user.id, ...(req.dataScope?.teamIds || [])];
-    return { [field]: { $in: ids } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { [field]: { $in: ids } } : {};
 };
 
 const settingsFieldForce = (settings) => ({
@@ -955,13 +950,8 @@ const serializeIds = (filter) => {
 
 /** Same as serializeIds but for the salesman-scope aggregate match. */
 const aggregateScopeIds = (req, field) => {
-  const role = req.user?.role;
-  const oid = (id) => new mongoose.Types.ObjectId(id);
-  if (role === 'SALESMAN') return { [field]: oid(req.user.id) };
-  if (role === 'MANAGER') {
-    return { [field]: { $in: [req.user.id, ...(req.dataScope?.teamIds || [])].map(oid) } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { [field]: { $in: ids.map((id) => new mongoose.Types.ObjectId(String(id))) } } : {};
 };
 
 export default {

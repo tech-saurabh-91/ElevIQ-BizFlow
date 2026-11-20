@@ -256,6 +256,14 @@ export const GUIDES = [
         '"Who can do what" on the Users page lists everyone who can do one thing, and why.',
         'Every change is in the audit trail.',
       ] },
+      { h: 'Whose records, limits and profiles' },
+      { list: [
+        'Whose records they see: Own (only theirs), Own + team (theirs and the people who report to them) or Whole company. By default a salesman sees their own and a manager their team.',
+        'Max discount by hand: the most a user may type as a discount, or cut a price below the price list, on a line. Leave empty for no limit.',
+        'Approve up to: the largest order or expense the user may approve.',
+        'Access profiles (Users & Teams → Access profiles): one set of Allow / Deny, records and limits for several users, such as “Senior presales”. Change the profile and it changes for everyone on it. A user’s own settings still win.',
+        'Maker-checker (Company settings → Order rules): when on, nobody approves an order, expense, stock request or day cashout they raised themselves. Company admins are exempt.',
+      ] },
     ],
   },
   {

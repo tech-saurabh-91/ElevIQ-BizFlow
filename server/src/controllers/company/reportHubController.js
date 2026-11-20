@@ -43,7 +43,7 @@ const contextOf = async (req) => {
     companyId: req.companyId,
     tz: req.company?.timezone || settings?.timezone || DEFAULT_TZ,
     role: req.user.role,
-    user: { id: req.user.id, role: req.user.role, teamIds: req.dataScope?.teamIds || [] },
+    user: { id: req.user.id, role: req.user.role, teamIds: req.dataScope?.teamIds || [], ...(req.dataScope && 'ids' in req.dataScope ? { scopeIds: req.dataScope.ids } : {}) },
   };
 };
 

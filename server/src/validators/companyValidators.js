@@ -432,6 +432,12 @@ export const userResetPasswordSchema = z.object({
   newPassword: PASSWORD_RULES,
 });
 
+/** Ceilings: null = none. */
+const accessLimits = z.object({
+  maxDiscountPercent: z.coerce.number().min(0).max(100).nullable().optional(),
+  maxApproveAmount: z.coerce.number().min(0).max(1e12).nullable().optional(),
+});
+
 /** PUT /users/:id/access - the user's whole list of own Allow / Deny (replaces it). */
 export const userAccessSchema = z.object({
   overrides: z
@@ -444,7 +450,21 @@ export const userAccessSchema = z.object({
       })
     )
     .max(300),
+  profileId: objectIdSchema.nullable().optional(),
+  dataScope: z.enum(['', 'OWN', 'TEAM', 'ALL']).optional(),
+  limits: accessLimits.optional(),
 });
+
+const accessProfileBase = {
+  name: z.string().trim().min(2, 'Name is required').max(60),
+  description: z.string().trim().max(200).optional(),
+  overrides: z.array(z.object({ permission: z.string().trim().min(3).max(80), effect: z.enum(['ALLOW', 'DENY']) })).max(300).optional(),
+  dataScope: z.enum(['', 'OWN', 'TEAM', 'ALL']).optional(),
+  limits: accessLimits.optional(),
+  isActive: z.boolean().optional(),
+};
+export const accessProfileCreateSchema = z.object(accessProfileBase);
+export const accessProfileUpdateSchema = z.object({ ...accessProfileBase, name: accessProfileBase.name.optional() });
 
 export const userAccessWhoSchema = z.object({
   permission: z.string().trim().min(3).max(80),
@@ -560,6 +580,13 @@ export const settingsUpdateSchema = z.object({
     .partial()
     .optional(),
 
+  approvals: z
+    .object({
+      makerChecker: z.boolean().optional(),
+    })
+    .partial()
+    .optional(),
+
   collections: z
     .object({
       overdueReminderDays: z.coerce.number().int().min(0).max(90).optional(),
@@ -646,6 +673,8 @@ export default {
   userResetPasswordSchema,
   userAccessSchema,
   userAccessWhoSchema,
+  accessProfileCreateSchema,
+  accessProfileUpdateSchema,
   settingsUpdateSchema,
   rolePermissionsSchema,
   auditListQuerySchema,

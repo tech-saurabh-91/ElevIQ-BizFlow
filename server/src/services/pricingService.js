@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import Product from '../models/Product.js';
 import DiscountRule from '../models/DiscountRule.js';
 import Scheme from '../models/Scheme.js';
-import { BadRequestError } from '../utils/errors.js';
+import { AppError, BadRequestError } from '../utils/errors.js';
 import { round2 } from '../models/helpers.js';
 import { resolveLinePricing, priceLineValues, assertPackQty, computeTotals, wholeUnitCodes, assertWholeQty, assertPriced } from './orderService.js';
 
@@ -101,11 +101,12 @@ const loadProductsFor = async (productMap, wanted) => {
  *
  * @param {Array} items  [{product, qty, unit?, unitPrice?, discountPercent?, taxRate?, note?}]
  *                       (free lines from an earlier save are ignored - they are rebuilt)
- * @param {object} opts  { products: Map, priceList, settings, customer, date, canOverride, verb }
+ * @param {object} opts  { products: Map, priceList, settings, customer, date, canOverride, maxManualDiscount, verb }
+ *   maxManualDiscount: the user's ceiling (%) on a hand-typed discount or price cut; null = none.
  * @returns {{ lines, totals, taxBreakup, meta, applied, offers }}
  */
 export const buildSaleLines = async (items, opts) => {
-  const { priceList, settings, customer, date, canOverride = false, verb = 'sold' } = opts;
+  const { priceList, settings, customer, date, canOverride = false, maxManualDiscount = null, verb = 'sold' } = opts;
   const products = opts.products || new Map();
   const paid = (items || []).filter((i) => !i.isFree);
   if (!paid.length) throw new BadRequestError('Add at least one product', 'VALIDATION_ERROR');
@@ -144,6 +145,26 @@ export const buildSaleLines = async (items, opts) => {
       throw new BadRequestError(`${product.name}: price ${base.unitPrice} is more than the MRP ${mrpForUnit}`, 'VALIDATION_ERROR', [
         { field: `items.${index}.unitPrice`, message: `Cannot be more than the MRP ${mrpForUnit}` },
       ]);
+    }
+
+    // The user's discount ceiling: a typed discount, or a typed price below
+    // the price list, may not go past it.
+    if (maxManualDiscount !== null && maxManualDiscount !== undefined && (manualPrice || manualDiscount)) {
+      const limit = Number(maxManualDiscount);
+      const typed = manualDiscount ? Number(input.discountPercent || 0) : 0;
+      let cut = 0;
+      if (manualPrice) {
+        const list = Number(resolveLinePricing(product, priceList, { qty: input.qty, unit: input.unit }).unitPrice || 0);
+        if (list > 0) cut = Math.max(0, ((list - Number(base.unitPrice)) / list) * 100);
+      }
+      const total = 100 - (100 - cut) * (1 - typed / 100);
+      if (total > limit + 0.001) {
+        throw new AppError(`${product.name}: you can give at most ${limit}% discount by hand (this line is ${round2(total)}%). Ask someone with a higher limit.`, {
+          status: 422,
+          code: 'DISCOUNT_LIMIT',
+          errors: [{ field: `items.${index}.${manualDiscount ? 'discountPercent' : 'unitPrice'}`, message: `At most ${limit}% for you` }],
+        });
+      }
     }
 
     let tradeDiscount = Number(base.discountPercent || 0);

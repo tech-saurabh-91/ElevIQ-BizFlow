@@ -8,6 +8,8 @@ import User from '../models/User.js';
 import PlatformUser from '../models/PlatformUser.js';
 import Company from '../models/Company.js';
 import Session from '../models/Session.js';
+import AccessProfile from '../models/AccessProfile.js';
+import { dataScopeFor } from './rbac.js';
 import Setting from '../models/Setting.js';
 import logger from '../utils/logger.js';
 
@@ -71,6 +73,10 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
       role: actingAs.role,
       salesType: actingAs.salesType || 'BOTH',
       accessOverrides: actingAs.accessOverrides || [],
+      dataScope: actingAs.dataScope || '',
+      limits: actingAs.limits || {},
+      profile: actingAs.accessProfile ? await AccessProfile.findOne({ _id: actingAs.accessProfile, companyId: company._id }).lean() : null,
+      reportingManager: actingAs.reportingManager ? String(actingAs.reportingManager) : null,
       scope: 'impersonate',
       companyId: String(company._id),
       companyName: company.businessName,
@@ -81,6 +87,7 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
     req.companyId = String(company._id);
     req.company = company;
     req.isImpersonating = true;
+    req.dataScope = scopeOf(req.user, actingAs);
 
     return runWithContext(
       // impersonatedBy is the platform admin, so audit trails show who really acted.
@@ -186,6 +193,9 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
     role: user.role,
     salesType: user.salesType || 'BOTH',
     accessOverrides: user.accessOverrides || [],
+    dataScope: user.dataScope || '',
+    limits: user.limits || {},
+    profile: null,
     scope: 'company',
     companyId,
     companyName: company.businessName,
@@ -199,12 +209,11 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
   req.company = company;
   req.settings = settings;
 
-  // Scope for data-level rules: SALESMAN -> own records, MANAGER -> team.
-  req.dataScope = {
-    selfId: String(user._id),
-    managerId: user.reportingManager ? String(user.reportingManager) : null,
-    teamIds: (user.teamMembers || []).map(String),
-  };
+  // The user's access profile (shared Allow / Deny, data scope, limits).
+  if (user.accessProfile) {
+    req.user.profile = await AccessProfile.findOne({ _id: user.accessProfile, companyId }).lean();
+  }
+  req.dataScope = scopeOf(req.user, user);
 
   return runWithContext(
     {
@@ -217,6 +226,24 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
     () => next()
   );
 });
+
+/**
+ * Whose records this request may see. `level` OWN / TEAM / ALL (user, then
+ * profile, then role: salesman OWN, manager TEAM); `ids` the users whose
+ * records count (null = everyone).
+ */
+function scopeOf(reqUser, userDoc) {
+  const { level } = dataScopeFor(reqUser);
+  const selfId = String(userDoc._id);
+  const teamIds = (userDoc.teamMembers || []).map(String);
+  return {
+    level,
+    selfId,
+    managerId: userDoc.reportingManager ? String(userDoc.reportingManager) : null,
+    teamIds,
+    ids: level === 'OWN' ? [selfId] : level === 'TEAM' ? [selfId, ...teamIds] : null,
+  };
+}
 
 /** Require a valid session (alias kept for readability at route level). */
 export const protect = authenticate;

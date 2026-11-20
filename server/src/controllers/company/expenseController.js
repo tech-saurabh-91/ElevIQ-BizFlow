@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { assertCanApprove } from '../../services/approvalGuard.js';
 import dayjs from 'dayjs';
 import ExcelJS from 'exceljs';
 
@@ -18,7 +19,7 @@ import {
   EXPENSE_CATEGORIES,
 } from '../../config/constants.js';
 import { BadRequestError, ConflictError, ErrorCodes } from '../../utils/errors.js';
-import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
+import { toPlain, loadDoc, refOrNull, dateOrNull, scopeIds } from './_helpers.js';
 import { nextExpenseNumber } from '../../services/fieldForceService.js';
 import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
 import { companyToday, tzOf } from '../../utils/companyTime.js';
@@ -52,13 +53,8 @@ const labelOf = (d) => d?.expenseNo || (d?._id ? String(d._id) : 'Expense');
 
 /** Salesman -> own, manager -> team, others -> all. */
 const scopeFilter = (req) => {
-  const role = req.user?.role;
-  if (role === 'SALESMAN') return { claimant: req.user.id };
-  if (role === 'MANAGER') {
-    const ids = [req.user.id, ...(req.dataScope?.teamIds || [])];
-    return { claimant: { $in: ids } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { claimant: { $in: ids } } : {};
 };
 
 const pushHistory = (doc, status, req, text = '') => {
@@ -351,6 +347,7 @@ export const approve = asyncHandler(async (req, res) => {
   if (amount > Number(doc.amount || 0)) {
     throw new BadRequestError('Approved amount cannot exceed the claimed amount', 'VALIDATION_ERROR');
   }
+  assertCanApprove(req, { raisedBy: [doc.claimant, doc.createdBy], amount, label: `expense ${labelOf(doc)}` });
 
   doc.status = EXPENSE_STATUS.APPROVED;
   doc.approvedBy = req.user.id;
@@ -586,13 +583,8 @@ export const formOptions = asyncHandler(async (req, res) => {
 
 /** Same scope but with ObjectIds (for aggregate()). */
 const aggregateScope = (req) => {
-  const role = req.user?.role;
-  const oid = (id) => new mongoose.Types.ObjectId(id);
-  if (role === 'SALESMAN') return { claimant: oid(req.user.id) };
-  if (role === 'MANAGER') {
-    return { claimant: { $in: [req.user.id, ...(req.dataScope?.teamIds || [])].map(oid) } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { claimant: { $in: ids.map((id) => new mongoose.Types.ObjectId(String(id))) } } : {};
 };
 
 export default {

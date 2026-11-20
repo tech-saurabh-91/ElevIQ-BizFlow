@@ -10,7 +10,7 @@ import { listDocuments } from '../../utils/query.js';
 import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, TARGET_PERIODS, TARGET_STATUS } from '../../config/constants.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors.js';
-import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
+import { toPlain, loadDoc, refOrNull, dateOrNull, scopeIds } from './_helpers.js';
 import { periodWindow, refreshTargetAchievements } from '../../services/fieldForceService.js';
 
 /**
@@ -37,13 +37,8 @@ const labelOf = (d) => d?.name || d?.periodLabel || (d?._id ? String(d._id) : 'T
 
 /** Salesman -> own targets, manager -> own + team, admin -> all. */
 const scopeFilter = (req) => {
-  const role = req.user?.role;
-  if (role === 'SALESMAN') return { salesman: req.user.id };
-  if (role === 'MANAGER') {
-    const ids = [req.user.id, ...(req.dataScope?.teamIds || [])];
-    return { salesman: { $in: ids } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { salesman: { $in: ids } } : {};
 };
 
 // ---------------------------------------------------------------------------

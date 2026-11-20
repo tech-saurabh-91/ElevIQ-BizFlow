@@ -165,6 +165,10 @@ const schema = z.object({
     showStockOnOrder: z.boolean(),
   }),
 
+  approvals: z.object({
+    makerChecker: z.boolean(),
+  }),
+
   inventory: z.object({
     defaultWarehouse: str(40),
     lowStockThreshold: str(10),
@@ -269,6 +273,10 @@ const toDefaults = (data) => ({
     allowNegativeStock: data?.order?.allowNegativeStock ?? false,
     defaultPaymentMode: data?.order?.defaultPaymentMode || 'CREDIT',
     showStockOnOrder: data?.order?.showStockOnOrder ?? true,
+  },
+
+  approvals: {
+    makerChecker: data?.approvals?.makerChecker ?? false,
   },
 
   inventory: {
@@ -401,6 +409,7 @@ function SettingsForm({ data, canUpdate, tab }) {
         ...values.fieldForce,
         geofenceRadiusM: num(values.fieldForce.geofenceRadiusM),
       },
+      approvals: { makerChecker: Boolean(values.approvals?.makerChecker) },
     };
 
     try {
@@ -832,6 +841,12 @@ function SettingsForm({ data, canUpdate, tab }) {
                 </Select>
               </Field>
               <div className="space-y-2 sm:col-span-2">
+                <Checkbox
+                  label="Maker-checker: nobody approves what they raised"
+                  description="Orders, expenses, van stock requests and day cashouts must be approved by someone other than the person who raised them. Company admins are exempt. Each user's own approval limit is set under Users & Teams → Access."
+                  {...register('approvals.makerChecker')}
+                  disabled={disabled}
+                />
                 <Checkbox label="Reserve stock when an order is confirmed" {...register('order.reserveStockOnConfirm')} disabled={disabled} />
                 <Checkbox
                   label="Allow invoice / dispatch without enough stock"

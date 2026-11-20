@@ -254,3 +254,167 @@ describe('Who can do what', () => {
     expect((await admin.get('/api/v1/users/access/who?permission=bogus.key')).status).toBe(400);
   });
 });
+
+describe('Phase 2: data scope, limits, maker-checker, profiles', () => {
+  let Customer;
+  let Expense;
+  const asUser = (token) => ({
+    get: (url) => request.get(url).set(as(token)),
+    post: (url, body) => request.post(url).set(as(token)).send(body),
+  });
+  const save = (userId, body) => admin.put(`/api/v1/users/${userId}/access`, { overrides: [], ...body });
+  const customerNames = async (token) => (await asUser(token).get('/api/v1/customers?limit=100')).body.data.map((c) => c.name).sort();
+
+  beforeAll(async () => {
+    Customer = (await import('../src/models/Customer.js')).default;
+    Expense = (await import('../src/models/Expense.js')).default;
+    await inTenant(async () => {
+      await Customer.create({ name: 'Shop of A', code: 'SA', assignedTo: state.presaleAId });
+      await Customer.create({ name: 'Shop of B', code: 'SB', assignedTo: state.presaleBId });
+      await Customer.create({ name: 'Shop of C', code: 'SC', assignedTo: state.presaleCId });
+      // Presale C leads Presale A.
+      await User.updateOne({ _id: state.presaleCId }, { $set: { teamMembers: [state.presaleAId] } });
+      await User.updateOne({ _id: state.presaleAId }, { $set: { reportingManager: state.presaleCId } });
+    });
+  });
+
+  test('by role a salesman sees only their own customers', async () => {
+    expect(await customerNames(state.presaleB)).toEqual(['Shop of B']);
+  });
+
+  test('Team shows their own and their team’s; Whole company shows all; back to role', async () => {
+    expect((await save(state.presaleCId, { dataScope: 'TEAM' })).body.data.dataScope).toMatchObject({ level: 'TEAM', source: 'USER' });
+    expect(await customerNames(state.presaleC)).toEqual(['Shop of A', 'Shop of C']);
+    await save(state.presaleBId, { dataScope: 'ALL' });
+    expect(await customerNames(state.presaleB)).toEqual(['Shop of A', 'Shop of B', 'Shop of C']);
+    // Others still see their own only.
+    expect(await customerNames(state.presaleA)).toEqual(['Shop of A']);
+    await save(state.presaleBId, { dataScope: '' });
+    expect(await customerNames(state.presaleB)).toEqual(['Shop of B']);
+  });
+
+  test('a manager can be narrowed to their own records', async () => {
+    await save(state.managerId, { dataScope: 'OWN' });
+    expect(await customerNames(state.manager)).toEqual([]);
+    await save(state.managerId, { dataScope: '' });
+  });
+
+  test('approval limit: a manager approves expenses only up to their amount', async () => {
+    await inTenant(() => User.updateOne({ _id: state.managerId }, { $set: { teamMembers: [state.presaleAId, state.presaleBId] } }));
+    const [small, big] = await inTenant(() =>
+      Promise.all([
+        Expense.create({ expenseNo: 'EXP-1', claimant: state.presaleAId, category: 'TRAVEL', amount: 300, status: 'SUBMITTED' }),
+        Expense.create({ expenseNo: 'EXP-2', claimant: state.presaleBId, category: 'TRAVEL', amount: 800, status: 'SUBMITTED' }),
+      ])
+    );
+    expect((await save(state.managerId, { limits: { maxApproveAmount: 500 } })).body.data.limits.effective.maxApproveAmount).toBe(500);
+    const big1 = await asUser(state.manager).post(`/api/v1/field-force/expenses/${big._id}/approve`, {});
+    expect(big1.status).toBe(403);
+    expect(big1.body.code).toBe('APPROVAL_LIMIT');
+    // Approving a smaller amount of it is within the limit.
+    expect((await asUser(state.manager).post(`/api/v1/field-force/expenses/${big._id}/approve`, { approvedAmount: 450 })).status).toBe(200);
+    expect((await asUser(state.manager).post(`/api/v1/field-force/expenses/${small._id}/approve`, {})).status).toBe(200);
+    await save(state.managerId, { limits: { maxApproveAmount: null } });
+  });
+
+  test('maker-checker: with it on, nobody approves their own; admins are exempt', async () => {
+    const own = await inTenant(() => Expense.create({ expenseNo: 'EXP-3', claimant: state.managerId, category: 'FUEL', amount: 100, status: 'SUBMITTED' }));
+    const own2 = await inTenant(() => Expense.create({ expenseNo: 'EXP-4', claimant: state.managerId, category: 'FUEL', amount: 120, status: 'SUBMITTED' }));
+    expect((await admin.put('/api/v1/settings', { approvals: { makerChecker: true } })).status).toBe(200);
+    const res = await asUser(state.manager).post(`/api/v1/field-force/expenses/${own._id}/approve`, {});
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('MAKER_CHECKER');
+    // An admin may still approve it.
+    expect((await request.post(`/api/v1/field-force/expenses/${own._id}/approve`).set(as(state.admin)).send({})).status).toBe(200);
+    // Off again: the manager may approve their own.
+    await admin.put('/api/v1/settings', { approvals: { makerChecker: false } });
+    expect((await asUser(state.manager).post(`/api/v1/field-force/expenses/${own2._id}/approve`, {})).status).toBe(200);
+  });
+
+  test('discount limit: a hand-typed discount or price cut stops at the user’s ceiling', async () => {
+    const api2 = (url, body) => request.post(url).set(as(state.admin)).send(body);
+    const food = await api2('/api/v1/product-categories', { level: 'CLASSIFICATION', name: 'Food' });
+    const snacks = await api2('/api/v1/product-categories', { level: 'CATEGORY', name: 'Snacks', parent: food.body.data.id });
+    const chips = await api2('/api/v1/product-categories', { level: 'SUBCATEGORY', name: 'Chips', parent: snacks.body.data.id });
+    const product = await api2('/api/v1/products', {
+      name: 'Limit Chips',
+      classificationId: food.body.data.id,
+      categoryId: snacks.body.data.id,
+      subCategoryId: chips.body.data.id,
+      unit: 'PCS',
+      gstRate: 0,
+      mrp: 120,
+      sellingPrice: 100,
+      purchasePrice: 60,
+    });
+    expect(product.status).toBe(201);
+    const customer = await inTenant(() => Customer.findOne({ name: 'Shop of A' }).lean());
+    const preview = (token, item) =>
+      request.post('/api/v1/pricing/preview').set(as(token)).send({ customerId: String(customer._id), items: [{ product: product.body.data.id, qty: 1, ...item }] });
+
+    await save(state.managerId, { limits: { maxDiscountPercent: 10 } });
+    expect((await preview(state.manager, { discountPercent: 8 })).status).toBe(200);
+    const tooMuch = await preview(state.manager, { discountPercent: 15 });
+    expect(tooMuch.status).toBe(422);
+    expect(tooMuch.body.code).toBe('DISCOUNT_LIMIT');
+    // 100 -> 85 is a 15% cut too.
+    expect((await preview(state.manager, { unitPrice: 85 })).body.code).toBe('DISCOUNT_LIMIT');
+    expect((await preview(state.manager, { unitPrice: 92 })).status).toBe(200);
+    // Price 95 (5% cut) and 6% discount = 10.7% in all.
+    expect((await preview(state.manager, { unitPrice: 95, discountPercent: 6 })).body.code).toBe('DISCOUNT_LIMIT');
+    // Admins have no ceiling.
+    expect((await preview(state.admin, { discountPercent: 40 })).status).toBe(200);
+    await save(state.managerId, { limits: { maxDiscountPercent: null } });
+    expect((await preview(state.manager, { discountPercent: 40 })).status).toBe(200);
+  });
+
+  test('access profile: one set of access for several users, changed in one place', async () => {
+    const make = await request
+      .post('/api/v1/access-profiles')
+      .set(as(state.admin))
+      .send({ name: 'Senior presales', overrides: [{ permission: 'customers.create', effect: 'ALLOW' }], dataScope: 'ALL', limits: { maxDiscountPercent: 5 } });
+    expect(make.status).toBe(201);
+    const profileId = make.body.data.id;
+    expect((await request.post('/api/v1/access-profiles').set(as(state.admin)).send({ name: 'senior PRESALES' })).status).toBe(409);
+    // No admin-only Allow in a profile either.
+    expect((await request.post('/api/v1/access-profiles').set(as(state.admin)).send({ name: 'Bad', overrides: [{ permission: 'users.update', effect: 'ALLOW' }] })).status).toBe(422);
+
+    await save(state.presaleAId, { profileId });
+    await save(state.presaleBId, { profileId });
+    for (const token of [state.presaleA, state.presaleB]) {
+      expect((await request.post('/api/v1/customers').set(as(token)).send({})).status).toBe(422);
+      expect(await customerNames(token)).toEqual(['Shop of A', 'Shop of B', 'Shop of C']);
+    }
+    const view = (await admin.get(`/api/v1/users/${state.presaleAId}/access`)).body.data;
+    expect(view.profile).toMatchObject({ name: 'Senior presales' });
+    expect(view.permissions.find((p) => p.key === 'customers.create')).toMatchObject({ allowed: true, source: 'PROFILE_ALLOW', profileEffect: 'ALLOW' });
+    expect(view.limits.effective.maxDiscountPercent).toBe(5);
+    expect(view.dataScope).toMatchObject({ level: 'ALL', source: 'PROFILE' });
+
+    // The user's own Deny wins over the profile.
+    await save(state.presaleBId, { overrides: [{ permission: 'customers.create', effect: 'DENY' }] });
+    expect((await request.post('/api/v1/customers').set(as(state.presaleB)).send({})).status).toBe(403);
+    expect((await request.post('/api/v1/customers').set(as(state.presaleA)).send({})).status).toBe(422);
+
+    // Who can shows where it comes from.
+    const who = (await admin.get('/api/v1/users/access/who?permission=customers.create')).body.data.users;
+    expect(who.find((u) => u.id === state.presaleAId)).toMatchObject({ source: 'PROFILE_ALLOW', profile: 'Senior presales' });
+
+    // Changing the profile changes everyone on it.
+    const listed = (await admin.get('/api/v1/access-profiles')).body.data.find((p) => p.id === profileId);
+    expect(listed.userCount).toBe(2);
+    expect((await request.patch(`/api/v1/access-profiles/${profileId}`).set(as(state.admin)).send({ overrides: [] })).status).toBe(200);
+    expect((await request.post('/api/v1/customers').set(as(state.presaleA)).send({})).status).toBe(403);
+
+    // Switched off, it no longer counts; in use, it cannot be deleted.
+    await request.patch(`/api/v1/access-profiles/${profileId}`).set(as(state.admin)).send({ isActive: false });
+    expect(await customerNames(state.presaleA)).toEqual(['Shop of A']);
+    expect((await request.delete(`/api/v1/access-profiles/${profileId}`).set(as(state.admin))).body.code).toBe('PROFILE_IN_USE');
+    await save(state.presaleAId, { profileId: null });
+    await save(state.presaleBId, { profileId: null });
+    expect((await request.delete(`/api/v1/access-profiles/${profileId}`).set(as(state.admin))).status).toBe(200);
+
+    // Only admins manage profiles.
+    expect((await request.get('/api/v1/access-profiles').set(as(state.manager))).status).toBe(403);
+  });
+});

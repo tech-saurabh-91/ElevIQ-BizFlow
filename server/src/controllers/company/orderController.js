@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { assertCanApprove } from '../../services/approvalGuard.js';
 import ExcelJS from 'exceljs';
 import { renderDocumentPdf, companyBlock, addressText, dateText, lineColumns, lineRow, priceTotals, itemSummary } from '../../services/docPdf.js';
 import { amountInWords } from '../../utils/amountWords.js';
@@ -31,8 +32,7 @@ import {
   assertRef,
   refOrNull,
   dateOrNull,
-  markSetup,
-} from './_helpers.js';
+  markSetup, scopeIds } from './_helpers.js';
 import {
   stockWarnings,
   assertCreditLimit,
@@ -49,7 +49,7 @@ import {
 } from '../../services/inventoryService.js';
 import { activeVanOf, assertDayClosed, assertVanStock } from '../../services/vanService.js';
 import { buildSaleLines, repriceInput } from '../../services/pricingService.js';
-import { hasPermission } from '../../middlewares/rbac.js';
+import { hasPermission, limitsFor } from '../../middlewares/rbac.js';
 import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
 import { companyToday, tzOf } from '../../utils/companyTime.js';
 
@@ -85,24 +85,14 @@ const SORT_ALLOWED = ['orderDate', 'createdAt', 'updatedAt', 'total', 'orderNo',
 
 /** Field-level data scope: salesman -> own, manager -> team, others -> all. */
 const scopeFilter = (req) => {
-  const role = req.user?.role;
-  if (role === 'SALESMAN') return { salesman: req.user.id };
-  if (role === 'MANAGER') {
-    const ids = [req.user.id, ...(req.dataScope?.teamIds || [])];
-    return { salesman: { $in: ids } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { salesman: { $in: ids } } : {};
 };
 
 /** Same scope, but with ObjectIds because aggregate() skips casting/plugin hooks. */
 const aggregateScope = (req) => {
-  const role = req.user?.role;
-  const oid = (id) => new mongoose.Types.ObjectId(id);
-  if (role === 'SALESMAN') return { salesman: oid(req.user.id) };
-  if (role === 'MANAGER') {
-    return { salesman: { $in: [req.user.id, ...(req.dataScope?.teamIds || [])].map(oid) } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { salesman: { $in: ids.map((id) => new mongoose.Types.ObjectId(String(id))) } } : {};
 };
 
 const settingsOf = async (req) => req.settings || (await Setting.forCompany(req.companyId));
@@ -244,6 +234,7 @@ const priceOrder = async (req, customer, priceList, rawItems, settings, date = n
     customer,
     date,
     canOverride: hasPermission(req, 'pricing.override'),
+    maxManualDiscount: limitsFor(req.user).maxDiscountPercent,
     verb: 'ordered',
   });
   priced.taxBreakup = taxBreakupFor(priced.totals.taxTotal, settings, {
@@ -628,6 +619,7 @@ export const approve = asyncHandler(async (req, res) => {
       ErrorCodes.INVALID_STATUS_TRANSITION
     );
   }
+  assertCanApprove(req, { raisedBy: [order.createdBy, order.salesman], amount: Number(order.total || 0), label: `order ${order.orderNo || ''}`.trim() });
   await transition(req, order, ORDER_STATUS.CONFIRMED, {
     note: req.body?.note || 'Approved',
     extra: {

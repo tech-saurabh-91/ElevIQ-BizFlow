@@ -144,6 +144,15 @@ const settingSchema = new mongoose.Schema(
       default: () => ({}),
     },
 
+    // Approvals: maker-checker (nobody approves what they raised themselves;
+    // company admins are exempt, as the owner is often the only approver).
+    approvals: {
+      type: {
+        makerChecker: { type: Boolean, default: false },
+      },
+      default: () => ({}),
+    },
+
     // RBAC: role -> permission matrix (COMPANY_ADMIN customizable)
     rolePermissions: { type: Object, default: () => buildDefaultPermissions() },
 

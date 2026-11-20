@@ -24,7 +24,7 @@ import { listDocuments, searchRegex } from '../../utils/query.js';
 import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, INVOICE_STATUS, INVOICE_STATUS_LIST, MOVEMENT_TYPES } from '../../config/constants.js';
 import { AppError, BadRequestError, ConflictError, ErrorCodes } from '../../utils/errors.js';
-import { toPlain, loadDoc, assertRef, refOrNull, dateOrNull } from './_helpers.js';
+import { toPlain, loadDoc, assertRef, refOrNull, dateOrNull, scopeIds } from './_helpers.js';
 import {
   nextInvoiceNumber,
   dueDateFor,
@@ -38,7 +38,7 @@ import {
 } from '../../services/invoiceService.js';
 import { taxBreakupFor, sellerStateOf, buyerStateOf, computeTotals } from '../../services/orderService.js';
 import { buildSaleLines, repriceInput } from '../../services/pricingService.js';
-import { hasPermission } from '../../middlewares/rbac.js';
+import { hasPermission, limitsFor } from '../../middlewares/rbac.js';
 import { activeVanOf, assertDayClosed } from '../../services/vanService.js';
 import { recordMovement, resolveDefaultWarehouse, assertWarehouseStock, releaseReservation, reserveStock } from '../../services/inventoryService.js';
 import { baseQtyOf } from '../../services/catalogService.js';
@@ -103,18 +103,13 @@ const ownInvoices = (ids) => ({
 });
 
 const scopeFilter = (req) => {
-  const role = req.user?.role;
-  if (role === 'SALESMAN') return ownInvoices([req.user.id]);
-  if (role === 'MANAGER') return ownInvoices([req.user.id, ...(req.dataScope?.teamIds || [])]);
-  return {};
+  const ids = scopeIds(req);
+  return ids ? ownInvoices(ids) : {};
 };
 
 const aggregateScope = (req) => {
-  const role = req.user?.role;
-  const oid = (id) => new mongoose.Types.ObjectId(String(id));
-  if (role === 'SALESMAN') return ownInvoices([oid(req.user.id)]);
-  if (role === 'MANAGER') return ownInvoices([req.user.id, ...(req.dataScope?.teamIds || [])].map(oid));
-  return {};
+  const ids = scopeIds(req);
+  return ids ? ownInvoices(ids.map((id) => new mongoose.Types.ObjectId(String(id)))) : {};
 };
 
 const settingsOf = async (req) => req.settings || (await Setting.forCompany(req.companyId));
@@ -187,6 +182,7 @@ const priceDirectLines = (req, rawItems, { products, priceList, settings, custom
     customer,
     date,
     canOverride: hasPermission(req, 'pricing.override'),
+    maxManualDiscount: limitsFor(req.user).maxDiscountPercent,
     verb: 'invoiced',
   });
 

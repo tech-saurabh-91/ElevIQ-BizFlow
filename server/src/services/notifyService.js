@@ -2,6 +2,7 @@ import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import Setting from '../models/Setting.js';
 import { accessFor } from '../middlewares/rbac.js';
+import { withProfiles } from './accessService.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -42,7 +43,7 @@ export const notifyUsers = async (userIds, { type = 'SYSTEM', title, body = '', 
  */
 export const usersWithPermission = async (companyId, permission) => {
   const settings = await Setting.forCompany(companyId);
-  const users = await User.find({ isActive: true }).select('_id role salesType accessOverrides').lean();
+  const users = await withProfiles(await User.find({ isActive: true }).select('_id role salesType accessOverrides accessProfile').lean());
   return users.filter((u) => accessFor(u, settings, permission).allowed).map((u) => String(u._id));
 };
 

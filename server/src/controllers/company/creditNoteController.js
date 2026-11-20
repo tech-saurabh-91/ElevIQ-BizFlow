@@ -18,7 +18,7 @@ import { listDocuments, searchRegex } from '../../utils/query.js';
 import { audit } from '../../middlewares/audit.js';
 import { AUDIT_ACTIONS, CREDIT_NOTE_STATUS, CREDIT_NOTE_STATUS_LIST } from '../../config/constants.js';
 import { AppError, BadRequestError, ConflictError, ErrorCodes } from '../../utils/errors.js';
-import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
+import { toPlain, loadDoc, refOrNull, dateOrNull, scopeIds } from './_helpers.js';
 import { CREDIT_NOTE_REASONS } from '../../models/CreditNote.js';
 import {
   nextCreditNoteNumber,
@@ -155,23 +155,13 @@ const SORT_ALLOWED = ['creditNoteDate', 'createdAt', 'updatedAt', 'total', 'cred
 const CREDITABLE_INVOICE_STATUSES = ['ISSUED', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'];
 
 const scopeFilter = (req) => {
-  const role = req.user?.role;
-  if (role === 'SALESMAN') return { salesman: req.user.id };
-  if (role === 'MANAGER') {
-    const ids = [req.user.id, ...(req.dataScope?.teamIds || [])];
-    return { salesman: { $in: ids } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { salesman: { $in: ids } } : {};
 };
 
 const aggregateScope = (req) => {
-  const role = req.user?.role;
-  const oid = (id) => new mongoose.Types.ObjectId(id);
-  if (role === 'SALESMAN') return { salesman: oid(req.user.id) };
-  if (role === 'MANAGER') {
-    return { salesman: { $in: [req.user.id, ...(req.dataScope?.teamIds || [])].map(oid) } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { salesman: { $in: ids.map((id) => new mongoose.Types.ObjectId(String(id))) } } : {};
 };
 
 const settingsOf = async (req) => req.settings || (await Setting.forCompany(req.companyId));

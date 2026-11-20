@@ -99,3 +99,11 @@ export const groupPermissions = (keys) => {
   // Modules in the order of their names, as people read them.
   return Object.fromEntries(Object.entries(out).sort(([a], [b]) => moduleLabel(a).localeCompare(moduleLabel(b))));
 };
+
+/** Never given to one user or a profile (mirror of the server). */
+export const ADMIN_ONLY_PERMISSIONS = ['users.create', 'users.update', 'users.delete', 'settings.update'];
+
+/** Granting these asks for a confirmation (mirror of the server). */
+export const isSensitivePermission = (key) =>
+  /\.(delete|cancel|approve)$/.test(key) ||
+  ['books.close', 'audit.view', 'settings.view', 'documents.print.original', 'pricing.override', 'products.cost.view'].includes(key);

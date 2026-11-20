@@ -28,9 +28,19 @@ const SOURCE_LABEL = {
   ROLE: 'From role',
   USER_ALLOW: 'Allowed for this user',
   USER_DENY: 'Denied for this user',
+  PROFILE_ALLOW: 'Allowed by profile',
+  PROFILE_DENY: 'Denied by profile',
   SALES_TYPE: 'Blocked by sales type',
   UNKNOWN: 'Unknown',
 };
+export const SCOPE_LABEL = { OWN: 'Own records', TEAM: 'Own + team', ALL: 'Whole company' };
+const numOrNull = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
+const extrasFrom = (view) => ({
+  profileId: view?.profile?.id || '',
+  dataScope: view?.dataScope?.own || '',
+  maxDiscountPercent: view?.limits?.own?.maxDiscountPercent ?? '',
+  maxApproveAmount: view?.limits?.own?.maxApproveAmount ?? '',
+});
 const today = () => new Date().toISOString().slice(0, 10);
 const dayInput = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 /** End of the chosen day, local time. */
@@ -44,9 +54,9 @@ const editableFrom = (view) =>
       .map((p) => [p.key, { effect: p.override.effect, until: dayInput(p.override.until), note: p.override.note || '' }])
   );
 
-function EffectSwitch({ value, onChange, allowDisabled, label }) {
+export function EffectSwitch({ value, onChange, allowDisabled, label, neutralLabel = 'Role' }) {
   const options = [
-    ['', 'Role'],
+    ['', neutralLabel],
     ['ALLOW', 'Allow'],
     ['DENY', 'Deny'],
   ];
@@ -95,10 +105,19 @@ export function UserAccessDialog({ target, onClose }) {
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState(null);
   const [copyFrom, setCopyFrom] = useState('');
+  const [discard, setDiscard] = useState(false);
+  const [extras, setExtras] = useState(extrasFrom(null));
+  const setExtra = (k, v) => {
+    setExtras((prev) => ({ ...prev, [k]: v }));
+    setDirty(true);
+  };
+  // Closing with changes not saved asks first.
+  const requestClose = () => (dirty ? setDiscard(true) : onClose());
 
   useEffect(() => {
     if (view) {
       setEdits(editableFrom(view));
+      setExtras(extrasFrom(view));
       setDirty(false);
     }
   }, [view]);
@@ -109,6 +128,13 @@ export function UserAccessDialog({ target, onClose }) {
     enabled: Boolean(target?.id),
   });
   const sources = others.filter((u) => u.id !== target?.id && u.role !== 'COMPANY_ADMIN');
+  const { data: profiles = [] } = useQuery({
+    queryKey: ['company', 'access-profiles'],
+    queryFn: async () => (await api.get('/v1/access-profiles')).data?.data || [],
+    enabled: Boolean(target?.id),
+  });
+  const profile = profiles.find((p) => p.id === extras.profileId) || null;
+  const profileEffectOf = (key) => (profile && profile.isActive ? profile.overrides.find((o) => o.permission === key)?.effect || null : null);
 
   const byKey = useMemo(() => Object.fromEntries((view?.permissions || []).map((p) => [p.key, p])), [view]);
   const user = view?.user;
@@ -119,6 +145,8 @@ export function UserAccessDialog({ target, onClose }) {
     if (user?.role === 'SALESMAN' && p.channel && !salesTypeAllows(user.salesType, p.channel)) return { allowed: false, source: 'SALES_TYPE' };
     if (e?.effect === 'ALLOW') return { allowed: true, source: 'USER_ALLOW' };
     if (e?.effect === 'DENY') return { allowed: false, source: 'USER_DENY' };
+    const pe = profileEffectOf(p.key);
+    if (pe) return { allowed: pe === 'ALLOW', source: pe === 'ALLOW' ? 'PROFILE_ALLOW' : 'PROFILE_DENY' };
     return { allowed: p.roleAllowed, source: 'ROLE' };
   };
 
@@ -141,14 +169,14 @@ export function UserAccessDialog({ target, onClose }) {
     const keys = (view?.permissions || [])
       .filter((p) => {
         if (q && !`${moduleLabel(p.key.split('.')[0])} ${permissionLabel(p.key)} ${p.key}`.toLowerCase().includes(q)) return false;
-        if (show === 'custom') return Boolean(edits[p.key]);
+        if (show === 'custom') return Boolean(edits[p.key]) || Boolean(profileEffectOf(p.key));
         if (show === 'allowed') return resultOf(p).allowed;
         if (show === 'blocked') return !resultOf(p).allowed;
         return true;
       })
       .map((p) => p.key);
     return groupPermissions(keys);
-  }, [view, search, show, edits]);
+  }, [view, search, show, edits, profile]);
 
   const copyAccess = async (fromId) => {
     setCopyFrom(fromId);
@@ -175,7 +203,15 @@ export function UserAccessDialog({ target, onClose }) {
     Object.entries(edits).map(([permission, e]) => ({ permission, effect: e.effect, until: endOfDay(e.until), note: e.note || undefined }));
 
   const save = useMutation({
-    mutationFn: async () => (await api.put(`/v1/users/${target.id}/access`, { overrides: overridesPayload() })).data,
+    mutationFn: async () =>
+      (
+        await api.put(`/v1/users/${target.id}/access`, {
+          overrides: overridesPayload(),
+          profileId: extras.profileId || null,
+          dataScope: extras.dataScope,
+          limits: { maxDiscountPercent: numOrNull(extras.maxDiscountPercent), maxApproveAmount: numOrNull(extras.maxApproveAmount) },
+        })
+      ).data,
     onSuccess: (res) => {
       toast.success(res?.message || 'Access saved');
       queryClient.setQueryData(key, res?.data);
@@ -195,7 +231,10 @@ export function UserAccessDialog({ target, onClose }) {
     const newlySensitive = Object.entries(edits)
       .filter(([k, e]) => e.effect === 'ALLOW' && byKey[k]?.sensitive && !byKey[k]?.roleAllowed)
       .filter(([k, e]) => !(byKey[k]?.override?.effect === 'ALLOW' && dayInput(byKey[k]?.override?.until) === e.until));
-    if (newlySensitive.length) setConfirm(newlySensitive.map(([k]) => k));
+    const lines = newlySensitive.map(([k]) => `${moduleLabel(k.split('.')[0])} · ${permissionLabel(k)}`);
+    // Seeing the whole company's records is a big step for a salesman or manager.
+    if (extras.dataScope === 'ALL' && view?.dataScope?.own !== 'ALL' && view?.dataScope?.roleDefault !== 'ALL') lines.push('see the whole company’s records');
+    if (lines.length) setConfirm(lines);
     else save.mutate();
   };
 
@@ -205,7 +244,7 @@ export function UserAccessDialog({ target, onClose }) {
   return (
     <Dialog
       open={Boolean(target)}
-      onClose={onClose}
+      onClose={requestClose}
       size="xl"
       title={`Access · ${target?.name || ''}`}
       description="By default a user can do what their role can. Allow gives this user more; Deny takes something away from this user only."
@@ -215,10 +254,11 @@ export function UserAccessDialog({ target, onClose }) {
             variant="outline"
             onClick={() => {
               setEdits({});
+              setExtras({ profileId: '', dataScope: '', maxDiscountPercent: '', maxApproveAmount: '' });
               setDirty(true);
               setCopyFrom('');
             }}
-            disabled={!customCount || save.isPending}
+            disabled={(!customCount && !extras.profileId && !extras.dataScope && extras.maxDiscountPercent === '' && extras.maxApproveAmount === '') || save.isPending}
           >
             <RotateCcw className="h-4 w-4" /> Reset to role
           </Button>
@@ -236,7 +276,8 @@ export function UserAccessDialog({ target, onClose }) {
             <Badge tone="info">{ROLE_LABEL[user.role] || user.role}</Badge>
             {user.role === 'SALESMAN' && <Badge tone="muted">{salesTypeLabel(user.salesType)}</Badge>}
             <span className="text-muted-foreground">
-              {customCount ? `${customCount} setting${customCount === 1 ? '' : 's'} different from the role` : 'Same as the role'}
+              {customCount ? `${customCount} own setting${customCount === 1 ? '' : 's'}` : 'No own settings'}
+              {profile ? ` · profile “${profile.name}”${profile.isActive ? '' : ' (switched off)'}` : ''}
             </span>
             {dirty && <span className="text-xs font-medium text-warning">Not saved yet</span>}
           </div>
@@ -249,6 +290,69 @@ export function UserAccessDialog({ target, onClose }) {
               now follow the role.
             </p>
           )}
+
+          <div className="grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-foreground">Access profile</span>
+              <Select aria-label="Access profile" className="h-9" value={extras.profileId} onChange={(e) => setExtra('profileId', e.target.value)}>
+                <option value="">No profile</option>
+                {profiles
+                  .filter((p) => p.isActive || p.id === extras.profileId)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {p.isActive ? '' : ' (off)'}
+                    </option>
+                  ))}
+              </Select>
+              <span className="block text-muted-foreground">A shared set of access. This user&apos;s own Allow / Deny still win.</span>
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-foreground">Whose records they see</span>
+              <Select aria-label="Whose records they see" className="h-9" value={extras.dataScope} onChange={(e) => setExtra('dataScope', e.target.value)}>
+                <option value="">
+                  {profile?.isActive && profile.dataScope ? `From profile (${SCOPE_LABEL[profile.dataScope]})` : `By role (${SCOPE_LABEL[view.dataScope.roleDefault]})`}
+                </option>
+                <option value="OWN">Own records only</option>
+                <option value="TEAM">Own + their team</option>
+                <option value="ALL">Whole company</option>
+              </Select>
+              <span className="block text-muted-foreground">
+                {(extras.dataScope || (profile?.isActive && profile.dataScope) || view.dataScope.roleDefault) === 'TEAM' && !view.hasTeam
+                  ? 'Nobody reports to this user yet: set "Reports to" on their team members.'
+                  : 'Orders, invoices, receipts, customers, visits, expenses and reports.'}
+              </span>
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-foreground">Max discount by hand (%)</span>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                className="h-9"
+                value={extras.maxDiscountPercent}
+                onChange={(e) => setExtra('maxDiscountPercent', e.target.value)}
+                placeholder={profile?.isActive && profile.limits.maxDiscountPercent !== null ? `Profile: ${profile.limits.maxDiscountPercent}%` : 'No limit'}
+                aria-label="Max discount by hand (%)"
+              />
+              <span className="block text-muted-foreground">Typed discount or price cut below the price list, per line.</span>
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium text-foreground">Approve up to (amount)</span>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                className="h-9"
+                value={extras.maxApproveAmount}
+                onChange={(e) => setExtra('maxApproveAmount', e.target.value)}
+                placeholder={profile?.isActive && profile.limits.maxApproveAmount !== null ? `Profile: ${profile.limits.maxApproveAmount}` : 'No limit'}
+                aria-label="Approve up to (amount)"
+              />
+              <span className="block text-muted-foreground">Largest order or expense they may approve.</span>
+            </label>
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[12rem] flex-1">
@@ -277,6 +381,7 @@ export function UserAccessDialog({ target, onClose }) {
                 <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="px-3 py-2 font-semibold">Permission</th>
                   <th className="px-2 py-2 text-center font-semibold">Role</th>
+                  <th className="px-2 py-2 text-center font-semibold">Profile</th>
                   <th className="px-2 py-2 font-semibold">This user</th>
                   <th className="px-2 py-2 font-semibold">Until</th>
                   <th className="px-3 py-2 font-semibold">Result</th>
@@ -285,14 +390,14 @@ export function UserAccessDialog({ target, onClose }) {
               <tbody>
                 {Object.entries(groups).length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
                       Nothing matches.
                     </td>
                   </tr>
                 )}
                 {Object.entries(groups).flatMap(([module, keys]) => [
                   <tr key={`g-${module}`} className="border-b bg-muted/40">
-                    <td colSpan={5} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide">
+                    <td colSpan={6} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide">
                       {moduleLabel(module)}
                     </td>
                   </tr>,
@@ -318,6 +423,15 @@ export function UserAccessDialog({ target, onClose }) {
                         </td>
                         <td className="px-2 py-1.5 text-center text-xs">
                           {p.roleAllowed ? <span className="text-success">Yes</span> : <span className="text-muted-foreground">No</span>}
+                        </td>
+                        <td className="px-2 py-1.5 text-center text-xs">
+                          {profileEffectOf(k) === 'ALLOW' ? (
+                            <span className="text-success">Allow</span>
+                          ) : profileEffectOf(k) === 'DENY' ? (
+                            <span className="text-destructive">Deny</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="px-2 py-1.5">
                           <EffectSwitch
@@ -367,12 +481,24 @@ export function UserAccessDialog({ target, onClose }) {
         title="Give sensitive access?"
         message={
           confirm
-            ? `${target?.name} will be able to: ${confirm.map((k) => `${moduleLabel(k.split('.')[0])} · ${permissionLabel(k)}`).join(', ')}. Their role does not have this. It is recorded in the audit trail.`
+            ? `${target?.name} will be able to: ${confirm.join(', ')}. Their role does not have this. It is recorded in the audit trail.`
             : ''
         }
         confirmLabel="Yes, save"
         tone="destructive"
         loading={save.isPending}
+      />
+      <ConfirmDialog
+        open={discard}
+        onClose={() => setDiscard(false)}
+        onConfirm={() => {
+          setDiscard(false);
+          onClose();
+        }}
+        title="Close without saving?"
+        message="Your changes to this user's access are not saved yet. They will be lost."
+        confirmLabel="Close without saving"
+        tone="destructive"
       />
     </Dialog>
   );
@@ -398,6 +524,7 @@ export function WhoCanDialog({ open, onClose, catalog }) {
         <p className="truncate text-xs text-muted-foreground">
           {ROLE_LABEL[u.role] || u.role}
           {u.role === 'SALESMAN' ? ` · ${salesTypeLabel(u.salesType)}` : ''}
+          {u.profile ? ` · ${u.profile}` : ''}
         </p>
       </div>
       <span className="shrink-0 text-right text-xs text-muted-foreground">

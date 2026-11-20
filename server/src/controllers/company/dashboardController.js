@@ -1,3 +1,4 @@
+import { scopeIds } from './_helpers.js';
 import { startOfDay as dayStart, dayKey, DEFAULT_TZ } from '../../services/fieldForceService.js';
 import mongoose from 'mongoose';
 import Setting from '../../models/Setting.js';
@@ -22,9 +23,11 @@ export const summary = asyncHandler(async (req, res) => {
   const todayKey = dayKey(new Date(), tz);
   const startOfDay = dayStart(todayKey, tz);
   const startOfMonth = dayStart(`${todayKey.slice(0, 8)}01`, tz);
-  // A salesman's home shows their own numbers, not the whole company's.
-  const own = user.role === 'SALESMAN';
-  const me = own ? new mongoose.Types.ObjectId(String(user.id)) : null;
+  // A salesman's home shows their own numbers, not the whole company's (and
+  // anyone limited to their own / their team's records sees just those).
+  const scope = scopeIds(req);
+  const own = Boolean(scope);
+  const me = own ? { $in: scope.map((id) => new mongoose.Types.ObjectId(String(id))) } : null;
   const bySalesman = own ? { salesman: me } : {};
   // Invoices a salesman raised count as theirs too (van billing of another rep's order).
   const byInvoiceOwner = own ? { $and: [{ $or: [{ salesman: me }, { createdBy: me }] }] } : {};

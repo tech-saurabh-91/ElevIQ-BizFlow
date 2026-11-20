@@ -61,18 +61,23 @@ export const loadDoc = async (Model, id, { populate = [], filter = {}, label = '
 };
 
 /**
- * Data scope for field-force entities: a SALESMAN only sees records assigned to
- * them, a MANAGER sees their own plus their team's records, everyone else sees
- * the whole company (tenant scoping is still applied by the tenant plugin).
+ * The users whose records this request may see (null = everyone): set per
+ * user as OWN / TEAM / ALL (Users -> Access), else by role - a salesman their
+ * own, a manager their own plus their team's, everyone else the whole company.
+ * Tenant scoping is still applied by the tenant plugin.
  */
-export const salesScope = (req) => {
+export const scopeIds = (req) => {
+  if (req.dataScope && 'ids' in req.dataScope) return req.dataScope.ids;
   const role = req.user?.role;
-  if (role === 'SALESMAN') return { assignedTo: req.user.id };
-  if (role === 'MANAGER') {
-    const ids = [req.user.id, ...(req.dataScope?.teamIds || [])];
-    return { assignedTo: { $in: ids } };
-  }
-  return {};
+  if (role === 'SALESMAN') return [req.user.id];
+  if (role === 'MANAGER') return [req.user.id, ...(req.dataScope?.teamIds || [])];
+  return null;
+};
+
+/** Field-force entities (customers, routes...) by who they are assigned to. */
+export const salesScope = (req) => {
+  const ids = scopeIds(req);
+  return ids ? { assignedTo: { $in: ids } } : {};
 };
 
 /** Validate that a referenced document exists inside this tenant. */

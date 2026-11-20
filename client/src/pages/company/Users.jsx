@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, KeyRound, Power, ShieldCheck, ShieldQuestion, UserCog, UserRoundCheck, UserRoundX, Users as UsersIcon } from 'lucide-react';
+import { Copy, KeyRound, Layers, Power, ShieldCheck, ShieldQuestion, UserCog, UserRoundCheck, UserRoundX, Users as UsersIcon } from 'lucide-react';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
@@ -22,6 +22,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { formatDate, timeAgo } from '@/utils/format';
 import { SALES_TYPES, salesTypeLabel } from '@/utils/salesType';
 import { UserAccessDialog, WhoCanDialog } from '@/components/company/user-access';
+import { AccessProfilesDialog } from '@/components/company/access-profiles';
 import { useAuthStore } from '@/store/authStore';
 
 const ROLES = ['COMPANY_ADMIN', 'MANAGER', 'SALESMAN', 'ACCOUNTANT', 'WAREHOUSE'];
@@ -186,6 +187,12 @@ function UserForm({ mode, initial, onClose, onSaved }) {
             ))}
           </Select>
         </Field>
+        {mode === 'edit' && initial?.role && role !== initial.role && initial.customAccess > 0 && (
+          <p className="rounded-md bg-warning/10 px-3 py-2 text-xs text-warning-foreground dark:text-warning sm:col-span-2">
+            This user has {initial.customAccess} access setting{initial.customAccess === 1 ? '' : 's'} of their own (Allow / Deny). They stay with the new
+            role{role === 'COMPANY_ADMIN' ? ', but an admin has full access anyway' : ''}. Check them under Access after saving.
+          </p>
+        )}
         {role === 'SALESMAN' && (
           <Field
             label="Sales type"
@@ -419,6 +426,7 @@ export default function Users() {
   const [resetTarget, setResetTarget] = useState(null);
   const [accessTarget, setAccessTarget] = useState(null);
   const [whoCan, setWhoCan] = useState(false);
+  const [profilesOpen, setProfilesOpen] = useState(false);
   const permissionKeys = Object.keys(useAuthStore((st) => st.permissions) || {}).filter((k) => k !== 'reports.hub.view');
 
   const { data: statsData } = useQuery({
@@ -492,6 +500,11 @@ export default function Users() {
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-1">
             <Badge tone={ROLE_TONE[row.role] || 'secondary'}>{ROLE_LABEL[row.role] || row.role}</Badge>
+            {row.accessProfile?.name && row.role !== 'COMPANY_ADMIN' && (
+              <Badge tone="info" title="Access profile">
+                {row.accessProfile.name}
+              </Badge>
+            )}
             {row.customAccess > 0 && row.role !== 'COMPANY_ADMIN' && (
               <Badge tone="warning" title="This user's access differs from their role">
                 {row.customAccess} custom
@@ -592,9 +605,14 @@ export default function Users() {
         header={header}
         headerActions={
           isAdmin ? (
-            <Button variant="outline" onClick={() => setWhoCan(true)}>
-              <ShieldQuestion className="h-4 w-4" /> Who can do what
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setProfilesOpen(true)}>
+                <Layers className="h-4 w-4" /> Access profiles
+              </Button>
+              <Button variant="outline" onClick={() => setWhoCan(true)}>
+                <ShieldQuestion className="h-4 w-4" /> Who can do what
+              </Button>
+            </>
           ) : null
         }
         renderForm={(props) => <UserForm {...props} />}
@@ -700,6 +718,7 @@ export default function Users() {
       <ResetPasswordDialog target={resetTarget} onClose={() => setResetTarget(null)} />
       {accessTarget && <UserAccessDialog target={accessTarget} onClose={() => setAccessTarget(null)} />}
       <WhoCanDialog open={whoCan} onClose={() => setWhoCan(false)} catalog={permissionKeys} />
+      <AccessProfilesDialog open={profilesOpen} onClose={() => setProfilesOpen(false)} />
     </>
   );
 }

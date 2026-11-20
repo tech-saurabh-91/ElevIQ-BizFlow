@@ -74,11 +74,19 @@ export const windowOf = (params, tz = DEFAULT_TZ) => {
   return { from, to, fromKey, toKey };
 };
 
-/** A salesman only ever sees their own documents; managers see their team. */
-const ownScope = (ctx, field = 'salesman', alsoCreated = true) => {
+/** The users whose documents count (the user's data scope; null = everyone). */
+const scopeIdsOf = (ctx) => {
   const { role, id, teamIds = [] } = ctx.user;
-  if (!['SALESMAN', 'MANAGER'].includes(role)) return {};
-  const ids = role === 'SALESMAN' ? [oid(id)] : [id, ...teamIds].map(oid);
+  if ('scopeIds' in ctx.user) return ctx.user.scopeIds ? ctx.user.scopeIds.map(oid) : null;
+  if (role === 'SALESMAN') return [oid(id)];
+  if (role === 'MANAGER') return [id, ...teamIds].map(oid);
+  return null;
+};
+
+/** By data scope: a salesman their own documents, a manager their team's (or as set per user). */
+const ownScope = (ctx, field = 'salesman', alsoCreated = true) => {
+  const ids = scopeIdsOf(ctx);
+  if (!ids) return {};
   return alsoCreated ? { $and: [{ $or: [{ [field]: { $in: ids } }, { createdBy: { $in: ids } }] }] } : { [field]: { $in: ids } };
 };
 
@@ -1205,7 +1213,7 @@ const salesmanPerformance = {
     const { from, to } = windowOf(p, ctx.tz);
     const companyId = oid(ctx.companyId);
     const base = { companyId, isDeleted: { $ne: true } };
-    const scopeIds = ctx.user.role === 'SALESMAN' ? [oid(ctx.user.id)] : ctx.user.role === 'MANAGER' ? [ctx.user.id, ...(ctx.user.teamIds || [])].map(oid) : null;
+    const scopeIds = scopeIdsOf(ctx);
     const repMatch = (field) => (p.salesman ? { [field]: oid(p.salesman) } : scopeIds ? { [field]: { $in: scopeIds } } : {});
     const [orders, invoices, payments] = await Promise.all([
       Order.aggregate([

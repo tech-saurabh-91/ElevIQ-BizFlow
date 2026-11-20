@@ -35,10 +35,13 @@ export const overview = asyncHandler(async (req, res) => {
   return success(res, { data });
 });
 
+/** Limited to their own records (a salesman, or anyone set to Own). */
+const ownOnly = (req) => (req.dataScope?.level ? req.dataScope.level === 'OWN' : req.user?.role === 'SALESMAN');
+
 export const sales = asyncHandler(async (req, res) => {
   const window = windowFrom(req.query, req);
   const scope = {};
-  const salesman = req.user?.role === 'SALESMAN' ? req.user.id : req.query.salesman;
+  const salesman = ownOnly(req) ? req.user.id : req.query.salesman;
   const salesmanOid = salesman ? toOid(salesman) : null;
   if (salesmanOid) scope.salesman = salesmanOid;
 
@@ -66,7 +69,7 @@ export const receivables = asyncHandler(async (req, res) => {
 export const collections = asyncHandler(async (req, res) => {
   const window = windowFrom(req.query, req);
   const scope = {};
-  const collector = req.user?.role === 'SALESMAN' ? req.user.id : req.query.salesman;
+  const collector = ownOnly(req) ? req.user.id : req.query.salesman;
   const collectorOid = collector ? toOid(collector) : null;
   if (collectorOid) scope.collectedBy = collectorOid;
 
@@ -94,7 +97,7 @@ export const inventory = asyncHandler(async (req, res) => {
 
 export const fieldForce = asyncHandler(async (req, res) => {
   const window = windowFrom(req.query, req);
-  const salesman = req.user?.role === 'SALESMAN' ? req.user.id : req.query.salesman || null;
+  const salesman = ownOnly(req) ? req.user.id : req.query.salesman || null;
   const data = await reportService.fieldForceReport({
     companyId: req.companyId,
     window,
@@ -117,7 +120,7 @@ const styleSheet = (sheet) => {
 export const exportXlsx = asyncHandler(async (req, res) => {
   const type = req.query.type;
   const window = windowFrom(req.query, req);
-  const scope = req.user?.role === 'SALESMAN' ? { salesman: toOid(req.user.id) } : {};
+  const scope = ownOnly(req) ? { salesman: toOid(req.user.id) } : {};
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'ElevIQ SFA';
@@ -194,7 +197,7 @@ export const exportXlsx = asyncHandler(async (req, res) => {
     label = 'Field force';
     const r = await reportService.fieldForceReport({
       companyId: req.companyId, window, granularity: 'day', top: 100,
-      salesman: req.user?.role === 'SALESMAN' ? req.user.id : null,
+      salesman: ownOnly(req) ? req.user.id : null,
     });
     sheet = workbook.addWorksheet('Rep activity', { views: [{ state: 'frozen', ySplit: 1 }] });
     sheet.columns = [

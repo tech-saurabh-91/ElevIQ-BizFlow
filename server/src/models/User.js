@@ -60,6 +60,24 @@ const userSchema = new mongoose.Schema(
       default: [],
     },
 
+    /** A shared set of access (Users -> Access profiles); the user's own Allow / Deny win over it. */
+    accessProfile: { type: mongoose.Schema.Types.ObjectId, ref: 'AccessProfile', default: null },
+
+    /**
+     * Whose records this user sees: OWN (their own), TEAM (theirs and the
+     * people who report to them), ALL (the whole company). '' = by role:
+     * salesman OWN, manager TEAM, everyone else ALL.
+     */
+    dataScope: { type: String, enum: ['', 'OWN', 'TEAM', 'ALL'], default: '' },
+
+    /** Ceilings for this user (null = no ceiling). Company admins have none. */
+    limits: {
+      /** Discount (or price cut below the price list) a user may type by hand, in %. */
+      maxDiscountPercent: { type: Number, default: null, min: 0, max: 100 },
+      /** Largest order / expense this user may approve. */
+      maxApproveAmount: { type: Number, default: null, min: 0 },
+    },
+
     reportingManager: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     teamMembers: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
 

@@ -12,7 +12,7 @@ import { assertAddresses } from '../../services/locationService.js';
 import { assertIdentity } from '../../services/identityRules.js';
 import { assertUnlocked, lockInfo } from '../../services/settingLocks.js';
 
-const SECTIONS = ['series', 'tax', 'invoice', 'order', 'inventory', 'collections', 'fieldForce'];
+const SECTIONS = ['series', 'tax', 'invoice', 'order', 'inventory', 'collections', 'fieldForce', 'approvals'];
 const SCALARS = [
   'displayName',
   'logo',

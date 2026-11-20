@@ -1,4 +1,5 @@
 import VanDayClose from '../../models/VanDayClose.js';
+import { assertCanApprove } from '../../services/approvalGuard.js';
 import Warehouse from '../../models/Warehouse.js';
 import StockBalance from '../../models/StockBalance.js';
 import Product from '../../models/Product.js';
@@ -359,6 +360,7 @@ export const allDayCloses = asyncHandler(async (req, res) => {
 export const approveDayClose = asyncHandler(async (req, res) => {
   if (!can(req, 'vans.daycash.approve')) throw new ForbiddenError('You cannot approve day cashouts', 'FORBIDDEN');
   const { doc, van } = await loadCashout(req);
+  assertCanApprove(req, { raisedBy: [doc.executive, doc.closedBy], label: `the day cashout of ${van.code}` });
   await approveCashout(req, van, doc);
   await notifyUsers([doc.executive], {
     type: 'SYSTEM',

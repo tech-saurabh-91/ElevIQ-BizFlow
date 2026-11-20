@@ -52,12 +52,19 @@ const windows = (tz) => {
   return { today, tomorrow, monthStart, lastMonthStart, lastMonthSameDay };
 };
 
-/** { field: me } for a salesman, { field: { $in: team } } for a manager, {} otherwise. */
-const scopeOf = (ctx, field) => {
+/** The users whose numbers count (ctx.user.scopeIds from the user's data scope; null = all). */
+const scopeIdsOf = (ctx) => {
   const { role, id, teamIds = [] } = ctx.user;
-  if (role === S) return { [field]: oid(id) };
-  if (role === M) return { [field]: { $in: [id, ...teamIds].map(oid) } };
-  return {};
+  if ('scopeIds' in ctx.user) return ctx.user.scopeIds ? ctx.user.scopeIds.map(oid) : null;
+  if (role === S) return [oid(id)];
+  if (role === M) return [id, ...teamIds].map(oid);
+  return null;
+};
+
+/** { field: { $in: [users] } } by the user's data scope, {} for everyone. */
+const scopeOf = (ctx, field) => {
+  const ids = scopeIdsOf(ctx);
+  return ids ? { [field]: { $in: ids } } : {};
 };
 
 const sumOf = async (Model, match, field, dateField, from, to) => {
@@ -229,7 +236,8 @@ const WIDGETS = [
     requires: ['fieldforce.attendance.view'],
     load: async (ctx) => {
       const w = windows(ctx.tz);
-      const reps = await User.find({ role: S, isActive: true, ...(ctx.user.role === M ? { _id: { $in: (ctx.user.teamIds || []).map(oid) } } : {}) }).select('_id').lean();
+      const scope = scopeIdsOf(ctx);
+      const reps = await User.find({ role: S, isActive: true, ...(scope ? { _id: { $in: scope } } : {}) }).select('_id').lean();
       const ids = reps.map((u) => u._id);
       const [present, visits] = await Promise.all([
         Attendance.countDocuments({ user: { $in: ids }, day: { $gte: w.today, $lt: w.tomorrow }, status: { $in: ['PRESENT', 'HALF_DAY'] } }),

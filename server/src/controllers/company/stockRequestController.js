@@ -1,4 +1,5 @@
 import StockRequest, { STOCK_REQUEST_STATUS as S } from '../../models/StockRequest.js';
+import { assertCanApprove } from '../../services/approvalGuard.js';
 import StockTransfer from '../../models/StockTransfer.js';
 import Product from '../../models/Product.js';
 import Setting from '../../models/Setting.js';
@@ -121,6 +122,7 @@ export const approve = asyncHandler(async (req, res) => {
   if (!isApprover(req)) throw new ForbiddenError('You cannot approve stock requests', 'FORBIDDEN');
   const doc = await loadRequest(req);
   if (doc.status !== S.SUBMITTED) throw new ConflictError('Only a request waiting for approval can be approved', 'REQUEST_LOCKED');
+  assertCanApprove(req, { raisedBy: [doc.executive, doc.createdBy], label: `stock request ${doc.requestNo || ''}`.trim() });
   const lines = await buildLines(req.body.items);
   const requested = new Map(doc.items.map((i) => [String(i.product), i.requestedQty]));
   const van = await loadVan(doc.van);

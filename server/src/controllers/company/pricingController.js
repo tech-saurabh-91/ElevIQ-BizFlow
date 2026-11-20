@@ -7,7 +7,7 @@ import Setting from '../../models/Setting.js';
 import { success } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { BadRequestError } from '../../utils/errors.js';
-import { hasPermission } from '../../middlewares/rbac.js';
+import { hasPermission, limitsFor } from '../../middlewares/rbac.js';
 import { buildCrudController } from './_crud.js';
 import { autoCode, dateOrNull, refOrNull, toPlain } from './_helpers.js';
 import { buildSaleLines, loadPricingContext, schemeSummary } from '../../services/pricingService.js';
@@ -136,6 +136,7 @@ export const preview = asyncHandler(async (req, res) => {
   if (!customer) throw new BadRequestError('Customer not found', 'INVALID_REFERENCE');
   const priceList = await priceListFor(customer, req.body.priceList);
   const canOverride = hasPermission(req, 'pricing.override');
+  const maxManualDiscount = limitsFor(req.user).maxDiscountPercent;
   const items = req.body.items || [];
   if (!items.length) {
     const ctx = await loadPricingContext({ customer, date: dateOrNull(req.body.date) || new Date() });
@@ -149,6 +150,7 @@ export const preview = asyncHandler(async (req, res) => {
         applied: [],
         offers: ctx.schemes.map((s) => ({ id: String(s._id), name: s.name, type: s.type, summary: schemeSummary(s, (id) => products.get(id)?.name || 'item'), validTo: s.validTo })),
         canOverride,
+        maxManualDiscount,
       },
     });
   }
@@ -158,6 +160,7 @@ export const preview = asyncHandler(async (req, res) => {
     customer,
     date: dateOrNull(req.body.date) || new Date(),
     canOverride,
+    maxManualDiscount,
   });
   return success(res, {
     data: {
@@ -171,6 +174,7 @@ export const preview = asyncHandler(async (req, res) => {
       applied: priced.applied,
       offers: priced.offers,
       canOverride,
+      maxManualDiscount,
     },
   });
 });

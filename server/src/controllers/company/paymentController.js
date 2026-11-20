@@ -22,7 +22,7 @@ import {
   PAYMENT_MODES,
 } from '../../config/constants.js';
 import { AppError, BadRequestError, ConflictError, ErrorCodes } from '../../utils/errors.js';
-import { toPlain, loadDoc, refOrNull, dateOrNull } from './_helpers.js';
+import { toPlain, loadDoc, refOrNull, dateOrNull, scopeIds } from './_helpers.js';
 import { PAYMENT_REASONS } from '../../models/Payment.js';
 import {
   nextPaymentNumber,
@@ -66,23 +66,13 @@ const SORT_ALLOWED = ['paymentDate', 'createdAt', 'updatedAt', 'amount', 'paymen
 
 /** Scope a salesman to their own collections, a manager to their team. */
 const scopeFilter = (req) => {
-  const role = req.user?.role;
-  if (role === 'SALESMAN') return { collectedBy: req.user.id };
-  if (role === 'MANAGER') {
-    const ids = [req.user.id, ...(req.dataScope?.teamIds || [])];
-    return { collectedBy: { $in: ids } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { collectedBy: { $in: ids } } : {};
 };
 
 const aggregateScope = (req) => {
-  const role = req.user?.role;
-  const oid = (id) => new mongoose.Types.ObjectId(id);
-  if (role === 'SALESMAN') return { collectedBy: oid(req.user.id) };
-  if (role === 'MANAGER') {
-    return { collectedBy: { $in: [req.user.id, ...(req.dataScope?.teamIds || [])].map(oid) } };
-  }
-  return {};
+  const ids = scopeIds(req);
+  return ids ? { collectedBy: { $in: ids.map((id) => new mongoose.Types.ObjectId(String(id))) } } : {};
 };
 
 const settingsOf = async (req) => req.settings || (await Setting.forCompany(req.companyId));
