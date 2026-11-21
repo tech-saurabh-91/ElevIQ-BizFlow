@@ -155,7 +155,8 @@ export default function WorkspaceHome() {
         user={user}
         company={company}
         quickActions={quickActions}
-        setupSteps={isLoading ? null : setupSteps}
+        // Unknown while the summary is loading or failed: don't list every step as "to do".
+        setupSteps={isLoading || (homeFailed && !data) ? null : setupSteps}
         canCustomize={can('settings.update')}
       />
     );

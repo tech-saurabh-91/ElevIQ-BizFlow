@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { ErrorState } from '@/components/ui/empty-state';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   AlarmClock,
@@ -76,7 +77,9 @@ const greeting = () => {
 const ROLE_LABEL = { COMPANY_ADMIN: 'Owner / Admin', MANAGER: 'Sales manager', ACCOUNTANT: 'Accounts', WAREHOUSE: 'Warehouse', SALESMAN: 'Field sales' };
 
 export default function RoleDashboard({ user, company, quickActions = [], setupSteps = null, canCustomize = false }) {
-  const { data: widgets = [], isLoading } = useWidgets();
+  const { data: widgets = [], isLoading, isError, refetch } = useWidgets();
+  // Failed to load (e.g. offline) is not the same as "no widgets for this role".
+  const failed = isError && !widgets.length;
   const money = (v) => formatMoney(v || 0, company?.currency || 'INR', undefined, { decimals: 0 });
   const kpis = widgets.filter((w) => w.type === 'kpi');
   const charts = widgets.filter((w) => w.type === 'chart');
@@ -154,7 +157,13 @@ export default function RoleDashboard({ user, company, quickActions = [], setupS
         </div>
       )}
 
-      {!isLoading && !widgets.length && (
+      {failed && (
+        <div className="rounded-2xl border bg-card">
+          <ErrorState title="Could not load your dashboard" message="Check your connection, then try again." onRetry={() => refetch()} />
+        </div>
+      )}
+
+      {!isLoading && !failed && !widgets.length && (
         <div className="flex flex-col items-center rounded-2xl border border-dashed bg-card px-6 py-12 text-center">
           <LayoutGrid className="h-10 w-10 text-muted-foreground" />
           <p className="mt-3 font-semibold">Your dashboard is empty</p>
