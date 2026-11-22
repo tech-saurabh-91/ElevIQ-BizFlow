@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { CalendarCheck2, CheckCircle2, ExternalLink, Info, Lock, LockOpen, Search, TriangleAlert } from 'lucide-react';
+import { CalendarCheck2, CheckCircle2, Download, ExternalLink, Info, Lock, LockOpen, Search, TriangleAlert } from 'lucide-react';
 
 import api, { apiError } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -33,13 +33,16 @@ function CloseDialog({ year, onClose, onDone }) {
     queryFn: async () => (await api.get(`/v1/financial-years/${year.tag}/checklist`)).data.data,
   });
   const close = useMutation({
-    mutationFn: async () => (await api.post(`/v1/financial-years/${year.tag}/close`, { notes })).data,
+    mutationFn: async () => (await api.post(`/v1/financial-years/${year.tag}/close`, { notes, force: warnings.length > 0 })).data,
     onSuccess: (res) => {
       toast.success(res.message || `${year.label} closed`);
       onDone();
     },
   });
   const warnings = (data?.items || []).filter((i) => i.severity === 'warning' && i.count > 0);
+  // Closing with items still open needs a reason (kept with the year and in the audit trail).
+  const needReason = warnings.length > 0;
+  const reasonOk = !needReason || notes.trim().length >= 10;
 
   return (
     <Dialog
@@ -54,8 +57,8 @@ function CloseDialog({ year, onClose, onDone }) {
           <Button variant="outline" onClick={onClose} disabled={close.isPending}>
             Cancel
           </Button>
-          <Button onClick={() => close.mutate()} disabled={!sure || isLoading} loading={close.isPending}>
-            <Lock className="h-4 w-4" /> Close {year.label}
+          <Button onClick={() => close.mutate()} disabled={!sure || isLoading || !reasonOk} loading={close.isPending} variant={needReason ? 'destructive' : 'default'}>
+            <Lock className="h-4 w-4" /> {needReason ? 'Close anyway' : `Close ${year.label}`}
           </Button>
         </>
       }
@@ -85,6 +88,14 @@ function CloseDialog({ year, onClose, onDone }) {
                         {i.severity !== 'reminder' && <Badge tone={i.count ? (i.severity === 'warning' ? 'warning' : 'info') : 'muted'}>{i.count}</Badge>}
                       </p>
                       {!done && <p className="mt-0.5 text-xs text-muted-foreground">{i.hint}</p>}
+                      {!done && i.details?.length > 0 && (
+                        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
+                          {i.details.map((d) => (
+                            <li key={d}>{d}</li>
+                          ))}
+                          {i.count > i.details.length && <li>and {i.count - i.details.length} more</li>}
+                        </ul>
+                      )}
                     </div>
                     {!done && (
                       <Link to={i.to} className="shrink-0 text-xs font-medium text-brand-600 hover:underline" target="_blank" rel="noreferrer">
@@ -98,7 +109,8 @@ function CloseDialog({ year, onClose, onDone }) {
           )}
           {warnings.length > 0 && (
             <p className="mt-2 text-xs text-warning-foreground dark:text-warning">
-              {warnings.length} item(s) still open. You can close anyway - they will stay as they are and drafts dated in this year can only be re-dated into the new year.
+              {warnings.length} item(s) still need attention. Finish them first, or close anyway with a reason below - they will stay as they are, and drafts dated in this
+              year can only be re-dated into the new year.
             </p>
           )}
         </div>
@@ -108,8 +120,17 @@ function CloseDialog({ year, onClose, onDone }) {
           year later with a reason.
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="close-notes">Notes (optional)</Label>
-          <Textarea id="close-notes" rows={2} maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Audited by CA on 20 Sept" />
+          <Label htmlFor="close-notes" required={needReason}>
+            {needReason ? 'Why close with items still open? (at least 10 characters)' : 'Notes (optional)'}
+          </Label>
+          <Textarea
+            id="close-notes"
+            rows={2}
+            maxLength={1000}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={needReason ? 'e.g. Old draft invoices will be re-dated into April; CA approved' : 'e.g. Audited by CA on 20 Sept'}
+          />
         </div>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-1" checked={sure} onChange={(e) => setSure(e.target.checked)} />
@@ -314,6 +335,26 @@ export default function YearClosing() {
     queryClient.invalidateQueries({ queryKey: ['financial-years'] });
   };
   const years = data?.years || [];
+  const [downloading, setDownloading] = useState('');
+  const downloadPack = async (y) => {
+    setDownloading(y.tag);
+    try {
+      const res = await api.get(`/v1/financial-years/${y.tag}/export`, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `closing-pack-${y.tag}${y.status === 'CLOSED' ? '' : '-draft'}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (err) {
+      toast.error(apiError(err).message);
+    } finally {
+      setDownloading('');
+    }
+  };
+  const endedOpen = years.find((y) => y.status === 'OPEN' && y.ended);
   const viewed = years.find((y) => y.tag === viewTag && y.status === 'CLOSED') || years.find((y) => y.status === 'CLOSED' && !viewTag);
 
   return (
@@ -328,6 +369,16 @@ export default function YearClosing() {
           <Lock className="h-4 w-4 shrink-0 text-success" />
           <span>
             Books are closed up to <b>{formatDate(data.booksClosedThrough)}</b>. Use dates after this for new documents.
+          </span>
+        </div>
+      )}
+
+      {endedOpen && (
+        <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm">
+          <LockOpen className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+          <span>
+            <b>{endedOpen.label}</b> has ended but is not closed. Until it is closed, only admins and accountants (and users given &quot;Enter documents in an
+            ended year&quot;) can add or change documents dated up to {formatDate(endedOpen.endDay)}. Everyone else uses today&apos;s date.
           </span>
         </div>
       )}
@@ -380,6 +431,17 @@ export default function YearClosing() {
                     {y.status === 'CLOSED' && (
                       <Button size="sm" variant="outline" onClick={() => setViewTag(y.tag)}>
                         View closing figures
+                      </Button>
+                    )}
+                    {y.ended && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => downloadPack(y)}
+                        loading={downloading === y.tag}
+                        title={y.status === 'CLOSED' ? 'Year totals and every closing balance, in Excel' : 'Today\'s figures for this year - they can still change until it is closed'}
+                      >
+                        <Download className="h-4 w-4" /> {y.status === 'CLOSED' ? 'Closing pack' : 'Draft closing pack'}
                       </Button>
                     )}
                     {canClose && y.canClose && (

@@ -9,6 +9,8 @@ const router = Router();
 const tagParams = z.object({ tag: z.string().regex(/^\d{4}$/, 'Unknown financial year') });
 
 router.get('/', authorize('books.view'), ctrl.list);
+router.get('/status', authorize('books.view'), ctrl.status);
+router.get('/:tag/export', authorize('books.view'), validate({ params: tagParams }), ctrl.exportPack);
 router.get('/:tag/checklist', authorize('books.view'), validate({ params: tagParams }), ctrl.checklist);
 router.get(
   '/:tag/balances',
@@ -27,7 +29,7 @@ router.get(
 router.post(
   '/:tag/close',
   authorize('books.close'),
-  validate({ params: tagParams, body: z.object({ notes: z.string().trim().max(1000).optional().or(z.literal('')) }) }),
+  validate({ params: tagParams, body: z.object({ notes: z.string().trim().max(1000).optional().or(z.literal('')), force: z.boolean().optional() }) }),
   ctrl.close
 );
 router.post(

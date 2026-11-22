@@ -58,6 +58,7 @@ const ACTION_LABELS = {
   override: 'Type price / discount by hand',
   print: 'Print, PDF & email',
   close: 'Close the year',
+  backdate: 'Enter documents in an ended year (until it is closed)',
 };
 
 /** Whole-key names where the parts read badly. */
@@ -106,4 +107,4 @@ export const ADMIN_ONLY_PERMISSIONS = ['users.create', 'users.update', 'users.de
 /** Granting these asks for a confirmation (mirror of the server). */
 export const isSensitivePermission = (key) =>
   /\.(delete|cancel|approve)$/.test(key) ||
-  ['books.close', 'audit.view', 'settings.view', 'documents.print.original', 'pricing.override', 'products.cost.view'].includes(key);
+  ['books.close', 'books.backdate', 'audit.view', 'settings.view', 'documents.print.original', 'pricing.override', 'products.cost.view'].includes(key);

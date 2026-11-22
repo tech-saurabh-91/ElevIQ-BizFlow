@@ -538,6 +538,8 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
   'settings.view': [COMPANY_ROLES.COMPANY_ADMIN],
   'books.view': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
   'books.close': [COMPANY_ROLES.COMPANY_ADMIN],
+  // Enter or change documents dated in a year that has ended but is not closed yet.
+  'books.backdate': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
   // Print / PDF / email of each document type (the user also needs its view
   // permission), and who may print the original of a key document again /
   // allow another original.
@@ -572,7 +574,7 @@ export const LEGACY_PERMISSION_KEYS = Object.freeze({
 export const ADMIN_ONLY_PERMISSIONS = Object.freeze(['users.create', 'users.update', 'users.delete', 'settings.update']);
 export const isSensitivePermission = (key) =>
   /\.delete$/.test(key) ||
-  ['books.close', 'audit.view', 'settings.view', 'documents.print.original', 'pricing.override', 'products.cost.view'].includes(key) ||
+  ['books.close', 'books.backdate', 'audit.view', 'settings.view', 'documents.print.original', 'pricing.override', 'products.cost.view'].includes(key) ||
   /\.(cancel|approve)$/.test(key);
 /** How long a temporary grant may run. */
 export const MAX_ACCESS_DAYS = 366;

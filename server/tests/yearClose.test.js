@@ -66,6 +66,17 @@ beforeAll(async () => {
     await settings.save();
     await User.create({ companyId: company._id, name: 'Year Admin', email: 'admin@yearend.test', password: PASSWORD, role: 'COMPANY_ADMIN', isActive: true });
     await User.create({ companyId: company._id, name: 'Year Accountant', email: 'acc@yearend.test', password: PASSWORD, role: 'ACCOUNTANT', isActive: true });
+    await User.create({ companyId: company._id, name: 'Year Manager', email: 'mgr@yearend.test', password: PASSWORD, role: 'MANAGER', isActive: true });
+    // A manager the admin allowed to finish last year's books.
+    await User.create({
+      companyId: company._id,
+      name: 'Trusted Manager',
+      email: 'mgr2@yearend.test',
+      password: PASSWORD,
+      role: 'MANAGER',
+      isActive: true,
+      accessOverrides: [{ permission: 'books.backdate', effect: 'ALLOW' }],
+    });
     const customer = await Customer.create({ companyId: company._id, name: 'March Kirana', code: 'CUS-1', phone: '9876543210', createdAt: new Date(`${prevStart}-12-01`) });
     const product = await Product.create({ companyId: company._id, name: 'Year Soap', sku: 'YSOAP', unit: 'PCS', gstRate: 18, sellingPrice: 100, mrp: 120, isActive: true });
     const godown = await Warehouse.create({ companyId: company._id, name: 'Main Godown', code: 'MAIN', type: 'MAIN', isDefault: true });
@@ -75,6 +86,8 @@ beforeAll(async () => {
   });
   state.admin = await login('admin@yearend.test');
   state.accountant = await login('acc@yearend.test');
+  state.manager = await login('mgr@yearend.test');
+  state.trusted = await login('mgr2@yearend.test');
 
   // Stock counted in March but entered today: it belongs to last year's closing stock.
   const adj = await request.post('/api/v1/inventory/adjustments').set(as(state.admin)).send({
@@ -124,8 +137,77 @@ describe('Financial year closing', () => {
     expect(acc.status).toBe(403);
   });
 
+  test('until it is closed, only allowed users can date documents in the ended year', async () => {
+    const doc = { customerId: state.customerId, invoiceDate: inPrev('03-29'), items: [{ product: state.productId, qty: 1 }] };
+    const manager = await request.post('/api/v1/invoices').set(as(state.manager)).send(doc);
+    expect(manager.status).toBe(423);
+    expect(manager.body.code).toBe('PREVIOUS_YEAR');
+    // Nor change last year's issued invoice.
+    const edit = await request.patch(`/api/v1/invoices/${state.invoice.id}`).set(as(state.manager)).send({ notes: 'changed' });
+    expect(edit.status).toBe(423);
+    // Today's date is fine for everyone.
+    const today = await request.post('/api/v1/invoices').set(as(state.manager)).send({ ...doc, invoiceDate: todayIn });
+    expect(today.status).toBe(201);
+    // A user given "books.backdate" (admin and accountant by default) may.
+    const trusted = await request.post('/api/v1/invoices').set(as(state.trusted)).send(doc);
+    expect(trusted.status).toBe(201);
+    for (const id of [today.body.data.id, trusted.body.data.id]) {
+      expect((await request.delete(`/api/v1/invoices/${id}`).set(as(state.admin))).status).toBe(200);
+    }
+  });
+
+  test('the year-end status names the ended year still to close', async () => {
+    const res = await request.get('/api/v1/financial-years/status').set(as(state.accountant));
+    expect(res.status).toBe(200);
+    expect(res.body.data.ended).toMatchObject({ tag: PREV, endDay: `${prevStart + 1}-03-31` });
+    expect(res.body.data).toMatchObject({ canBackdate: true, canClose: false });
+    expect((await request.get('/api/v1/financial-years/status').set(as(state.manager))).status).toBe(403);
+  });
+
+  test('closing reminders go to the admin once per week, not twice', async () => {
+    const { runYearEndReminders } = await import('../src/jobs/yearEnd.js');
+    const Notification = (await import('../src/models/Notification.js')).default;
+    const first = await runYearEndReminders();
+    expect(first.sent).toBe(1);
+    expect((await runYearEndReminders()).sent).toBe(0);
+    const notes = await runWithContext({ scope: 'company', companyId: state.companyId }, () => Notification.find({ entityType: /^YEAR_END:/ }).lean());
+    expect(notes).toHaveLength(1);
+    expect(notes[0].title).toContain('has ended');
+  });
+
+  test('the checklist checks expenses, cashouts, stock and saved balances', async () => {
+    const res = await request.get(`/api/v1/financial-years/${PREV}/checklist`).set(as(state.admin));
+    const keys = res.body.data.items.map((i) => i.key);
+    expect(keys).toEqual(expect.arrayContaining(['pendingExpenses', 'pendingCashouts', 'openStockRequests', 'negativeStock', 'customerBalances', 'supplierBalances', 'stockLedger']));
+    const by = (k) => res.body.data.items.find((i) => i.key === k);
+    expect(by('customerBalances').count).toBe(0);
+    expect(by('stockLedger').count).toBe(0);
+
+    // A balance that drifted from its invoices is caught, with the name.
+    await runWithContext({ scope: 'company', companyId: state.companyId }, () => Customer.updateOne({ _id: state.customerId }, { $inc: { outstanding: 75 } }));
+    const drift = await request.get(`/api/v1/financial-years/${PREV}/checklist`).set(as(state.admin));
+    const item = drift.body.data.items.find((i) => i.key === 'customerBalances');
+    expect(item.count).toBe(1);
+    expect(item.details[0]).toContain('March Kirana');
+    await runWithContext({ scope: 'company', companyId: state.companyId }, () => Customer.updateOne({ _id: state.customerId }, { $inc: { outstanding: -75 } }));
+  });
+
+  test('a draft closing pack can be downloaded before closing', async () => {
+    const res = await request.get(`/api/v1/financial-years/${PREV}/export`).set(as(state.accountant)).buffer(true);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/spreadsheetml/);
+    expect(res.headers['content-disposition']).toContain(`closing-pack-${PREV}-draft.xlsx`);
+    expect((await request.get(`/api/v1/financial-years/${CUR}/export`).set(as(state.admin))).status).toBe(409);
+  });
+
   test('closing records totals and closing balances', async () => {
-    const res = await request.post(`/api/v1/financial-years/${PREV}/close`).set(as(state.admin)).send({ notes: 'Audited' });
+    // The forgotten draft invoice blocks the close until the admin gives a reason.
+    const blocked = await request.post(`/api/v1/financial-years/${PREV}/close`).set(as(state.admin)).send({ notes: 'Audited' });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.code).toBe('CHECKLIST_OPEN');
+    const shortReason = await request.post(`/api/v1/financial-years/${PREV}/close`).set(as(state.admin)).send({ notes: 'ok', force: true });
+    expect(shortReason.status).toBe(422);
+    const res = await request.post(`/api/v1/financial-years/${PREV}/close`).set(as(state.admin)).send({ notes: 'Audited; the draft moves to the new year', force: true });
     expect(res.status).toBe(200);
     const total = Number(state.invoice.total);
     expect(res.body.data.totals.sales).toBeCloseTo(total, 2);
@@ -148,6 +230,21 @@ describe('Financial year closing', () => {
 
     const again = await request.post(`/api/v1/financial-years/${PREV}/close`).set(as(state.admin)).send({});
     expect(again.status).toBe(409);
+
+    // The accountant hears about it; the pack is no longer a draft.
+    const Notification = (await import('../src/models/Notification.js')).default;
+    const accountant = await runWithContext({ scope: 'company', companyId: state.companyId }, () => User.findOne({ email: 'acc@yearend.test' }).lean());
+    const told = await runWithContext({ scope: 'company', companyId: state.companyId }, () => Notification.findOne({ recipients: accountant._id, title: /is closed/ }).lean());
+    expect(told).toBeTruthy();
+    const pack = await request.get(`/api/v1/financial-years/${PREV}/export`).set(as(state.admin)).buffer(true);
+    expect(pack.headers['content-disposition']).toContain(`closing-pack-${PREV}.xlsx`);
+
+    // Closed now: no more reminders, and not even the accountant can use its dates.
+    const { runYearEndReminders } = await import('../src/jobs/yearEnd.js');
+    expect((await runYearEndReminders()).sent).toBe(0);
+    const late = await request.post('/api/v1/invoices').set(as(state.accountant)).send({ customerId: state.customerId, invoiceDate: inPrev('03-30'), items: [{ product: state.productId, qty: 1 }] });
+    expect(late.status).toBe(423);
+    expect(late.body.code).toBe('BOOKS_CLOSED');
   });
 
   test("this year's opening balances equal last year's closing", async () => {
@@ -212,7 +309,8 @@ describe('Financial year closing', () => {
     const create = await request.post('/api/v1/invoices').set(as(state.admin)).send({ customerId: state.customerId, invoiceDate: inPrev('03-30'), items: [{ product: state.productId, qty: 1 }] });
     expect(create.status).toBe(201);
 
-    const close = await request.post(`/api/v1/financial-years/${PREV}/close`).set(as(state.admin)).send({});
+    // That new draft is open again: close anyway, with the reason.
+    const close = await request.post(`/api/v1/financial-years/${PREV}/close`).set(as(state.admin)).send({ notes: 'Correction done, draft left for April', force: true });
     expect(close.status).toBe(200);
     const list = await request.get('/api/v1/financial-years').set(as(state.admin));
     const prev = list.body.data.years.find((y) => y.tag === PREV);

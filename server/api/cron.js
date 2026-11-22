@@ -13,6 +13,7 @@ const JOBS = {
   'subscription-expiry': async () => (await import('../src/jobs/subscription.js')).runSubscriptionExpiry(),
   'overdue-reminders': async () => (await import('../src/jobs/overdue.js')).runOverdueReminders(),
   'session-cleanup': async () => (await import('../src/jobs/sessions.js')).runSessionCleanup(),
+  'year-end-reminders': async () => (await import('../src/jobs/yearEnd.js')).runYearEndReminders(),
 };
 
 export default async function handler(req, res) {

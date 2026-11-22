@@ -8,7 +8,8 @@ import PurchaseReturn from '../models/PurchaseReturn.js';
 import StockAdjustment from '../models/StockAdjustment.js';
 import StockTransfer from '../models/StockTransfer.js';
 import Expense from '../models/Expense.js';
-import { isLockedDate, booksClosedError } from '../services/yearCloseService.js';
+import { isLockedDate, booksClosedError, isPreviousYearDate, previousYearError } from '../services/yearCloseService.js';
+import { hasPermission } from './rbac.js';
 
 /**
  * Closed financial years are read-only.
@@ -18,6 +19,11 @@ import { isLockedDate, booksClosedError } from '../services/yearCloseService.js'
  * 2. A posted / issued document dated inside a closed year cannot be edited,
  *    cancelled, bounced or deleted. A draft may still be re-dated forward or
  *    deleted, but not issued / posted while its date is in the closed year.
+ *
+ * The same two rules apply to a year that has ended but is not closed yet
+ * ("previous year"), except for users with "books.backdate" (admin and
+ * accountant by default): they finish the old year's books - late bills,
+ * stock count, corrections - until it is closed.
  *
  * Orders and purchase orders are commitments, not books: pending ones carry
  * into the new year and are invoiced / received with new-year documents, so
@@ -61,23 +67,29 @@ const routeOf = (path) => {
   return null;
 };
 
+/** Is this request blocked by `isBlocked` (a date rule)? */
+const blockedBy = async (req, isBlocked) => {
+  const company = req.company;
+  // 1. dates sent with the request
+  const body = req.body || {};
+  if (DOCUMENT_DATES.some((f) => body[f] && isBlocked(company, body[f]))) return true;
+
+  // 2. the document being changed
+  const route = routeOf(req.path);
+  if (!route || route.readOnly?.includes(route.action)) return false;
+  const doc = await route.Model.findById(route.id).select(`${route.field} status`).lean();
+  if (!doc || !isBlocked(company, doc[route.field])) return false;
+  const draft = doc.status === 'DRAFT';
+  return !(draft && !POSTING.has(route.action));
+};
+
 export const booksLock = async (req, _res, next) => {
   try {
     const company = req.company;
-    if (!company?.booksClosedThrough || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-
-    // 1. dates sent with the request
-    const body = req.body || {};
-    if (DOCUMENT_DATES.some((f) => body[f] && isLockedDate(company, body[f]))) return next(booksClosedError(company));
-
-    // 2. the document being changed
-    const route = routeOf(req.path);
-    if (!route || route.readOnly?.includes(route.action)) return next();
-    const doc = await route.Model.findById(route.id).select(`${route.field} status`).lean();
-    if (!doc || !isLockedDate(company, doc[route.field])) return next();
-    const draft = doc.status === 'DRAFT';
-    if (draft && !POSTING.has(route.action)) return next();
-    return next(booksClosedError(company));
+    if (!company || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+    if (company.booksClosedThrough && (await blockedBy(req, isLockedDate))) return next(booksClosedError(company));
+    if (!hasPermission(req, 'books.backdate') && (await blockedBy(req, (c, d) => isPreviousYearDate(c, d)))) return next(previousYearError(company));
+    return next();
   } catch (err) {
     return next(err);
   }

@@ -26,6 +26,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatMoney, formatNumber, formatDate } from '@/utils/format';
 import RoleDashboard, { WidgetBoard } from '@/components/company/RoleDashboard';
+import YearEndBanner from '@/components/company/year-end-banner';
 
 /** "Good morning" etc. by the device clock. */
 const greeting = () => {
@@ -151,14 +152,17 @@ export default function WorkspaceHome() {
         ]
       : null;
     return (
-      <RoleDashboard
-        user={user}
-        company={company}
-        quickActions={quickActions}
-        // Unknown while the summary is loading or failed: don't list every step as "to do".
-        setupSteps={isLoading || (homeFailed && !data) ? null : setupSteps}
-        canCustomize={can('settings.update')}
-      />
+      <div className="space-y-4">
+        <YearEndBanner />
+        <RoleDashboard
+          user={user}
+          company={company}
+          quickActions={quickActions}
+          // Unknown while the summary is loading or failed: don't list every step as "to do".
+          setupSteps={isLoading || (homeFailed && !data) ? null : setupSteps}
+          canCustomize={can('settings.update')}
+        />
+      </div>
     );
   }
 

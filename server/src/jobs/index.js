@@ -40,6 +40,18 @@ export const startJobs = () => {
     )
   );
 
+  // Daily at 09:00 - financial year-end reminders.
+  registered.push(
+    cron.schedule(
+      '0 9 * * *',
+      safeWrap('year-end-reminders', async () => {
+        const { runYearEndReminders } = await import('./yearEnd.js');
+        await runYearEndReminders();
+      }),
+      { scheduled: true, timezone: 'Asia/Kolkata' }
+    )
+  );
+
   // Daily at 02:30 - clean expired sessions.
   registered.push(
     cron.schedule(

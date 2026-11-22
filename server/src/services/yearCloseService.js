@@ -17,6 +17,11 @@ import StockTransfer from '../models/StockTransfer.js';
 import StockMovement from '../models/StockMovement.js';
 import Customer from '../models/Customer.js';
 import Supplier from '../models/Supplier.js';
+import StockBalance from '../models/StockBalance.js';
+import Expense from '../models/Expense.js';
+import VanDayClose from '../models/VanDayClose.js';
+import StockRequest from '../models/StockRequest.js';
+import Visit from '../models/Visit.js';
 import { AppError, ConflictError, NotFoundError } from '../utils/errors.js';
 import { dayKey, DEFAULT_TZ } from './fieldForceService.js';
 
@@ -80,6 +85,31 @@ export const booksClosedError = (company) => {
   return new AppError(
     `${fy.label} is closed: documents dated ${shown} or earlier cannot be added, changed, cancelled or posted. Use a date after ${shown}, or ask the admin to reopen the year.`,
     { status: 423, code: 'BOOKS_CLOSED', errors: [{ field: '_', message: `${fy.label} is closed` }] }
+  );
+};
+
+/** The current financial year of the company (by its own today). */
+export const currentYearOf = (company, now = new Date()) => fyOfDay(dayKey(now, tzOf(company)), company?.financialYearStartMonth || 4);
+
+/**
+ * True when this date is in a year that has ended but is not closed yet.
+ * Only users with "books.backdate" may enter or change such documents.
+ */
+export const isPreviousYearDate = (company, date, now = new Date()) => {
+  if (!company || !date || isLockedDate(company, date)) return false;
+  const parsed = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const day = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : dayKey(parsed, tzOf(company));
+  return day < currentYearOf(company, now).startDay;
+};
+
+export const previousYearError = (company) => {
+  const current = currentYearOf(company);
+  const shown = dayjs(current.startDay).format('DD/MM/YYYY');
+  const ended = fyOfDay(dayjs(current.startDay).subtract(1, 'day').format('YYYY-MM-DD'), company.financialYearStartMonth || 4);
+  return new AppError(
+    `${ended.label} has ended: only users allowed to enter previous-year documents (admin, accountant) can use a date before ${shown}. Use today's date, or ask your accountant to enter it.`,
+    { status: 423, code: 'PREVIOUS_YEAR', errors: [{ field: '_', message: `${ended.label} has ended` }] }
   );
 };
 
@@ -153,13 +183,79 @@ export const listYears = async (company) => {
 
 // ---------------------------------------------------------------- checklist
 
+/**
+ * Do the saved running balances agree with the documents behind them?
+ *   customer: outstanding = opening + unpaid part of every live invoice
+ *   supplier: outstanding = opening + live bills - payments - billed returns
+ *   stock:    on-hand qty = sum of the stock ledger
+ * A difference means a balance drifted (an old bug, a manual fix in the
+ * database); closing would carry the wrong figure into the new year.
+ */
+export const balanceCheck = async (companyId) => {
+  // Aggregations are not tenant-scoped by the plugin: name the company.
+  const live = { companyId: oid(companyId), isDeleted: { $ne: true } };
+  const off = (a, b) => Math.abs(r2(a) - r2(b)) >= 0.01;
+
+  const dueBy = await sumBy(Invoice, { ...live, status: { $nin: ['DRAFT', 'CANCELLED'] } }, '$customerId', '$balanceDue');
+  const customers = (await Customer.find({}).select('name code openingBalance outstanding').lean())
+    .filter((c) => off(c.outstanding, Number(c.openingBalance || 0) + (dueBy.get(String(c._id)) || 0)))
+    .map((c) => `${c.name}${c.code ? ` (${c.code})` : ''}: saved ${r2(c.outstanding)}, documents ${r2(Number(c.openingBalance || 0) + (dueBy.get(String(c._id)) || 0))}`);
+
+  const billed = await sumBy(PurchaseBill, { ...live, status: { $ne: 'CANCELLED' } }, '$supplierId', '$total');
+  const paid = await sumBy(SupplierPayment, { ...live, status: { $ne: 'CANCELLED' } }, '$supplierId', '$amount');
+  const returned = await sumBy(PurchaseReturn, { ...live, status: { $ne: 'CANCELLED' } }, '$supplierId', { $ifNull: ['$billedTotal', 0] });
+  const suppliers = (await Supplier.find({}).select('name code openingBalance outstanding').lean())
+    .map((s) => {
+      const id = String(s._id);
+      return { s, expected: Number(s.openingBalance || 0) + (billed.get(id) || 0) - (paid.get(id) || 0) - (returned.get(id) || 0) };
+    })
+    .filter(({ s, expected }) => off(s.outstanding, expected))
+    .map(({ s, expected }) => `${s.name}${s.code ? ` (${s.code})` : ''}: saved ${r2(s.outstanding)}, documents ${r2(expected)}`);
+
+  const ledger = await StockMovement.aggregate([
+    { $match: { ...live } },
+    { $group: { _id: { p: '$product', w: '$warehouse' }, qty: { $sum: '$qty' } } },
+  ]);
+  const byPair = new Map(ledger.map((m) => [`${m._id.p}:${m._id.w}`, m.qty]));
+  const balances = await StockBalance.find({}).select('product productName warehouse qty').lean();
+  const seen = new Set();
+  const stock = [];
+  balances.forEach((b) => {
+    const key = `${b.product}:${b.warehouse}`;
+    seen.add(key);
+    const moved = byPair.get(key) || 0;
+    if (Math.abs(Number(b.qty || 0) - moved) > 1e-6) stock.push(`${b.productName || 'Product'}: on hand ${Number(b.qty || 0)}, ledger ${Math.round(moved * 10000) / 10000}`);
+  });
+  ledger.forEach((m) => {
+    if (!seen.has(`${m._id.p}:${m._id.w}`) && Math.abs(m.qty) > 1e-6) stock.push(`A product with ledger stock ${Math.round(m.qty * 10000) / 10000} has no on-hand record`);
+  });
+  return { customers, suppliers, stock };
+};
+
 /** Loose ends inside a year that should be finished before it is locked. */
 export const checklist = async (company, tag) => {
   const fy = fyOfTag(tag, company.financialYearStartMonth || 4);
   const tz = tzOf(company);
   const end = dayStart(fy.nextStartDay, tz);
   const upTo = (field) => ({ [field]: { $lt: end } });
-  const [draftInvoices, draftCredits, draftPayments, draftGrns, draftAdjustments, transfersInTransit, draftTransfers, openOrders, openPos] = await Promise.all([
+  const [
+    draftInvoices,
+    draftCredits,
+    draftPayments,
+    draftGrns,
+    draftAdjustments,
+    transfersInTransit,
+    draftTransfers,
+    openOrders,
+    openPos,
+    draftExpenses,
+    pendingExpenses,
+    unpaidExpenses,
+    pendingCashouts,
+    openStockRequests,
+    openVisits,
+    yearEndStock,
+  ] = await Promise.all([
     Invoice.countDocuments({ status: 'DRAFT', ...upTo('invoiceDate') }),
     CreditNote.countDocuments({ status: 'DRAFT', ...upTo('creditNoteDate') }),
     Payment.countDocuments({ status: 'DRAFT', ...upTo('paymentDate') }),
@@ -169,8 +265,17 @@ export const checklist = async (company, tag) => {
     StockTransfer.countDocuments({ status: 'DRAFT', ...upTo('transferDate') }),
     Order.countDocuments({ status: { $in: ['PENDING_APPROVAL', 'CONFIRMED', 'PARTIALLY_INVOICED'] }, ...upTo('orderDate') }),
     PurchaseOrder.countDocuments({ status: { $in: ['SENT', 'PARTIALLY_RECEIVED', 'APPROVED'] }, ...upTo('poDate') }),
+    Expense.countDocuments({ status: 'DRAFT', ...upTo('expenseDate') }),
+    Expense.countDocuments({ status: 'SUBMITTED', ...upTo('expenseDate') }),
+    Expense.countDocuments({ status: 'APPROVED', ...upTo('expenseDate') }),
+    VanDayClose.countDocuments({ status: 'SUBMITTED', day: { $lt: fy.nextStartDay } }),
+    StockRequest.countDocuments({ status: { $in: ['SUBMITTED', 'APPROVED'] }, createdAt: { $lt: end } }),
+    Visit.countDocuments({ status: 'IN_PROGRESS', visitDay: { $lt: end } }),
+    closingStock(oid(company._id), end),
   ]);
-  const item = (key, label, count, severity, to, hint) => ({ key, label, count, severity, to, hint });
+  const mismatch = await balanceCheck(company._id);
+  const negativeStock = yearEndStock.filter((x) => x.qty < -1e-9).map((x) => `${x.name || 'Product'}${x.warehouseName ? ` @ ${x.warehouseName}` : ''}: ${Math.round(x.qty * 10000) / 10000}`);
+  const item = (key, label, count, severity, to, hint, details) => ({ key, label, count, severity, to, hint, ...(details?.length ? { details: details.slice(0, 20) } : {}) });
   const items = [
     item('draftInvoices', 'Draft invoices', draftInvoices, 'warning', '/app/invoices?status=DRAFT', 'Issue or delete them - a draft dated in a closed year cannot be issued later.'),
     item('draftCredits', 'Draft credit notes', draftCredits, 'warning', '/app/credit-notes?status=DRAFT', 'Issue or delete them.'),
@@ -179,8 +284,42 @@ export const checklist = async (company, tag) => {
     item('draftAdjustments', 'Stock adjustments not posted', draftAdjustments, 'warning', '/app/inventory', 'Post or delete them.'),
     item('transfersInTransit', 'Transfers dispatched but not received', transfersInTransit, 'warning', '/app/inventory', 'Receive them at the destination.'),
     item('draftTransfers', 'Draft transfers', draftTransfers, 'warning', '/app/inventory', 'Dispatch or delete them.'),
+    item('draftExpenses', 'Expense claims not submitted', draftExpenses, 'warning', '/app/expenses', 'Ask the salesmen to submit them, or delete them.'),
+    item('pendingExpenses', 'Expense claims waiting for approval', pendingExpenses, 'warning', '/app/expenses', 'Approve or reject them so the year\'s expenses are final.'),
+    item('pendingCashouts', 'Van day cashouts waiting for approval', pendingCashouts, 'warning', '/app/day-cashouts', 'Approve or reject them so the van cash is settled in the year.'),
+    item('openStockRequests', 'Van stock requests not finished', openStockRequests, 'warning', '/app/inventory', 'Approve and receive them, or reject them - approved ones are stock on the road.'),
+    item(
+      'negativeStock',
+      `Products with stock below zero on ${dayjs(fy.endDay).format('DD/MM/YYYY')}`,
+      negativeStock.length,
+      'warning',
+      '/app/inventory',
+      'More was sold than the books show by the last day of the year. Post the missing goods receipt or a stock adjustment dated inside the year, so the closing stock is right.',
+      negativeStock
+    ),
+    item(
+      'customerBalances',
+      'Customer balances that do not match their invoices',
+      mismatch.customers.length,
+      'warning',
+      '/app/customers',
+      'The saved balance differs from opening balance + unpaid invoices. Ask support to check these customers before closing.',
+      mismatch.customers
+    ),
+    item(
+      'supplierBalances',
+      'Supplier balances that do not match their bills',
+      mismatch.suppliers.length,
+      'warning',
+      '/app/suppliers',
+      'The saved balance differs from opening balance + bills - payments - returns. Ask support to check these suppliers before closing.',
+      mismatch.suppliers
+    ),
+    item('stockLedger', 'Stock that does not match the stock ledger', mismatch.stock.length, 'warning', '/app/inventory', 'The on-hand quantity differs from the stock movements. Ask support to check these items before closing.', mismatch.stock),
     item('openOrders', 'Orders still open (they carry into the new year)', openOrders, 'info', '/app/orders', 'Fine to keep: they will be invoiced with new-year dates and numbers.'),
     item('openPos', 'Purchase orders still open (they carry into the new year)', openPos, 'info', '/app/purchase-orders', 'Fine to keep: goods received later get new-year dates.'),
+    item('unpaidExpenses', 'Approved expenses not paid yet', unpaidExpenses, 'info', '/app/expenses', 'Fine to keep: pay them in the new year.'),
+    item('openVisits', 'Shop visits never checked out', openVisits, 'info', '/app/reports/visit-register?status=OPEN', 'Do not affect the books; the salesman checks out on the Sales visit screen.'),
     item('stockCount', 'Physical stock count', 0, 'reminder', '/app/inventory', 'Count the godowns and vans and post any difference as a stock adjustment dated inside the year.'),
   ];
   return { year: fy, items, blocking: items.filter((i) => i.severity === 'warning' && i.count > 0).length };
@@ -215,6 +354,29 @@ export const lateMovementIds = async (companyId, end) => {
     ids.push(...moves);
   }
   return ids;
+};
+
+/**
+ * Stock per product x warehouse at the end of a year, replayed from the stock
+ * ledger (value at moving average). A movement counts by its document's date:
+ * March bills entered in April belong to March, so late-posted movements of
+ * in-year documents are added.
+ */
+export const closingStock = async (companyId, end) => {
+  const late = await lateMovementIds(companyId, end);
+  return StockMovement.aggregate([
+    { $match: { companyId, isDeleted: { $ne: true }, $or: [{ movedAt: { $lt: end } }, { _id: { $in: late } }] } },
+    {
+      $group: {
+        _id: { product: '$product', warehouse: '$warehouse' },
+        name: { $last: '$productName' },
+        code: { $last: '$productSku' },
+        warehouseName: { $last: '$warehouseName' },
+        qty: { $sum: '$qty' },
+        value: { $sum: '$value' },
+      },
+    },
+  ]);
 };
 
 /** Totals and closing balances of a year, from the documents dated inside it. */
@@ -287,20 +449,7 @@ export const buildSnapshot = async (company, fy) => {
   // ---- stock on the last day, replayed from the stock ledger (value at moving average).
   // A movement counts by its document's date: March bills entered in April
   // belong to March, so late-posted movements of in-year documents are added.
-  const late = await lateMovementIds(companyId, end);
-  const stock = await StockMovement.aggregate([
-    { $match: { ...live, $or: [{ movedAt: { $lt: end } }, { _id: { $in: late } }] } },
-    {
-      $group: {
-        _id: { product: '$product', warehouse: '$warehouse' },
-        name: { $last: '$productName' },
-        code: { $last: '$productSku' },
-        warehouseName: { $last: '$warehouseName' },
-        qty: { $sum: '$qty' },
-        value: { $sum: '$value' },
-      },
-    },
-  ]);
+  const stock = await closingStock(companyId, end);
   const stockRows = stock
     .filter((s) => Math.abs(s.qty) > 1e-9)
     .map((s) => ({
@@ -336,11 +485,44 @@ export const buildSnapshot = async (company, fy) => {
   return { totals, rows: [...custRows, ...supRows, ...stockRows] };
 };
 
+// ---------------------------------------------------------------- year-end state
+
+const REMIND_DAYS_BEFORE = 15;
+
+/**
+ * Where the company stands around the year end (for the banner and the
+ * reminders): the current year's days left, and an ended year that is not
+ * closed yet - only when that year had any activity.
+ */
+export const yearEndState = async (company, now = new Date()) => {
+  const startMonth = company.financialYearStartMonth || 4;
+  const today = dayKey(now, tzOf(company));
+  const current = fyOfDay(today, startMonth);
+  const daysLeft = dayjs(current.endDay).diff(dayjs(today), 'day');
+  const previous = fyOfDay(dayjs(current.startDay).subtract(1, 'day').format('YYYY-MM-DD'), startMonth);
+  const through = company.booksClosedThrough || '';
+  let ended = null;
+  if (!(through && previous.endDay <= through)) {
+    const first = await firstActivityDay(company);
+    if (first && first <= previous.endDay) {
+      // The oldest year still open is the one to close first.
+      const oldest = fyOfDay(through && through >= first ? dayjs(through).add(1, 'day').format('YYYY-MM-DD') : first, startMonth);
+      ended = { tag: oldest.tag, label: oldest.label, endDay: oldest.endDay, daysSinceEnd: dayjs(today).diff(dayjs(oldest.endDay), 'day') };
+    }
+  }
+  return {
+    today,
+    current: { tag: current.tag, label: current.label, endDay: current.endDay, daysLeft },
+    dueSoon: daysLeft <= REMIND_DAYS_BEFORE,
+    ended,
+  };
+};
+
 // ---------------------------------------------------------------- close / reopen
 
 const loadCompany = (companyId) => Company.findById(companyId).lean();
 
-export const closeYear = async ({ companyId, tag, user, notes = '' }) => {
+export const closeYear = async ({ companyId, tag, user, notes = '', force = false }) => {
   const company = await loadCompany(companyId);
   const { years } = await listYears(company);
   const year = years.find((y) => y.tag === tag);
@@ -352,6 +534,16 @@ export const closeYear = async ({ companyId, tag, user, notes = '' }) => {
   }
 
   const check = await checklist(company, tag);
+  // Unfinished work blocks the close unless the admin closes anyway, with a reason.
+  if (check.blocking > 0 && !force) {
+    throw new ConflictError(
+      `${check.blocking} item${check.blocking === 1 ? '' : 's'} on the checklist still need attention. Finish them, or close anyway with a reason.`,
+      'CHECKLIST_OPEN'
+    );
+  }
+  if (check.blocking > 0 && String(notes || '').trim().length < 10) {
+    throw new AppError('Say why the year is closed with items still open (at least 10 characters).', { status: 422, code: 'VALIDATION_ERROR', errors: [{ field: 'notes', message: 'Give the reason (at least 10 characters)' }] });
+  }
   const { totals, rows } = await buildSnapshot(company, year);
 
   await YearBalance.deleteMany({ tag }).hardDelete(); // derived rows, rebuilt on every close
@@ -370,7 +562,7 @@ export const closeYear = async ({ companyId, tag, user, notes = '' }) => {
     closedBy: user.id,
     closedByName: user.name,
     notes,
-    openItems: check.items.filter((i) => i.count > 0).map(({ key, label, count }) => ({ key, label, count })),
+    openItems: check.items.filter((i) => i.count > 0 && i.severity === 'warning').map(({ key, label, count }) => ({ key, label, count })),
     totals,
   };
   let doc;
