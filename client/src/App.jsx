@@ -80,7 +80,6 @@ const PrintControl = lazy(() => import('@/pages/company/PrintControl'));
 
 // ---- Phase 7: inventory + field force -------------------------------------
 const Inventory = lazy(() => import('@/pages/company/Inventory'));
-const Visits = lazy(() => import('@/pages/company/Visits'));
 const Attendance = lazy(() => import('@/pages/company/Attendance'));
 const Targets = lazy(() => import('@/pages/company/Targets'));
 const Expenses = lazy(() => import('@/pages/company/Expenses'));
@@ -282,7 +281,8 @@ export default function App() {
           <Route path="routes" element={guard('customers.view', <RoutesPage />)} />
 
           {/* Field force */}
-          <Route path="visits" element={guard('fieldforce.visits.view', <Visits />)} />
+          {/* Old link: the visits list is now a register report. */}
+          <Route path="visits" element={<Navigate to="/app/reports/visit-register" replace />} />
           <Route path="attendance" element={guard('fieldforce.attendance.view', <Attendance />)} />
           <Route path="targets" element={guard('fieldforce.targets.view', <Targets />)} />
           <Route path="expenses" element={guard('fieldforce.expenses.view', <Expenses />)} />

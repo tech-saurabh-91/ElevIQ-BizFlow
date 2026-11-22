@@ -149,6 +149,57 @@ describe('Figures', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/spreadsheetml/);
   });
+
+  test('visit register: times, place, outcome, productivity and the Show filter', async () => {
+    const Visit = (await import('../src/models/Visit.js')).default;
+    const User = (await import('../src/models/User.js')).default;
+    const sam = await inTenant(() => User.findOne({ email: 'sam@reph.test' }).lean());
+    const at = (h, m) => new Date(`${today}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00+05:30`);
+    const base = { visitDay: at(0, 0), customerId: state.customerId, customerName: 'Corner Shop', salesman: sam._id, salesmanName: 'Sam' };
+    await inTenant(() =>
+      Visit.create([
+        {
+          ...base,
+          visitNo: 'VIS-1',
+          status: 'COMPLETED',
+          outcome: 'ORDER_TAKEN',
+          orderValue: 500,
+          checkIn: { at: at(10, 0), location: { lat: 18.52, lng: 73.85 } },
+          checkOut: { at: at(10, 20) },
+          checkInDistanceM: 12,
+        },
+        {
+          ...base,
+          visitNo: 'VIS-2',
+          status: 'COMPLETED',
+          outcome: 'NO_ORDER',
+          noOrderReason: 'SHOP_CLOSED',
+          outsideGeofence: true,
+          checkIn: { at: at(11, 0) },
+          checkOut: { at: at(11, 10) },
+          checkInDistanceM: 900,
+        },
+        { ...base, visitNo: 'VIS-3', status: 'PLANNED' },
+      ])
+    );
+
+    const res = await get('/api/v1/reports/hub/run/visit-register');
+    expect(res.status).toBe(200);
+    const { rows, columns, summary } = res.body.data;
+    expect(rows.map((r) => r.docNo)).toEqual(['VIS-1', 'VIS-2']); // planned-only stops are not visits
+    expect(rows[0]).toMatchObject({ checkIn: '10:00', checkOut: '10:20', stay: 20, away: 12, location: '18.52,73.85', orderValue: 500, outcome: 'Order taken' });
+    expect(rows[1]).toMatchObject({ outcome: 'No order (away)', reason: 'Shop closed' });
+    expect(columns.find((c) => c.key === 'location').type).toBe('location');
+    expect(summary.find((s) => s.label.startsWith('Productive'))).toMatchObject({ label: 'Productive (50%)', qty: 1 });
+
+    const show = async (status) => (await get(`/api/v1/reports/hub/run/visit-register?status=${status}`)).body.data.rows.map((r) => r.docNo);
+    expect(await show('MISSED')).toEqual(['VIS-3']);
+    expect(await show('AWAY')).toEqual(['VIS-2']);
+    expect(await show('PRODUCTIVE')).toEqual(['VIS-1']);
+
+    const xlsx = await get('/api/v1/reports/hub/run/visit-register/export');
+    expect(xlsx.status).toBe(200);
+  });
 });
 
 describe('Report-wise access', () => {

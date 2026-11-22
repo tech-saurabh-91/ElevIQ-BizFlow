@@ -30,6 +30,7 @@ const taxWording = async (req, settings) => {
   if (taxLabel === 'GST' && (!country || country.code === 'IN')) return (text) => text;
   return (text) => (typeof text === 'string' ? text.replace(/\bGSTIN\b/g, taxIdLabel).replace(/\bGST\b/g, taxLabel) : text);
 };
+const mapUrl = (point) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(point)}`;
 const reword = (columns, ctx) => columns.map((c) => ({ ...c, label: ctx.word(c.label) }));
 
 const contextOf = async (req) => {
@@ -148,7 +149,15 @@ export const exportXlsx = asyncHandler(async (req, res) => {
     cell.border = { bottom: { style: 'thin' } };
   });
   result.rows.forEach((r) => {
-    const row = sheet.addRow(columns.map((c) => (c.type === 'date' ? (r[c.key] ? new Date(r[c.key]) : '') : r[c.key] ?? '')));
+    const row = sheet.addRow(
+      columns.map((c) => {
+        const v = r[c.key];
+        if (c.type === 'date') return v ? new Date(v) : '';
+        // A "lat,lng" point opens Google Maps from the sheet.
+        if (c.type === 'location') return v ? { text: 'Open map', hyperlink: mapUrl(v) } : '';
+        return v ?? '';
+      })
+    );
     // In / out columns in green / red when they carry a figure.
     columns.forEach((c, i) => {
       if (TONE_ARGB[c.tone] && Number(r[c.key])) row.getCell(i + 1).font = { color: { argb: TONE_ARGB[c.tone] } };

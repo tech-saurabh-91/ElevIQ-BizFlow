@@ -61,12 +61,27 @@ export const GUIDES = [
       {
         steps: [
           'Open Sales Visit and pick today\'s route. Your beat plan decides which route shows first.',
+          'Tap Directions on a shop to open Google Maps with the way there. Nearest first puts the closest shops on top and each card shows how far the shop is.',
           'Choose the shop and check in. You must be near the shop if your company uses the shop location check.',
           'Book the order (or the invoice if you sell from a van), take a payment if the shop pays, or note why there was no order.',
           'Check out of the shop. You cannot check in to another shop until you do.',
         ],
       },
       { p: 'Visit and attendance times are always today and now: they cannot be back-dated or set in the future.' },
+      { p: 'Directions use the shop location saved on the customer. When no location is saved they use the shop address, which is less exact: ask your office to pin the shop location.' },
+    ],
+  },
+  {
+    id: 'visit-register',
+    title: 'Visit Register: what the field team did',
+    roles: ['COMPANY_ADMIN', 'MANAGER'],
+    body: [
+      { list: [
+        'Open Reports > Register Reports > Visit Register. It lists every visit: check-in and check-out time, minutes at the shop, how far from the shop the rep checked in (with a map link), outcome, no-order reason and what was booked or collected.',
+        'The cards on top show shops visited, productive visits (an order or invoice) with the percentage, average minutes at a shop, and check-ins away from the shop.',
+        'The Show filter picks productive visits, visits with no order, visits not checked out, check-ins away from the shop, and planned shops that were not visited.',
+        'Export it to Excel or print it like any other report.',
+      ] },
     ],
   },
   {
@@ -220,7 +235,7 @@ export const GUIDES = [
         'Access profiles and Who can do what (admins): shared sets of access for several users, and a list of who can do any one thing.',
         'Beat Plan: assign routes to salesmen day by day. Days you do not change follow each route\'s weekly plan. Past days are locked.',
         'Targets: revenue or activity goals for a salesman or a beat, with achievement tracking.',
-        'Visits Report and Attendance: what the team did and when.',
+        'Reports > Visit Register and Attendance: what the team did and when.',
         'Expenses: salesmen log field spends; a manager approves them and marks them paid.',
       ] },
     ],
@@ -346,6 +361,8 @@ export const GUIDES = [
 export const FAQS = [
   { q: 'How do I check in for the day?', a: 'Open Attendance and tap check in. Allow location access on your phone. Check out from the same screen at the end of the day.', roles: FIELD, k: 'attendance punch start day mark present' },
   { q: 'Why can\'t I check in to another shop?', a: 'You are still checked in at the last shop. Open Sales Visit and check out of it first.', roles: FIELD, k: 'visit stuck check out shop' },
+  { q: 'How do I get directions to a shop?', a: 'In Sales Visit, tap Directions on the shop card. Google Maps opens with the way from where you are. Tap Nearest first to see the closest shops on top.', roles: FIELD, k: 'map route navigation way reach location directions google maps' },
+  { q: 'Where is the visits report?', a: 'Reports > Register Reports > Visit Register. It shows check-in and check-out times, time at the shop, where the rep checked in, outcome and no-order reason, and exports to Excel.', roles: ['COMPANY_ADMIN', 'MANAGER'], k: 'visits report register field activity check in' },
   { q: 'Why does it say I am too far from the shop?', a: 'Your company only allows shop check-in near the shop\'s saved location. Go to the shop, or ask your manager to correct the shop location.', roles: FIELD, k: 'geofence location distance gps far' },
   { q: 'How do I book an order?', a: 'Open Orders (My Orders) or Sales Visit, choose the customer, add products and quantities, then save or submit. Prices, discounts and schemes apply on their own.', k: 'new order booking sale' },
   { q: 'How do I take a payment from a shop?', a: 'Open Payments & Collections (My Collections), choose the customer, enter the amount and mode, set it against their open invoices and save.', roles: ['COMPANY_ADMIN', 'MANAGER', 'ACCOUNTANT', 'SALESMAN'], k: 'collection receipt cash cheque upi money received' },

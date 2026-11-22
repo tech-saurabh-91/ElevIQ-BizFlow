@@ -159,6 +159,10 @@ const customerOut = (c, visits) => ({
   phone: c.phone || '',
   address: [c.address?.line1, c.address?.city].filter(Boolean).join(', '),
   hasLocation: c.address?.gps?.lat != null && c.address?.gps?.lng != null,
+  // Pinned shop location (for directions and distance); null when not pinned.
+  location: c.address?.gps?.lat != null && c.address?.gps?.lng != null ? { lat: c.address.gps.lat, lng: c.address.gps.lng } : null,
+  // Full address: directions fall back to it when the shop is not pinned.
+  fullAddress: [c.address?.line1, c.address?.line2, c.address?.city, c.address?.state, c.address?.pincode].filter(Boolean).join(', '),
   outstanding: Number(c.outstanding || 0),
   route: c.route ? String(c.route) : null,
   visit: visitOut(visits.get(String(c._id))) || null,
@@ -222,7 +226,7 @@ export const customers = asyncHandler(async (req, res) => {
     filter.$or = [{ name: rx }, { code: rx }, { phone: rx }];
   }
   const [rows, visits] = await Promise.all([
-    Customer.find(filter).select('name code phone address.line1 address.city address.gps outstanding route').sort({ name: 1 }).limit(300).lean(),
+    Customer.find(filter).select('name code phone address.line1 address.line2 address.city address.state address.pincode address.gps outstanding route').sort({ name: 1 }).limit(300).lean(),
     visitsOn(req.user.id, day, tz),
   ]);
   return success(res, { data: rows.map((c) => customerOut(c, visits)) });

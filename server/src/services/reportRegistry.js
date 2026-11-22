@@ -17,6 +17,7 @@ import PurchaseReturn from '../models/PurchaseReturn.js';
 import SupplierPayment from '../models/SupplierPayment.js';
 import Target from '../models/Target.js';
 import Expense from '../models/Expense.js';
+import Visit from '../models/Visit.js';
 import { startOfDay, dayKey, DEFAULT_TZ } from './fieldForceService.js';
 import { lateMovementIds } from './yearCloseService.js';
 
@@ -309,6 +310,117 @@ const orderRegister = {
       status: d.status,
     }));
     return finish(columns, rows);
+  },
+};
+
+const NO_ORDER_LABELS = {
+  STOCK_AVAILABLE: 'Has enough stock',
+  SHOP_CLOSED: 'Shop closed',
+  OWNER_ABSENT: 'Owner / buyer not available',
+  NO_PAYMENT: 'Payment issue / pending dues',
+  PRICE_ISSUE: 'Price or margin issue',
+  WAITING_FOR_SCHEME: 'Waiting for a scheme',
+  COMPETITOR: 'Buying from a competitor',
+  OTHER: 'Other',
+};
+const PRODUCTIVE = ['ORDER_TAKEN', 'INVOICED'];
+const titleOf = (v) => String(v || '').toLowerCase().replace(/_/g, ' ').replace(/^\w/, (ch) => ch.toUpperCase());
+/** "14:05" in the company's timezone. */
+const clockIn = (at, tz) =>
+  at ? new Intl.DateTimeFormat('en-GB', { timeZone: tz || DEFAULT_TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(at)) : '';
+const pointOf = (p) => (p?.lat != null && p?.lng != null ? `${p.lat},${p.lng}` : '');
+
+/** What the "Show" filter of the visit register means. */
+const VISIT_SHOW = {
+  PRODUCTIVE: { status: 'COMPLETED', outcome: { $in: PRODUCTIVE } },
+  NO_ORDER: { status: 'COMPLETED', outcome: { $nin: PRODUCTIVE } },
+  OPEN: { status: 'IN_PROGRESS' },
+  AWAY: { outsideGeofence: true },
+  MISSED: { status: 'PLANNED' },
+  SKIPPED: { status: { $in: ['SKIPPED', 'CANCELLED'] } },
+};
+
+const visitRegister = {
+  code: 'visit-register',
+  group: 'REGISTER',
+  title: 'Visit Register',
+  description: 'Every shop visit: check-in and check-out time, time at the shop, where the rep checked in, outcome, no-order reason and what was booked.',
+  icon: 'MapPin',
+  requires: ['fieldforce.visits.view'],
+  filters: ['dateRange', 'customer', 'salesman', 'status'],
+  statuses: [
+    ['', 'All visits'],
+    ['PRODUCTIVE', 'Productive (order / invoice)'],
+    ['NO_ORDER', 'Visited, no order'],
+    ['OPEN', 'Not checked out'],
+    ['AWAY', 'Checked in away from the shop'],
+    ['MISSED', 'Planned, not visited'],
+    ['SKIPPED', 'Skipped / cancelled'],
+  ],
+  run: async (p, ctx) => {
+    const { from, to } = windowOf(p, ctx.tz);
+    const show = VISIT_SHOW[p.status] || { status: { $ne: 'PLANNED' } };
+    const docs = await Visit.find({
+      visitDay: { $gte: from, $lt: to },
+      ...show,
+      ...by(p, 'customer', 'customerId'),
+      ...by(p, 'salesman'),
+      ...ownScope(ctx, 'salesman', false),
+    })
+      .sort({ visitDay: 1, 'checkIn.at': 1 })
+      .lean();
+    const columns = [
+      col('date', 'Date', 'date'),
+      col('docNo', 'Visit'),
+      col('party', 'Customer'),
+      col('salesman', 'Salesman'),
+      col('route', 'Route'),
+      col('checkIn', 'In'),
+      col('checkOut', 'Out'),
+      { ...col('stay', 'Minutes at shop', 'number'), noTotal: true },
+      { ...col('away', 'Metres from shop', 'number'), noTotal: true },
+      col('location', 'Check-in location', 'location'),
+      col('outcome', 'Outcome'),
+      col('reason', 'Reason / notes'),
+      col('orderValue', 'Order', 'money'),
+      col('invoiceValue', 'Invoice', 'money'),
+      col('collected', 'Collected', 'money'),
+    ];
+    const rows = docs.map((d) => ({
+      date: d.visitDay,
+      docNo: d.visitNo,
+      party: d.customerName,
+      salesman: d.salesmanName,
+      route: d.routeName,
+      checkIn: clockIn(d.checkIn?.at, ctx.tz),
+      checkOut: clockIn(d.checkOut?.at, ctx.tz),
+      stay: d.checkOut?.at ? d.durationMinutes : null,
+      away: d.checkInDistanceM ?? null,
+      location: pointOf(d.checkIn?.location),
+      outcome:
+        d.status === 'COMPLETED'
+          ? titleOf(d.outcome) + (d.outsideGeofence ? ' (away)' : '')
+          : d.status === 'IN_PROGRESS'
+            ? 'Not checked out'
+            : d.status === 'PLANNED'
+              ? 'Not visited'
+              : titleOf(d.status),
+      reason: [NO_ORDER_LABELS[d.noOrderReason] || '', d.skipReason, d.notes].filter(Boolean).join(' · '),
+      orderValue: d.orderValue,
+      invoiceValue: d.invoiceValue,
+      collected: d.collectionAmount,
+    }));
+    const visited = docs.filter((d) => d.checkIn?.at);
+    const productive = visited.filter((d) => PRODUCTIVE.includes(d.outcome)).length;
+    const stays = visited.filter((d) => d.checkOut?.at);
+    const avgStay = stays.length ? Math.round(stays.reduce((s, d) => s + (d.durationMinutes || 0), 0) / stays.length) : 0;
+    const summary = [
+      { label: 'Shops visited', qty: visited.length, strong: true },
+      { label: `Productive (${visited.length ? Math.round((productive / visited.length) * 100) : 0}%)`, qty: productive, tone: 'in' },
+      { label: 'Avg. minutes at shop', qty: avgStay },
+      { label: 'Away from shop', qty: visited.filter((d) => d.outsideGeofence).length, tone: 'out' },
+    ];
+    return finish(columns, rows, { summary });
   },
 };
 
@@ -1476,6 +1588,7 @@ export const REPORTS = [
   salesReturnRegister,
   receiptRegister,
   orderRegister,
+  visitRegister,
   purchaseRegister,
   purchaseReturnRegister,
   supplierPaymentRegister,

@@ -126,6 +126,12 @@ export default function ReportViewer() {
     if (c.type === 'number') return formatNumber(v);
     if (c.type === 'percent') return `${formatNumber(v)}%`;
     if (c.type === 'date') return formatDate(v);
+    if (c.type === 'location')
+      return (
+        <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+          Map
+        </a>
+      );
     return v;
   };
   const numeric = (c) => ['money', 'number', 'percent'].includes(c.type);

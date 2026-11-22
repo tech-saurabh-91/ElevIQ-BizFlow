@@ -129,8 +129,8 @@ export default function WorkspaceHome() {
           { to: '/app/customers', label: 'Add customer', icon: Users, perm: 'customers.create' },
           { to: '/app/products', label: 'Manage products', icon: Package, perm: 'products.view' },
           {
-            to: '/app/visits',
-            label: 'Visits report',
+            to: '/app/reports/visit-register',
+            label: 'Visit register',
             icon: MapPin,
             perm: 'fieldforce.visits.view',
           },

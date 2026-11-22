@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
+  MapPin,
   ChevronDown,
   Search,
   ShieldCheck,
@@ -79,7 +80,7 @@ const DASHBOARDS = [
 ];
 
 // Icons named by the server's report registry (kept explicit so the bundle stays small).
-const ICONS = { FileText, Undo2, Wallet, ShoppingCart, ReceiptText, PackageMinus, HandCoins, PackagePlus, ArrowLeftRight, TrendingUp, Hourglass, Scale, PackageSearch, Timer, Boxes, Snail, Landmark, Award, Target, Users, Package, Truck, AlertTriangle, LayoutDashboard, LineChart, Banknote, Footprints, FileBarChart };
+const ICONS = { FileText, Undo2, Wallet, ShoppingCart, ReceiptText, PackageMinus, HandCoins, PackagePlus, ArrowLeftRight, TrendingUp, Hourglass, Scale, PackageSearch, Timer, Boxes, Snail, Landmark, Award, Target, Users, Package, Truck, AlertTriangle, LayoutDashboard, LineChart, Banknote, Footprints, FileBarChart, MapPin };
 const iconOf = (name) => ICONS[name] || FileBarChart;
 
 export default function ReportsHub() {

@@ -30,7 +30,6 @@ import {
   Wallet,
   Boxes,
   Truck,
-  MapPin,
   BarChart3,
   UserCog,
   CalendarCheck,
@@ -147,8 +146,7 @@ export const companyNav = [
     items: [
       { to: '/app/beat-plan', label: 'Beat Plan', icon: CalendarRange, permission: 'fieldforce.targets.manage' },
       { to: '/app/day-cashouts', label: 'Day Cashouts', icon: Wallet, permission: 'vans.daycash.approve' },
-      // Team views; a salesman works from "My Day".
-      { to: '/app/visits', label: 'Visits Report', icon: MapPin, permission: 'fieldforce.visits.view', excludeRoles: ['SALESMAN'] },
+      // Team views; a salesman works from "My Day". Visits are in Reports -> Visit Register.
       { to: '/app/attendance', label: 'Attendance', icon: CalendarCheck, permission: 'fieldforce.attendance.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/targets', label: 'Targets', icon: Target, permission: 'fieldforce.targets.view' },
       { to: '/app/expenses', label: 'Expenses', icon: Wallet, permission: 'fieldforce.expenses.view' },

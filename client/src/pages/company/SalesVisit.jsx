@@ -11,6 +11,7 @@ import {
   LogOut,
   MapPin,
   MapPinOff,
+  Navigation,
   Phone,
   RotateCcw,
   Search,
@@ -45,6 +46,26 @@ const NO_ROUTE = 'none';
 // salesman checks out when they are done at the shop (nothing is forced).
 const RETURN_TO = '/app/sales';
 const OUTCOME_TONE = { ORDER_TAKEN: 'success', INVOICED: 'success', PAYMENT_COLLECTED: 'info', NO_ORDER: 'warning', CUSTOMER_UNAVAILABLE: 'muted' };
+
+/**
+ * Google Maps directions from where the phone is to the shop: on a phone it
+ * opens the Maps app in navigation, on a computer a new tab. The pinned point
+ * is exact; without a pin we fall back to the shop's name and address.
+ */
+const directionsUrl = (c) => {
+  const dest = c.location ? `${c.location.lat},${c.location.lng}` : c.fullAddress ? `${c.name}, ${c.fullAddress}` : '';
+  return dest ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}&travelmode=driving` : '';
+};
+
+/** Straight-line distance in km between two { lat, lng } points. */
+const kmBetween = (a, b) => {
+  const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+};
+const kmLabel = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km < 10 ? km.toFixed(1) : Math.round(km)} km`);
 
 const minutesSince = (at) => (at ? Math.max(0, Math.round((Date.now() - new Date(at).getTime()) / 60000)) : 0);
 const durationLabel = (min) => (min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`);
@@ -92,6 +113,37 @@ export default function SalesVisit() {
   const [busy, setBusy] = useState('');
   const [checkingOut, setCheckingOut] = useState(null);
   const [, tick] = useState(0);
+  // Where the phone is now: "how far" on each card and "Nearest first".
+  const [here, setHere] = useState(null);
+  const [nearest, setNearest] = useState(() => {
+    try {
+      return localStorage.getItem('sales-visit-nearest') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [locating, setLocating] = useState(false);
+  const locate = async () => {
+    setLocating(true);
+    const gps = await captureGps();
+    setLocating(false);
+    if (gps) setHere(gps);
+    return gps;
+  };
+  useEffect(() => {
+    let live = true;
+    captureGps().then((gps) => live && gps && setHere(gps));
+    return () => {
+      live = false;
+    };
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem('sales-visit-nearest', nearest ? '1' : '0');
+    } catch {
+      /* per-viewer convenience only */
+    }
+  }, [nearest]);
 
   const mine = useQuery({
     queryKey: ['company', 'beat', 'mine'],
@@ -117,7 +169,12 @@ export default function SalesVisit() {
     queryFn: async () => (await api.get('/v1/beat-plans/customers', { params: { route: routeId, q: search || undefined } })).data?.data ?? [],
     keepPreviousData: true,
   });
-  const rows = customers.data || [];
+  const rows = useMemo(() => {
+    const list = (customers.data || []).map((c) => ({ ...c, km: here && c.location ? kmBetween(here, c.location) : null }));
+    // Nearest first; shops without a pin go last, in name order.
+    if (nearest && here) list.sort((a, b) => (a.km ?? Infinity) - (b.km ?? Infinity));
+    return list;
+  }, [customers.data, here, nearest]);
 
   // Old links (?checkout=1) no longer pop the check-out; just tidy the URL.
   useEffect(() => {
@@ -247,9 +304,26 @@ export default function SalesVisit() {
         <p className="text-sm text-muted-foreground">
           {rows.length} customer{rows.length === 1 ? '' : 's'} · {done} visited today
         </p>
-        <div className="relative w-full sm:w-72">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search shop, code or phone…" className="h-9 pl-8" aria-label="Search customers" />
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <Button
+            variant={nearest && here ? 'default' : 'outline'}
+            size="sm"
+            loading={locating}
+            aria-pressed={nearest && Boolean(here)}
+            title="Sort the shops by how far they are from you"
+            onClick={async () => {
+              if (nearest) return setNearest(false);
+              const gps = here || (await locate());
+              if (!gps) return toast.error('Your location is not available. Allow location access for this site and turn on GPS.');
+              return setNearest(true);
+            }}
+          >
+            <Navigation className="h-4 w-4" /> Nearest first
+          </Button>
+          <div className="relative w-full sm:w-72">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search shop, code or phone…" className="h-9 pl-8" aria-label="Search customers" />
+          </div>
         </div>
       </div>
 
@@ -266,10 +340,11 @@ export default function SalesVisit() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((c) => {
-            const here = open && open.customerId === c.id;
+            const atShop = open && open.customerId === c.id;
+            const route = directionsUrl(c);
             const visited = c.visit?.status === 'COMPLETED';
             return (
-              <Card key={c.id} className={cn('flex flex-col gap-3 p-4', here && 'border-brand-500/60 bg-brand-500/5')}>
+              <Card key={c.id} className={cn('flex flex-col gap-3 p-4', atShop && 'border-brand-500/60 bg-brand-500/5')}>
                 <div className="min-w-0">
                   <p className="truncate font-medium" title={c.name}>
                     {c.name}
@@ -289,23 +364,39 @@ export default function SalesVisit() {
                       {c.phone}
                     </a>
                   )}
+                  {c.km != null && (
+                    <p className="flex items-center gap-1 font-medium text-foreground">
+                      <Navigation className="h-3 w-3" /> {kmLabel(c.km)} away
+                    </p>
+                  )}
                   {!c.hasLocation && (
                     <p className="flex items-center gap-1">
-                      <MapPinOff className="h-3 w-3" /> Shop location not pinned
+                      <MapPinOff className="h-3 w-3" /> Shop location not pinned{c.fullAddress ? ' - directions use the address' : ''}
                     </p>
                   )}
                   {c.outstanding > 0 && <p className="font-medium text-foreground">Due {formatMoney(c.outstanding)}</p>}
                 </div>
                 <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
-                  <VisitChip visit={here ? { ...open, status: 'IN_PROGRESS' } : c.visit} />
-                  {here ? (
+                  <VisitChip visit={atShop ? { ...open, status: 'IN_PROGRESS' } : c.visit} />
+                  {route && !atShop && (
+                    <a
+                      href={route}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-medium hover:bg-accent focus-ring"
+                      title={c.location ? 'Directions to the shop in Google Maps' : 'Directions to the shop address (location not pinned)'}
+                    >
+                      <Navigation className="h-4 w-4" /> Directions
+                    </a>
+                  )}
+                  {atShop ? (
                     <Button size="sm" className="ml-auto" onClick={() => setCheckingOut(open)}>
                       <LogOut className="h-4 w-4" /> Check out
                     </Button>
                   ) : visited ? (
                     // Back at a shop visited today (a second order, a late
                     // collection): a fresh check-in opens a new visit.
-                    <span className="ml-auto flex items-center gap-2">
+                    <span className={cn('flex items-center gap-2', !route && 'ml-auto')}>
                       <CheckCircle2 className="h-5 w-5 text-success" aria-label="Visited" />
                       <Button
                         size="sm"
@@ -322,7 +413,7 @@ export default function SalesVisit() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="ml-auto"
+                      className={route ? undefined : 'ml-auto'}
                       onClick={() => checkIn(c)}
                       loading={busy === c.id}
                       disabled={Boolean(open) || blocked || !can('fieldforce.visits.manage')}
