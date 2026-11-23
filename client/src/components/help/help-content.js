@@ -249,6 +249,12 @@ export const GUIDES = [
       ] },
       { p: 'If something must be corrected, an admin can reopen the year with a reason, fix it and close it again. The reopen is kept in the audit trail and everyone who keeps the books is told.' },
       { p: 'A credit note for an old-year invoice can still be issued in the new year (dated in the new year), and old-year invoices can still be paid.' },
+      { h: 'Set up the new year' },
+      { list: [
+        'Year Closing > Set up: copy last year\'s monthly, quarterly and yearly targets into the same months of the new year, raised or lowered by a percentage. Targets already set are kept, and inactive salesmen or routes are skipped.',
+        'Schemes, price lists and discounts that ended around the year end (or end in the next 45 days) are listed: tick them and extend them to the end of the new year in one go.',
+        'Numbering shows the first number each document gets in the new year. Change the prefixes in Company settings if you want.',
+      ] },
     ],
   },
   {
@@ -410,6 +416,8 @@ export const FAQS = [
   { q: 'How do I send a customer their statement?', a: 'Customers > row menu > Statement. Pick the period, then PDF, Excel, Email or WhatsApp. Tick Balance confirmation to ask them to confirm the balance.', roles: ['COMPANY_ADMIN', 'MANAGER', 'ACCOUNTANT'], k: 'ledger statement of account balance confirmation khata customer supplier' },
   { q: 'Why does the statement balance differ from what the customer says?', a: 'Advances (money not set against an invoice) are not in the balance, and drafts or cancelled documents are left out. Compare line by line with their statement, or ask them to send theirs.', roles: ['COMPANY_ADMIN', 'MANAGER', 'ACCOUNTANT'], k: 'ledger mismatch difference advance statement' },
   { q: 'Why can\'t I use last year\'s date?', a: 'The financial year has ended. Until it is closed, only admins and accountants can enter documents dated in it. Use today\'s date, or ask your accountant to enter it.', roles: ['MANAGER', 'SALESMAN', 'WAREHOUSE', 'ACCOUNTANT'], k: 'previous year back date old date march april ended locked' },
+  { q: 'How do I carry last year\'s targets into the new year?', a: 'Year Closing > Set up > Targets: enter the change in percent (0 to keep them the same) and choose Copy targets. Targets already set for a month are kept.', roles: ['COMPANY_ADMIN', 'MANAGER', 'ACCOUNTANT'], k: 'copy targets new year next year increase percent' },
+  { q: 'My scheme or price list stopped working in April', a: 'Its valid-to date has passed. Year Closing > Set up lists the ones that ended around the year end: tick them and extend them to the end of the new year.', roles: ['COMPANY_ADMIN', 'MANAGER', 'ACCOUNTANT'], k: 'scheme price list discount expired validity extend april new year' },
   { q: 'What does the closing pack contain?', a: 'An Excel file with the year totals (sales, tax, profit, purchases, collections) and every customer, supplier and stock balance on the last day. Before closing it is marked as a draft.', roles: ['COMPANY_ADMIN', 'ACCOUNTANT'], k: 'year end closing balances excel auditor ca export' },
   { q: 'Why can\'t I close the year?', a: 'Some checklist items still need attention. Finish them, or choose Close anyway and write why. Only an admin can close a year, and years close in order.', roles: ['COMPANY_ADMIN', 'ACCOUNTANT'], k: 'year closing blocked checklist close anyway' },
   { q: 'Why can\'t I edit an old invoice?', a: 'Its financial year may be closed, or the invoice is already issued. A closed year must be reopened by an admin before anything in it can change.', roles: OFFICE, k: 'locked old edit year closed' },

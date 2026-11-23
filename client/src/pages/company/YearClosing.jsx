@@ -16,6 +16,7 @@ import { Tabs } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorAlert } from '@/components/ui/alert';
 import { formatDate, formatMoney } from '@/utils/format';
+import NewYearSetup from '@/components/company/new-year-setup';
 import { cn } from '@/utils/cn';
 
 const STATUS = {
@@ -459,6 +460,8 @@ export default function YearClosing() {
               );
             })}
       </div>
+
+      <NewYearSetup />
 
       {viewed && <ClosingBalances key={viewed.tag} year={viewed} money={money} />}
 

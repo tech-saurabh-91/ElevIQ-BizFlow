@@ -10,6 +10,7 @@ import { escapeRegex } from '../../utils/query.js';
 import ExcelJS from 'exceljs';
 import dayjs from 'dayjs';
 import * as years from '../../services/yearCloseService.js';
+import { newYearOverview, copyTargets, extendValidity } from '../../services/newYearService.js';
 import { notifyPermission } from '../../services/notifyService.js';
 import { hasPermission } from '../../middlewares/rbac.js';
 import { ConflictError, NotFoundError } from '../../utils/errors.js';
@@ -201,4 +202,36 @@ export const exportPack = asyncHandler(async (req, res) => {
   return res.send(Buffer.from(buffer));
 });
 
-export default { list, checklist, close, reopen, balances, status, exportPack };
+/** GET /financial-years/new-year - targets to copy, validity to extend, next numbers. */
+export const newYear = asyncHandler(async (req, res) => {
+  const data = await newYearOverview(await companyOf(req), (p) => hasPermission(req, p));
+  return success(res, { data });
+});
+
+/** POST /financial-years/new-year/targets  { percent } - copy last year's targets into this year. */
+export const newYearTargets = asyncHandler(async (req, res) => {
+  const result = await copyTargets(await companyOf(req), { percent: req.body.percent || 0 });
+  audit(req, {
+    action: AUDIT_ACTIONS.CREATE,
+    entityType: 'Target',
+    entityLabel: 'New year targets',
+    description: `${result.created} target(s) copied from last year${req.body.percent ? ` (${req.body.percent > 0 ? '+' : ''}${req.body.percent}%)` : ''}; ${result.skipped.exists} already set, ${result.skipped.inactive} for inactive salesmen or routes`,
+  });
+  return success(res, { message: `${result.created} target${result.created === 1 ? '' : 's'} copied`, data: result });
+});
+
+/** POST /financial-years/new-year/extend  { items: [{ kind, id }], validTo? } */
+export const newYearExtend = asyncHandler(async (req, res) => {
+  const result = await extendValidity(await companyOf(req), req.body, (p) => hasPermission(req, p));
+  if (result.extended.length) {
+    audit(req, {
+      action: AUDIT_ACTIONS.UPDATE,
+      entityType: 'Setting',
+      entityLabel: 'Validity extended',
+      description: `Valid to ${dayjs(result.validTo).format('DD/MM/YYYY')}: ${result.extended.map((x) => x.name).join(', ')}`,
+    });
+  }
+  return success(res, { message: `${result.extended.length} extended to ${dayjs(result.validTo).format('DD/MM/YYYY')}`, data: result });
+});
+
+export default { list, checklist, close, reopen, balances, status, exportPack, newYear, newYearTargets, newYearExtend };
