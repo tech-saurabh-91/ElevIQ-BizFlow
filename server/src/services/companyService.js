@@ -153,7 +153,7 @@ const limitsFromPlan = (plan) =>
  * Best-effort platform audit trail (never fails the request).
  * Awaiting it keeps list/detail responses consistent immediately after a write.
  */
-const recordPlatformAudit = (actor, entry) =>
+export const recordPlatformAudit = (actor, entry) =>
   PlatformAuditLog.create({
     actor: {
       userId: actor?.id || null,

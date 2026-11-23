@@ -100,6 +100,22 @@ const companySchema = new mongoose.Schema(
 
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, default: null },
+
+    /**
+     * Data backup / purge / restore by the provider (see services/companyBackupService.js).
+     * `purgedAt` set = every record of the company was removed after a backup;
+     * the company row stays so its code is not reused and the backup can come back.
+     */
+    dataBackup: {
+      lastAt: { type: Date, default: null },
+      lastBy: { type: String, default: '' },
+      sha256: { type: String, default: '' },
+      bytes: { type: Number, default: 0 },
+      records: { type: Number, default: 0 },
+    },
+    purgedAt: { type: Date, default: null },
+    purgedBy: { type: String, default: '' },
+    restoredAt: { type: Date, default: null },
   },
   {
     timestamps: true,

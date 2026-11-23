@@ -73,5 +73,15 @@ export const spreadsheetUpload = multer({
   },
 });
 
+/** A company backup file (.json.gz) kept in memory for the restore. */
+export const backupUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 200 * 1024 * 1024, files: 1 },
+  fileFilter(_req, file, cb) {
+    if (/\.gz$/i.test(file.originalname || '')) return cb(null, true);
+    return cb(new BadRequestError('Upload the .json.gz backup file', 'INVALID_FILE_TYPE'));
+  },
+});
+
 export { uploadRoot };
 export default upload;

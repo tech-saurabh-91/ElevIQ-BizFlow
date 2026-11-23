@@ -384,6 +384,9 @@ export const AUDIT_ACTIONS = Object.freeze({
   PASSWORD_RESET: 'PASSWORD_RESET',
   YEAR_CLOSE: 'YEAR_CLOSE',
   YEAR_REOPEN: 'YEAR_REOPEN',
+  BACKUP: 'BACKUP',
+  PURGE: 'PURGE',
+  RESTORE: 'RESTORE',
 });
 
 // ---------------------------------------------------------------------------

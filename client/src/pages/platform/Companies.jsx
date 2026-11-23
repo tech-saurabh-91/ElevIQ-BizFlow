@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Building2, Plus, Search, Eye, Users, MoreHorizontal, SquareCheck, CirclePause, CircleX, SlidersHorizontal } from 'lucide-react';
+import { Building2, Plus, Search, Upload, Eye, Users, MoreHorizontal, SquareCheck, CirclePause, CircleX, SlidersHorizontal } from 'lucide-react';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
@@ -17,6 +17,8 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { formatDate } from '@/utils/format';
+import { useAuth } from '@/hooks/useAuth';
+import { RestoreBackupDialog } from '@/components/platform/company-data';
 
 const STATUS_CHIPS = ['ALL', 'ACTIVE', 'TRIAL', 'SUSPENDED', 'EXPIRED', 'CANCELLED'];
 
@@ -52,6 +54,8 @@ export default function Companies() {
 
   const [searchDraft, setSearchDraft] = useState(search);
   const [target, setTarget] = useState(null); // { company, nextStatus }
+  const [restoring, setRestoring] = useState(false);
+  const { user: me } = useAuth();
 
   const setParam = (patch) => {
     const next = new URLSearchParams(params);
@@ -113,14 +117,23 @@ export default function Companies() {
         title="Companies"
         description="Tenant accounts on the ElevIQ SFA platform"
         actions={
-          <Link to="/platform/companies/new">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New company
-            </Button>
-          </Link>
+          <>
+            {me?.role === 'SUPER_ADMIN' && (
+              <Button variant="outline" onClick={() => setRestoring(true)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Restore from backup
+              </Button>
+            )}
+            <Link to="/platform/companies/new">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New company
+              </Button>
+            </Link>
+          </>
         }
       />
+      <RestoreBackupDialog open={restoring} onClose={() => setRestoring(false)} onDone={() => queryClient.invalidateQueries({ queryKey: ['platform', 'companies'] })} />
 
       {/* Filters */}
       <Card>

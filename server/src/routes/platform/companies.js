@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../../controllers/platform/companyController.js';
+import * as data from '../../controllers/platform/companyDataController.js';
+import { backupUpload } from '../../middlewares/upload.js';
 import { validate, paginationSchema } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
 import {
@@ -45,6 +47,8 @@ const userQuerySchema = paginationSchema.extend({
 // ---- collection ------------------------------------------------------------
 router.get('/', validate({ query: companyListQuerySchema }), ctrl.list);
 router.post('/', validate({ body: createCompanySchema }), ctrl.create);
+// Load a company back from its backup file (?apply=true; without it the file is only checked).
+router.post('/restore', data.requireSuperAdmin, backupUpload.single('file'), data.restore);
 
 // ---- item ------------------------------------------------------------------
 router.get('/:id', ctrl.detail);
@@ -62,5 +66,20 @@ router.post(
   ctrl.assignSubscription
 );
 router.post('/:id/impersonate', validate({ body: impersonateSchema }), ctrl.impersonate);
+
+// ---- data: backup / purge (super admin) ---------------------------------------
+router.get('/:id/data', data.requireSuperAdmin, data.summary);
+router.get('/:id/backup', data.requireSuperAdmin, data.backup);
+router.post(
+  '/:id/purge',
+  data.requireSuperAdmin,
+  validate({
+    body: z.object({
+      confirmCode: z.string().trim().min(1, 'Type the company code to confirm').max(40),
+      reason: z.string().trim().min(10, 'Say why the data is deleted (at least 10 characters)').max(500),
+    }),
+  }),
+  data.purge
+);
 
 export default router;

@@ -39,6 +39,7 @@ import { Dialog, ConfirmDialog } from '@/components/ui/dialog';
 import { ErrorAlert } from '@/components/ui/alert';
 import { formatMoney, formatNumber, formatDate, formatDateTime } from '@/utils/format';
 import { useAuth } from '@/hooks/useAuth';
+import { CompanyDataPanel } from '@/components/platform/company-data';
 
 const TRANSITION_ACTION = {
   ACTIVE: { label: 'Activate', icon: SquareCheck },
@@ -362,6 +363,7 @@ export default function CompanyDetail() {
           { value: 'users', label: 'Users', badge: tenantCounts.users },
           { value: 'subscriptions', label: 'Subscription history', badge: subscriptions.length },
           { value: 'activity', label: 'Activity', badge: activity.length },
+          ...(me?.role === 'SUPER_ADMIN' ? [{ value: 'data', label: 'Data & backup' }] : []),
         ]}
       />
 
@@ -441,6 +443,12 @@ export default function CompanyDetail() {
           </Card>
         </div>
       </TabPanel>
+
+      {me?.role === 'SUPER_ADMIN' && (
+        <TabPanel value="data" active={tab}>
+          {tab === 'data' && <CompanyDataPanel company={{ ...company, id }} />}
+        </TabPanel>
+      )}
 
       <TabPanel value="users" active={tab}>
         <Card>
