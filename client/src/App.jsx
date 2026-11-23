@@ -66,6 +66,14 @@ const PriceReview = lazy(() => import('@/pages/company/PriceReview'));
 const PurchaseBills = lazy(() => import('@/pages/company/PurchaseBills'));
 const SupplierPayments = lazy(() => import('@/pages/company/SupplierPayments'));
 const PurchaseReturns = lazy(() => import('@/pages/company/PurchaseReturns'));
+// Purchase documents on their own screens (new + detail), like orders and invoices.
+const PurchaseOrderNew = lazy(() => import('@/pages/company/PurchaseNew').then((m) => ({ default: m.PurchaseOrderNew })));
+const GoodsReceiptNew = lazy(() => import('@/pages/company/PurchaseNew').then((m) => ({ default: m.GoodsReceiptNew })));
+const PurchaseDocPage = lazy(() => import('@/pages/company/PurchaseDocPage'));
+const BookBillPage = lazy(() => import('@/pages/company/PurchaseBills').then((m) => ({ default: m.BookBillPage })));
+const BillDetailPage = lazy(() => import('@/pages/company/PurchaseBills').then((m) => ({ default: m.BillDetailPage })));
+const PayPage = lazy(() => import('@/pages/company/SupplierPayments').then((m) => ({ default: m.PayPage })));
+const ReturnPage = lazy(() => import('@/pages/company/PurchaseReturns').then((m) => ({ default: m.ReturnPage })));
 const PurchaseOrders = lazy(() => import('@/pages/company/PurchaseOrders'));
 const GoodsReceipts = lazy(() => import('@/pages/company/GoodsReceipts'));
 const DiscountRules = lazy(() => import('@/pages/company/DiscountRules'));
@@ -276,6 +284,16 @@ export default function App() {
           <Route path="purchase-returns" element={guard('purchasereturns.view', <PurchaseReturns />)} />
           <Route path="purchase-orders" element={guard('purchases.view', <PurchaseOrders />)} />
           <Route path="goods-receipts" element={guard('grn.view', <GoodsReceipts />)} />
+          <Route path="purchase-orders/new" element={guard('purchases.create', <PurchaseOrderNew />)} />
+          <Route path="purchase-orders/:id" element={guard('purchases.view', <PurchaseDocPage kind="po" />)} />
+          <Route path="goods-receipts/new" element={guard('grn.create', <GoodsReceiptNew />)} />
+          <Route path="goods-receipts/:id" element={guard('grn.view', <PurchaseDocPage kind="grn" />)} />
+          <Route path="purchase-bills/new" element={guard('bills.create', <BookBillPage />)} />
+          <Route path="purchase-bills/:id" element={guard('bills.view', <BillDetailPage />)} />
+          <Route path="supplier-payments/new" element={guard('supplierpayments.create', <PayPage />)} />
+          <Route path="supplier-payments/:id" element={guard('supplierpayments.view', <PurchaseDocPage kind="payment" />)} />
+          <Route path="purchase-returns/new" element={guard('purchasereturns.create', <ReturnPage />)} />
+          <Route path="purchase-returns/:id" element={guard('purchasereturns.view', <PurchaseDocPage kind="return" />)} />
           <Route path="discounts" element={guard('discounts.view', <DiscountRules />)} />
           <Route path="schemes" element={guard('schemes.view', <Schemes />)} />
           <Route path="warehouses" element={guard('inventory.view', <Warehouses />)} />

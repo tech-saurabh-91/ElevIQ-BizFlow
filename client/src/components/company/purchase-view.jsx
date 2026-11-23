@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Dialog } from '@/components/ui/dialog';
+import { FormShell } from '@/components/ui/form-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/badge';
 import { formatDate, formatDateTime, formatMoney, formatNumber } from '@/utils/format';
@@ -16,10 +16,10 @@ import { useTaxLabels } from '@/hooks/useLocations';
  * supplier payment or purchase return. Same layout as the supplier bill view.
  */
 const KINDS = {
-  po: { path: 'purchase-orders', no: 'poNo', date: 'poDate', label: 'Purchase order' },
-  grn: { path: 'goods-receipts', no: 'grnNo', date: 'grnDate', label: 'Goods receipt' },
-  payment: { path: 'supplier-payments', no: 'paymentNo', date: 'paymentDate', label: 'Supplier payment' },
-  return: { path: 'purchase-returns', no: 'returnNo', date: 'returnDate', label: 'Purchase return' },
+  po: { path: 'purchase-orders', no: 'poNo', date: 'poDate', label: 'Purchase order', list: 'Purchase Orders' },
+  grn: { path: 'goods-receipts', no: 'grnNo', date: 'grnDate', label: 'Goods receipt', list: 'Goods Receipts' },
+  payment: { path: 'supplier-payments', no: 'paymentNo', date: 'paymentDate', label: 'Supplier payment', list: 'Supplier Payments' },
+  return: { path: 'purchase-returns', no: 'returnNo', date: 'returnDate', label: 'Purchase return', list: 'Purchase Returns' },
 };
 
 const Row = ({ label, value, strong }) => (
@@ -52,7 +52,8 @@ function TaxRows({ doc, money, label = 'Tax' }) {
   );
 }
 
-export function PurchaseDocDialog({ kind, id, onClose }) {
+/** The saved document - as a dialog, or with `asPage` as its own full screen. */
+export function PurchaseDocDialog({ kind, id, onClose, asPage = false }) {
   const cfg = KINDS[kind];
   const { company } = useAuth();
   const { can } = usePermissions();
@@ -68,7 +69,15 @@ export function PurchaseDocDialog({ kind, id, onClose }) {
   const description = doc ? `${cfg.label} dated ${formatDate(doc[cfg.date])}` : '';
 
   return (
-    <Dialog open onClose={onClose} size="lg" title={title} description={description}>
+    <FormShell
+      asPage={asPage}
+      open
+      onClose={onClose}
+      size="lg"
+      title={title}
+      description={description}
+      breadcrumbs={[{ label: 'Purchase', to: '/app/purchase-bills' }, { label: cfg.list, to: `/app/${cfg.path}` }, { label: doc?.[cfg.no] || cfg.label }]}
+    >
       {isLoading || !doc ? (
         <Skeleton className="h-48 w-full" />
       ) : (
@@ -247,7 +256,7 @@ export function PurchaseDocDialog({ kind, id, onClose }) {
           )}
         </div>
       )}
-    </Dialog>
+    </FormShell>
   );
 }
 

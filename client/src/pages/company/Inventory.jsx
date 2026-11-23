@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ArrowDown, ArrowUp, AlertTriangle, Boxes, ClipboardList, Download, Eye, Layers, MoreHorizontal, Package, PackagePlus, Plus, Search, ShoppingCart, Trash2, TrendingUp, Truck, Warehouse, X, Upload } from 'lucide-react';
@@ -48,6 +48,7 @@ import BulkImport from '@/components/company/BulkImport';
 import { todayInput } from '@/components/company/form-utils';
 import { SectionCards, SectionBar } from '@/components/ui/section-cards';
 import { PurchaseDocDialog } from '@/components/company/purchase-view';
+import { FormShell } from '@/components/ui/form-shell';
 
 const TABS = [
   { value: 'stock', label: 'Stock on hand', icon: Boxes, description: 'What each warehouse and van holds right now' },
@@ -1287,7 +1288,7 @@ function TransfersTab() {
 // Purchase orders
 // ===========================================================================
 /** Also the Purchase Orders page (Purchase menu). */
-export function PurchaseOrdersTab() {
+export function PurchaseOrdersTab({ mode = 'list' } = {}) {
   const [params, setParams] = useSearchParams();
   const setParam = useSetParam(params, setParams);
   const queryClient = useQueryClient();
@@ -1339,6 +1340,11 @@ export function PurchaseOrdersTab() {
 
   // ---- create ---------------------------------------------------------------
   const [createOpen, setCreateOpen] = useState(false);
+  // "create" mode: the form is the whole screen (/app/purchase-orders/new), like orders.
+  const navigate = useNavigate();
+  const asPage = mode === 'create';
+  const openCreate = () => navigate('/app/purchase-orders/new');
+  const closeCreate = () => (asPage ? navigate('/app/purchase-orders') : setCreateOpen(false));
   const [form, setForm] = useState({
     supplierId: '',
     warehouse: '',
@@ -1384,6 +1390,7 @@ export function PurchaseOrdersTab() {
       return data;
     },
     onSuccess: (payload) => {
+      if (asPage) navigate(`/app/purchase-orders/${payload?.data?.id || payload?.data?._id || ''}`);
       toast.success(payload?.message || 'Purchase order created');
       setCreateOpen(false);
       resetForm();
@@ -1424,6 +1431,8 @@ export function PurchaseOrdersTab() {
 
   return (
     <div className="space-y-4">
+      {!asPage && (
+      <>
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-2 py-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -1449,7 +1458,7 @@ export function PurchaseOrdersTab() {
 
           <div className="flex flex-wrap items-center gap-2">
             {canCreate && (
-              <Button onClick={() => setCreateOpen(true)}>
+              <Button onClick={openCreate}>
                 <Plus className="h-4 w-4" />
                 New purchase order
               </Button>
@@ -1506,7 +1515,7 @@ export function PurchaseOrdersTab() {
             description="Raise a purchase order to buy stock from a supplier, then receive it with a GRN."
             action={
               canCreate ? (
-                <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <Button size="sm" onClick={openCreate}>
                   <Plus className="h-4 w-4" />
                   New purchase order
                 </Button>
@@ -1535,7 +1544,7 @@ export function PurchaseOrdersTab() {
                 return (
                   <TableRow key={row.id}>
                     <TableCell>
-                      <button type="button" onClick={() => setViewing(row.id)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
+                      <button type="button" onClick={() => navigate(`/app/purchase-orders/${row.id}`)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
                         {row.poNo || '—'}
                       </button>
                     </TableCell>
@@ -1566,7 +1575,7 @@ export function PurchaseOrdersTab() {
                               <DropdownMenuItem
                                 onClick={() => {
                                   close();
-                                  setViewing(row.id);
+                                  navigate(`/app/purchase-orders/${row.id}`);
                                 }}
                               >
                                 <Eye className="h-4 w-4" /> View
@@ -1625,9 +1634,13 @@ export function PurchaseOrdersTab() {
         </Card>
       )}
 
-      <Dialog
+      </>
+      )}
+      <FormShell
+        asPage={asPage}
+        breadcrumbs={[{ label: 'Purchase', to: '/app/purchase-bills' }, { label: 'Purchase Orders', to: '/app/purchase-orders' }, { label: 'New' }]}
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={closeCreate}
         title="New purchase order"
         description="Order stock from a supplier. Nothing moves until a goods receipt is posted."
         size="xl"
@@ -1635,7 +1648,7 @@ export function PurchaseOrdersTab() {
         footer={
           <>
             {missingPrice && <span className="mr-auto text-xs text-destructive">Enter the price of every line</span>}
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={createMutation.isPending}>
+            <Button variant="outline" onClick={closeCreate} disabled={createMutation.isPending}>
               Cancel
             </Button>
             <Button
@@ -1764,7 +1777,7 @@ export function PurchaseOrdersTab() {
             Mark as sent to the supplier straight away
           </label>
         </div>
-      </Dialog>
+      </FormShell>
 
       {viewing && <PurchaseDocDialog kind="po" id={viewing} onClose={() => setViewing(null)} />}
 
@@ -1827,7 +1840,7 @@ export function PurchaseOrdersTab() {
 // Goods receipt notes
 // ===========================================================================
 /** Also the Goods Receipts page (Purchase menu). */
-export function GoodsReceiptsTab() {
+export function GoodsReceiptsTab({ mode = 'list' } = {}) {
   const [params, setParams] = useSearchParams();
   const setParam = useSetParam(params, setParams);
   const queryClient = useQueryClient();
@@ -1880,6 +1893,11 @@ export function GoodsReceiptsTab() {
 
   // ---- create ---------------------------------------------------------------
   const [createOpen, setCreateOpen] = useState(false);
+  // "create" mode: the form is the whole screen (/app/goods-receipts/new), like orders.
+  const navigate = useNavigate();
+  const asPage = mode === 'create';
+  const openCreate = () => navigate('/app/goods-receipts/new');
+  const closeCreate = () => (asPage ? navigate('/app/goods-receipts') : setCreateOpen(false));
   const [form, setForm] = useState({
     purchaseOrder: '',
     warehouse: '',
@@ -1992,6 +2010,7 @@ export function GoodsReceiptsTab() {
       return data;
     },
     onSuccess: (payload) => {
+      if (asPage) navigate(`/app/goods-receipts/${payload?.data?.id || payload?.data?._id || ''}`);
       toast.success(payload?.message || 'Goods receipt created');
       setCreateOpen(false);
       resetForm();
@@ -2028,6 +2047,8 @@ export function GoodsReceiptsTab() {
 
   return (
     <div className="space-y-4">
+      {!asPage && (
+      <>
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-2 py-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -2052,7 +2073,7 @@ export function GoodsReceiptsTab() {
           </div>
 
           {canCreate && (
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button onClick={openCreate}>
               <Plus className="h-4 w-4" />
               New goods receipt
             </Button>
@@ -2080,7 +2101,7 @@ export function GoodsReceiptsTab() {
             description="A GRN books physically received stock into a warehouse against a purchase order."
             action={
               canCreate ? (
-                <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <Button size="sm" onClick={openCreate}>
                   <Plus className="h-4 w-4" />
                   New goods receipt
                 </Button>
@@ -2109,7 +2130,7 @@ export function GoodsReceiptsTab() {
                 return (
                   <TableRow key={row.id}>
                     <TableCell>
-                      <button type="button" onClick={() => setViewingGrn(row.id)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
+                      <button type="button" onClick={() => navigate(`/app/goods-receipts/${row.id}`)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
                         {row.grnNo || '—'}
                       </button>
                     </TableCell>
@@ -2140,7 +2161,7 @@ export function GoodsReceiptsTab() {
                               <DropdownMenuItem
                                 onClick={() => {
                                   close();
-                                  setViewingGrn(row.id);
+                                  navigate(`/app/goods-receipts/${row.id}`);
                                 }}
                               >
                                 <Eye className="h-4 w-4" /> View
@@ -2199,9 +2220,13 @@ export function GoodsReceiptsTab() {
         </Card>
       )}
 
-      <Dialog
+      </>
+      )}
+      <FormShell
+        asPage={asPage}
+        breadcrumbs={[{ label: 'Purchase', to: '/app/purchase-bills' }, { label: 'Goods Receipts', to: '/app/goods-receipts' }, { label: 'New' }]}
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={closeCreate}
         title="New goods receipt"
         description="Record what physically arrived. Posting the receipt is what books stock in."
         size="xl"
@@ -2209,7 +2234,7 @@ export function GoodsReceiptsTab() {
         footer={
           <>
             {missingCost && <span className="mr-auto text-xs text-destructive">Enter the unit cost of every accepted line</span>}
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={createMutation.isPending}>
+            <Button variant="outline" onClick={closeCreate} disabled={createMutation.isPending}>
               Cancel
             </Button>
             <Button
@@ -2350,7 +2375,7 @@ export function GoodsReceiptsTab() {
             Post immediately — books the accepted quantities into stock
           </label>
         </div>
-      </Dialog>
+      </FormShell>
 
       {action?.kind === 'post' && (
         <WorkflowDialog

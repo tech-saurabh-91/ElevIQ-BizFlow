@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Eye, MoreHorizontal, Plus, Search, XCircle } from 'lucide-react';
@@ -16,6 +16,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { StatusBadge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
+import { FormShell } from '@/components/ui/form-shell';
 import { ErrorAlert } from '@/components/ui/alert';
 import { DropdownMenu, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { PayablesStats, PAYABLES_KEY, SupplierSelect, amountOf, onlyDecimal } from '@/components/company/payables-shared';
@@ -39,6 +40,7 @@ const modeLabel = (m) => MODES.find(([v]) => v === m)?.[1] || m;
 
 /** Money paid to suppliers, set against their bills (the rest is an advance). */
 export default function SupplierPayments() {
+  const navigate = useNavigate();
   const { company } = useAuth();
   const { can } = usePermissions();
   const queryClient = useQueryClient();
@@ -83,7 +85,7 @@ export default function SupplierPayments() {
         breadcrumbs={[{ label: 'Purchase', to: '/app/purchase-bills' }, { label: 'Supplier Payments' }]}
         actions={
           can('supplierpayments.create') && (
-            <Button onClick={() => setPaying(true)}>
+            <Button onClick={() => navigate('/app/supplier-payments/new')}>
               <Plus className="h-4 w-4" /> Record payment
             </Button>
           )
@@ -126,7 +128,7 @@ export default function SupplierPayments() {
             icon="empty"
             title="No supplier payments yet"
             description="Record what you pay suppliers to keep their balances right."
-            action={can('supplierpayments.create') && <Button onClick={() => setPaying(true)}>Record payment</Button>}
+            action={can('supplierpayments.create') && <Button onClick={() => navigate('/app/supplier-payments/new')}>Record payment</Button>}
           />
         ) : (
           <Table cards>
@@ -145,7 +147,7 @@ export default function SupplierPayments() {
               {rows.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell>
-                    <button type="button" onClick={() => setViewing(p.id)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
+                    <button type="button" onClick={() => navigate(`/app/supplier-payments/${p.id}`)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
                       {p.paymentNo}
                     </button>
                     <p className="text-xs text-muted-foreground">{formatDate(p.paymentDate)}</p>
@@ -175,7 +177,7 @@ export default function SupplierPayments() {
                       >
                         {({ close }) => (
                           <>
-                            <DropdownMenuItem onClick={() => (close(), setViewing(p.id))}>
+                            <DropdownMenuItem onClick={() => (close(), navigate(`/app/supplier-payments/${p.id}`))}>
                               <Eye className="h-4 w-4" /> View
                             </DropdownMenuItem>
                             {can('supplierpayments.cancel') && p.status !== 'CANCELLED' && (
@@ -210,7 +212,7 @@ export default function SupplierPayments() {
   );
 }
 
-function PayDialog({ onClose, money }) {
+export function PayDialog({ onClose, money , asPage = false, onSaved }) {
   const queryClient = useQueryClient();
   const [supplierId, setSupplierId] = useState('');
   const [form, setForm] = useState({ amount: '', paymentDate: todayInput(), mode: 'BANK_TRANSFER', reference: '', notes: '' });
@@ -256,7 +258,8 @@ function PayDialog({ onClose, money }) {
     onSuccess: (res) => {
       toast.success(`Payment ${res.data?.data?.paymentNo || ''} recorded`);
       queryClient.invalidateQueries({ queryKey: PAYABLES_KEY });
-      onClose();
+      if (onSaved) onSaved(res.data?.data);
+      else onClose();
     },
     onError: (err) => setError(apiError(err)),
   });
@@ -264,7 +267,7 @@ function PayDialog({ onClose, money }) {
   const canSave = supplierId && amount > 0 && advance >= -0.009 && !overBill && !needsReference;
 
   return (
-    <Dialog
+    <FormShell asPage={asPage} breadcrumbs={[{ label: 'Purchase', to: '/app/purchase-bills' }, { label: 'Supplier Payments', to: '/app/supplier-payments' }, { label: 'Record payment' }]}
       open
       onClose={onClose}
       size="lg"
@@ -366,6 +369,14 @@ function PayDialog({ onClose, money }) {
           <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </Field>
       </div>
-    </Dialog>
+    </FormShell>
   );
+}
+
+/** Recording a supplier payment on its own screen (/app/supplier-payments/new). */
+export function PayPage() {
+  const navigate = useNavigate();
+  const { company } = useAuth();
+  const money = (v) => formatMoney(v || 0, company?.currency);
+  return <PayDialog asPage money={money} onClose={() => navigate('/app/supplier-payments')} onSaved={(d) => navigate(d?.id || d?._id ? `/app/supplier-payments/${d.id || d._id}` : '/app/supplier-payments')} />;
 }

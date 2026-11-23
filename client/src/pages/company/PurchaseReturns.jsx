@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Eye, MoreHorizontal, Plus, Search, XCircle } from 'lucide-react';
@@ -16,6 +16,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { StatusBadge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
+import { FormShell } from '@/components/ui/form-shell';
 import { ErrorAlert } from '@/components/ui/alert';
 import { DropdownMenu, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { PAYABLES_KEY, SupplierSelect, amountOf, onlyDecimal } from '@/components/company/payables-shared';
@@ -31,6 +32,7 @@ import { PurchaseDocDialog } from '@/components/company/purchase-view';
  * bill and what you owe go down.
  */
 export default function PurchaseReturns() {
+  const navigate = useNavigate();
   const { company } = useAuth();
   const { can } = usePermissions();
   const queryClient = useQueryClient();
@@ -75,7 +77,7 @@ export default function PurchaseReturns() {
         breadcrumbs={[{ label: 'Purchase', to: '/app/purchase-bills' }, { label: 'Purchase Returns' }]}
         actions={
           can('purchasereturns.create') && (
-            <Button onClick={() => setCreating(true)}>
+            <Button onClick={() => navigate('/app/purchase-returns/new')}>
               <Plus className="h-4 w-4" /> New return
             </Button>
           )
@@ -130,7 +132,7 @@ export default function PurchaseReturns() {
               {rows.map((x) => (
                 <TableRow key={x.id}>
                   <TableCell>
-                    <button type="button" onClick={() => setViewing(x.id)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
+                    <button type="button" onClick={() => navigate(`/app/purchase-returns/${x.id}`)} className="text-left font-semibold text-brand-600 hover:underline dark:text-brand-300">
                       {x.returnNo}
                     </button>
                     <p className="text-xs text-muted-foreground">
@@ -161,7 +163,7 @@ export default function PurchaseReturns() {
                       >
                         {({ close }) => (
                           <>
-                            <DropdownMenuItem onClick={() => (close(), setViewing(x.id))}>
+                            <DropdownMenuItem onClick={() => (close(), navigate(`/app/purchase-returns/${x.id}`))}>
                               <Eye className="h-4 w-4" /> View
                             </DropdownMenuItem>
                             {can('purchasereturns.cancel') && x.status !== 'CANCELLED' && (
@@ -196,7 +198,7 @@ export default function PurchaseReturns() {
   );
 }
 
-function ReturnDialog({ onClose, money }) {
+export function ReturnDialog({ onClose, money , asPage = false, onSaved }) {
   const queryClient = useQueryClient();
   const [supplierId, setSupplierId] = useState('');
   const [grnId, setGrnId] = useState('');
@@ -230,13 +232,14 @@ function ReturnDialog({ onClose, money }) {
     onSuccess: (res) => {
       toast.success(`Return ${res.data?.data?.returnNo || ''} posted`);
       queryClient.invalidateQueries({ queryKey: PAYABLES_KEY });
-      onClose();
+      if (onSaved) onSaved(res.data?.data);
+      else onClose();
     },
     onError: (err) => setError(apiError(err)),
   });
 
   return (
-    <Dialog
+    <FormShell asPage={asPage} breadcrumbs={[{ label: 'Purchase', to: '/app/purchase-bills' }, { label: 'Purchase Returns', to: '/app/purchase-returns' }, { label: 'New return' }]}
       open
       onClose={onClose}
       size="lg"
@@ -301,6 +304,14 @@ function ReturnDialog({ onClose, money }) {
           Goods not yet billed simply will not be billed. Goods already on a bill come off that bill and what you owe the supplier.
         </p>
       </div>
-    </Dialog>
+    </FormShell>
   );
+}
+
+/** A purchase return on its own screen (/app/purchase-returns/new). */
+export function ReturnPage() {
+  const navigate = useNavigate();
+  const { company } = useAuth();
+  const money = (v) => formatMoney(v || 0, company?.currency);
+  return <ReturnDialog asPage money={money} onClose={() => navigate('/app/purchase-returns')} onSaved={(d) => navigate(d?.id || d?._id ? `/app/purchase-returns/${d.id || d._id}` : '/app/purchase-returns')} />;
 }
