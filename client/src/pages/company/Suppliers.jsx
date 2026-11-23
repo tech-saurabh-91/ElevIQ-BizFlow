@@ -3,7 +3,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Truck } from 'lucide-react';
+import { BookOpenText, Truck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { usePermissions } from '@/hooks/usePermissions';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
@@ -287,6 +290,9 @@ function SupplierForm({ mode, initial, onClose, onSaved }) {
 export default function Suppliers() {
   const { taxIdLabel } = useTaxLabels();
   const { company } = useAuth();
+  const { can } = usePermissions();
+  const navigate = useNavigate();
+  const canStatement = can('bills.view') && can('supplierpayments.view') && company?.featureFlags?.purchase !== false;
 
   const columns = [
     {
@@ -376,6 +382,20 @@ export default function Suppliers() {
       formDescription="Bank details and payment terms are tenant-scoped."
       formSize="xl"
       renderForm={(props) => <SupplierForm {...props} />}
+      rowActions={
+        canStatement
+          ? (row, { close }) => (
+              <DropdownMenuItem
+                onClick={() => {
+                  close();
+                  navigate(`/app/ledger/supplier/${row.id}`);
+                }}
+              >
+                <BookOpenText className="h-4 w-4" /> Statement
+              </DropdownMenuItem>
+            )
+          : undefined
+      }
     />
   );
 }

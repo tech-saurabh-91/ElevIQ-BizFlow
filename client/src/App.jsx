@@ -88,6 +88,7 @@ const Expenses = lazy(() => import('@/pages/company/Expenses'));
 const Reports = lazy(() => import('@/pages/company/Reports'));
 const ReportsHub = lazy(() => import('@/pages/company/ReportsHub'));
 const ReportViewer = lazy(() => import('@/pages/company/ReportViewer'));
+const PartyLedger = lazy(() => import('@/pages/company/PartyLedger'));
 const ReportAccess = lazy(() => import('@/pages/company/ReportAccess'));
 const DashboardCustomize = lazy(() => import('@/pages/company/DashboardCustomize'));
 const Notifications = lazy(() => import('@/pages/company/Notifications'));
@@ -294,6 +295,8 @@ export default function App() {
           <Route path="reports/access" element={guard('settings.update', <ReportAccess />)} />
           <Route path="dashboard/customize" element={guard('settings.update', <DashboardCustomize />)} />
           <Route path="reports/:code" element={<ReportViewer />} />
+          {/* Statement of account of a customer or supplier (the server checks access by kind). */}
+          <Route path="ledger/:kind/:id" element={<PartyLedger />} />
           <Route path="inventory" element={guard('inventory.view', <Inventory />)} />
 
           {/* Admin */}

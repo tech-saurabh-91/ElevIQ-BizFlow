@@ -20,6 +20,7 @@ import Expense from '../models/Expense.js';
 import Visit from '../models/Visit.js';
 import { startOfDay, dayKey, DEFAULT_TZ } from './fieldForceService.js';
 import { lateMovementIds } from './yearCloseService.js';
+import { CUSTOMER_LEGS, SUPPLIER_LEGS } from './ledgerService.js';
 
 /**
  * Report registry: every printable report in one place.
@@ -1102,11 +1103,7 @@ const customerBalances = {
       ctx,
       Party: Customer,
       partyFilter: p.customer ? { _id: oid(p.customer) } : {},
-      legs: [
-        { key: 'sales', Model: Invoice, match: { status: { $in: LIVE_INVOICE } }, date: 'invoiceDate', party: 'customerId', value: '$total', sign: 1 },
-        { key: 'receipts', Model: Payment, match: { status: 'RECEIVED' }, date: 'paymentDate', party: 'customerId', value: { $ifNull: ['$amountApplied', '$amount'] }, sign: -1 },
-        { key: 'credits', Model: CreditNote, match: { status: 'ISSUED' }, date: 'creditNoteDate', party: 'customerId', value: '$total', sign: -1 },
-      ],
+      legs: CUSTOMER_LEGS,
     });
     const columns = [col('name', 'Customer'), col('code', 'Code'), col('opening', 'Opening', 'money'), col('sales', 'Sales', 'money'), col('receipts', 'Receipts', 'money'), col('credits', 'Credit notes', 'money'), col('closing', 'Closing', 'money')];
     return finish(columns, rows, {
@@ -1130,11 +1127,7 @@ const supplierBalances = {
       ctx,
       Party: Supplier,
       partyFilter: p.supplier ? { _id: oid(p.supplier) } : {},
-      legs: [
-        { key: 'bills', Model: PurchaseBill, match: { status: { $ne: 'CANCELLED' } }, date: 'billDate', party: 'supplierId', value: '$total', sign: 1 },
-        { key: 'payments', Model: SupplierPayment, match: { status: { $ne: 'CANCELLED' } }, date: 'paymentDate', party: 'supplierId', value: '$amount', sign: -1 },
-        { key: 'returns', Model: PurchaseReturn, match: { status: { $ne: 'CANCELLED' } }, date: 'returnDate', party: 'supplierId', value: '$total', sign: -1 },
-      ],
+      legs: SUPPLIER_LEGS,
     });
     const columns = [col('name', 'Supplier'), col('code', 'Code'), col('opening', 'Opening', 'money'), col('bills', 'Bills', 'money'), col('payments', 'Payments', 'money'), col('returns', 'Returns', 'money'), col('closing', 'Closing', 'money')];
     return finish(columns, rows, { note: 'Opening = what you owed at the start of the period. A new supplier’s own opening balance shows under Bills.' });

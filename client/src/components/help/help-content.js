@@ -211,6 +211,22 @@ export const GUIDES = [
     ],
   },
   {
+    id: 'statement',
+    title: 'Statement of account and balance confirmation',
+    roles: ['COMPANY_ADMIN', 'MANAGER', 'ACCOUNTANT'],
+    body: [
+      { steps: [
+        'Open Customers (or Suppliers), open the row menu of the party and choose Statement.',
+        'Pick the period: a financial year, a month or your own dates. The statement starts with the opening balance on the first day.',
+        'Every invoice, receipt and credit note (bill, payment and return for a supplier) follows in date order with the running balance, ending with the closing balance.',
+        'Print it as a PDF, download it to Excel, email it with the PDF attached, or send a short summary on WhatsApp.',
+      ] },
+      { p: 'Tick Balance confirmation before printing or sending to ask the party to confirm the closing balance: the PDF then carries a confirmation request and a place for their signature. This is the usual year-end balance confirmation.' },
+      { p: 'Dr means the party owes you, Cr means you owe the party. Money received but not set against any invoice is an advance: it is shown on its receipt line but not in the balance. Cancelled and draft documents are left out.' },
+      { p: 'A customer statement needs the "Statement of account" permission (admins, managers and accountants by default; the admin can give it to a salesman in Users > Access).' },
+    ],
+  },
+  {
     id: 'year',
     title: 'Closing the financial year',
     roles: ['COMPANY_ADMIN', 'ACCOUNTANT'],
@@ -391,6 +407,8 @@ export const FAQS = [
   { q: 'How do I close my day on the van?', a: 'Open Day Cashout, count the stock and cash, and submit. After a manager approves it, check out in Attendance.', roles: ['SALESMAN', 'MANAGER'], k: 'cashout cash handover end of day van' },
   { q: 'How do I claim an expense?', a: 'Open Expenses, add the spend with its amount, and submit it. Your manager approves it and marks it paid.', roles: ['SALESMAN', 'MANAGER', 'COMPANY_ADMIN', 'ACCOUNTANT'], k: 'expense claim travel fuel reimburse' },
   { q: 'Why can\'t I change the currency or financial year?', a: 'They lock after the company\'s first transaction, because saved documents depend on them. The same goes for the currency symbol, country and tax regime.', roles: ADMIN, k: 'locked currency symbol country financial year tax regime settings' },
+  { q: 'How do I send a customer their statement?', a: 'Customers > row menu > Statement. Pick the period, then PDF, Excel, Email or WhatsApp. Tick Balance confirmation to ask them to confirm the balance.', roles: ['COMPANY_ADMIN', 'MANAGER', 'ACCOUNTANT'], k: 'ledger statement of account balance confirmation khata customer supplier' },
+  { q: 'Why does the statement balance differ from what the customer says?', a: 'Advances (money not set against an invoice) are not in the balance, and drafts or cancelled documents are left out. Compare line by line with their statement, or ask them to send theirs.', roles: ['COMPANY_ADMIN', 'MANAGER', 'ACCOUNTANT'], k: 'ledger mismatch difference advance statement' },
   { q: 'Why can\'t I use last year\'s date?', a: 'The financial year has ended. Until it is closed, only admins and accountants can enter documents dated in it. Use today\'s date, or ask your accountant to enter it.', roles: ['MANAGER', 'SALESMAN', 'WAREHOUSE', 'ACCOUNTANT'], k: 'previous year back date old date march april ended locked' },
   { q: 'What does the closing pack contain?', a: 'An Excel file with the year totals (sales, tax, profit, purchases, collections) and every customer, supplier and stock balance on the last day. Before closing it is marked as a draft.', roles: ['COMPANY_ADMIN', 'ACCOUNTANT'], k: 'year end closing balances excel auditor ca export' },
   { q: 'Why can\'t I close the year?', a: 'Some checklist items still need attention. Finish them, or choose Close anyway and write why. Only an admin can close a year, and years close in order.', roles: ['COMPANY_ADMIN', 'ACCOUNTANT'], k: 'year closing blocked checklist close anyway' },

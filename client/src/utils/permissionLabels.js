@@ -59,6 +59,7 @@ const ACTION_LABELS = {
   print: 'Print, PDF & email',
   close: 'Close the year',
   backdate: 'Enter documents in an ended year (until it is closed)',
+  statement: 'Statement of account (print, share)',
 };
 
 /** Whole-key names where the parts read badly. */

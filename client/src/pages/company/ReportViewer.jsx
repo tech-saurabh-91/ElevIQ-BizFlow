@@ -16,52 +16,15 @@ import { useLookups } from '@/hooks/useLookups';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDate, formatMoney, formatNumber } from '@/utils/format';
 import { cn } from '@/utils/cn';
+import { firstOfMonth, todayKey, periodOptions } from '@/utils/periods';
 
 /**
  * One report from the hub: its filters (as the server's registry declares
  * them), the table with totals, and Excel export / print.
  */
 
-const firstOfMonth = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-};
-const todayKey = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 /** Colour of stock coming in / going out (same rule on every stock screen). */
 const TONE_TEXT = { in: 'text-success', out: 'text-destructive' };
-
-const ymd = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
-
-/**
- * The "Period" list: quick months, then every financial year from the current
- * one back five years (the company's FY start - April in India), then Custom.
- */
-const periodOptions = (startMonth = 4) => {
-  const d = new Date();
-  const m = Number(startMonth) || 4;
-  const fy = d.getMonth() + 1 >= m ? d.getFullYear() : d.getFullYear() - 1;
-  const fyLabel = (y) => (m === 1 ? `FY ${y}` : `FY ${y}-${String(y + 1).slice(-2)}`);
-  const quarterStart = new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
-  const options = [
-    { value: 'today', label: 'Today', range: [todayKey(), todayKey()] },
-    { value: 'this-month', label: 'This month', range: [firstOfMonth(), todayKey()] },
-    { value: 'last-month', label: 'Last month', range: [ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), ymd(new Date(d.getFullYear(), d.getMonth(), 0))] },
-    { value: 'this-quarter', label: 'This quarter', range: [ymd(quarterStart), todayKey()] },
-  ];
-  for (let y = fy; y > fy - 6; y -= 1) {
-    const to = y === fy ? todayKey() : ymd(new Date(y + 1, m - 1, 0));
-    options.push({
-      value: `fy-${y}`,
-      label: `${fyLabel(y)}${y === fy ? ' (this year)' : y === fy - 1 ? ' (last year)' : ''}`,
-      range: [`${y}-${String(m).padStart(2, '0')}-01`, to],
-      group: 'Financial year',
-    });
-  }
-  return options;
-};
 
 export default function ReportViewer() {
   const { code } = useParams();

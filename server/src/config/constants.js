@@ -406,6 +406,8 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
   'users.export': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER],
 
   'customers.view': ALL_ROLES,
+  // Statement of account (ledger) of a customer: print, share, balance confirmation.
+  'customers.statement': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
   'customers.create': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
   'customers.update': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
   'customers.delete': [COMPANY_ROLES.COMPANY_ADMIN],

@@ -32,12 +32,15 @@ export default function YearEndBanner() {
           <div className="text-sm">
             <p className="font-semibold">{label} has ended - close the books</p>
             <p className="text-muted-foreground">
-              It ended on {formatDate(endDay)}. Until it is closed, only admins and accountants can enter documents dated in it. Finish the checklist and close
-              the year.
+              It ended on {formatDate(endDay)}. Until it is closed, only admins and accountants can
+              enter documents dated in it. Finish the checklist and close the year.
             </p>
           </div>
         </div>
-        <Link to="/app/year-closing" className="inline-flex shrink-0 items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+        <Link
+          to="/app/year-closing"
+          className="inline-flex shrink-0 items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
           Open Year Closing
         </Link>
       </div>
@@ -51,7 +54,9 @@ export default function YearEndBanner() {
         <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
         <div>
           <p className="font-semibold">
-            {label} ends {daysLeft === 0 ? 'today' : `in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`} ({formatDate(endDay)})
+            {label} ends{' '}
+            {daysLeft === 0 ? 'today' : `in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`} (
+            {formatDate(endDay)})
           </p>
           <p className="text-muted-foreground">
             Plan the stock count, clear draft documents and pending approvals.{' '}

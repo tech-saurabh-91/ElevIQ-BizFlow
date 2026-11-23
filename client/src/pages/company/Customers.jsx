@@ -3,7 +3,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { LocateFixed, Upload, Users } from 'lucide-react';
+import { BookOpenText, LocateFixed, Upload, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
@@ -548,6 +550,7 @@ export default function Customers() {
   const { taxIdLabel } = useTaxLabels();
   const { company } = useAuth();
   const { can } = usePermissions();
+  const navigate = useNavigate();
   const [importing, setImporting] = useState(false);
 
   const columns = [
@@ -675,6 +678,20 @@ export default function Customers() {
         formTitle={(mode) => ({ create: 'Add customer', edit: 'Edit customer', view: 'Customer details' })[mode]}
         formSize="xl"
         renderForm={(props) => <CustomerForm {...props} />}
+        rowActions={
+          can('customers.statement')
+            ? (row, { close }) => (
+                <DropdownMenuItem
+                  onClick={() => {
+                    close();
+                    navigate(`/app/ledger/customer/${row.id}`);
+                  }}
+                >
+                  <BookOpenText className="h-4 w-4" /> Statement
+                </DropdownMenuItem>
+              )
+            : undefined
+        }
         deleteMessage={(row) =>
           row
             ? `“${row.name}” will be removed. Customers with transactions cannot be deleted — mark them inactive instead.`
