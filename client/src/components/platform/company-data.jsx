@@ -204,7 +204,13 @@ export function RestoreBackupDialog({ open, onClose, onDone }) {
     mutationFn: async (apply) => {
       const form = new FormData();
       form.append('file', file);
-      return (await api.post(`/platform/companies/restore${apply ? '?apply=true' : ''}`, form, { timeout: 300_000 })).data;
+      // The client's default JSON content type would turn the file into JSON: send it as a file upload.
+      return (
+        await api.post(`/platform/companies/restore${apply ? '?apply=true' : ''}`, form, {
+          timeout: 300_000,
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+      ).data;
     },
     onSuccess: (res, apply) => {
       if (apply) {

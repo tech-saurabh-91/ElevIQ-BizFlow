@@ -212,9 +212,9 @@ export default function SupplierPayments() {
   );
 }
 
-export function PayDialog({ onClose, money , asPage = false, onSaved }) {
+export function PayDialog({ onClose, money , asPage = false, onSaved, initialSupplierId = '' }) {
   const queryClient = useQueryClient();
-  const [supplierId, setSupplierId] = useState('');
+  const [supplierId, setSupplierId] = useState(initialSupplierId);
   const [form, setForm] = useState({ amount: '', paymentDate: todayInput(), mode: 'BANK_TRANSFER', reference: '', notes: '' });
   const [manual, setManual] = useState(false);
   const [alloc, setAlloc] = useState({}); // billId -> amount text
@@ -378,5 +378,6 @@ export function PayPage() {
   const navigate = useNavigate();
   const { company } = useAuth();
   const money = (v) => formatMoney(v || 0, company?.currency);
-  return <PayDialog asPage money={money} onClose={() => navigate('/app/supplier-payments')} onSaved={(d) => navigate(d?.id || d?._id ? `/app/supplier-payments/${d.id || d._id}` : '/app/supplier-payments')} />;
+  const [params] = useSearchParams();
+  return <PayDialog asPage initialSupplierId={params.get('supplier') || ''} money={money} onClose={() => navigate('/app/supplier-payments')} onSaved={(d) => navigate(d?.id || d?._id ? `/app/supplier-payments/${d.id || d._id}` : '/app/supplier-payments')} />;
 }

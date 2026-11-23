@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Eye, MoreHorizontal, Plus, Search, XCircle } from 'lucide-react';
+import { Ban, Eye, MoreHorizontal, Plus, Search, Wallet, XCircle } from 'lucide-react';
 
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
@@ -211,9 +211,9 @@ export default function PurchaseBills() {
 
 // ---------------------------------------------------------------------------
 
-export function BookBillDialog({ onClose, money , asPage = false, onSaved }) {
+export function BookBillDialog({ onClose, money , asPage = false, onSaved, initialSupplierId = '' }) {
   const queryClient = useQueryClient();
-  const [supplierId, setSupplierId] = useState('');
+  const [supplierId, setSupplierId] = useState(initialSupplierId);
   const [picked, setPicked] = useState({}); // grnId -> true
   const [lines, setLines] = useState({}); // grnItemId -> { qty, taxRate }
   const [form, setForm] = useState({ supplierInvoiceNo: '', supplierInvoiceDate: todayInput(), otherCharges: '', notes: '' });
@@ -414,6 +414,46 @@ const Row = ({ label, value }) => (
   </div>
 );
 
+/** On the bill's own screen: pay it, or cancel it. */
+function BillActions({ bill }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const [cancelling, setCancelling] = useState(false);
+  const cancel = useMutation({
+    mutationFn: (reason) => api.post(`/v1/purchase-bills/${bill.id}/cancel`, { reason }),
+    onSuccess: () => {
+      toast.success('Bill cancelled');
+      setCancelling(false);
+      queryClient.invalidateQueries({ queryKey: PAYABLES_KEY });
+    },
+    onError: (err) => toast.error(apiError(err).message),
+  });
+  const supplier = typeof bill.supplierId === 'object' ? bill.supplierId?.id || bill.supplierId?._id : bill.supplierId;
+  return (
+    <>
+      {bill.status !== 'CANCELLED' && Number(bill.balanceDue) > 0 && can('supplierpayments.create') && (
+        <Button onClick={() => navigate(`/app/supplier-payments/new${supplier ? `?supplier=${supplier}` : ''}`)}>
+          <Wallet className="h-4 w-4" /> Record payment
+        </Button>
+      )}
+      {bill.status !== 'CANCELLED' && can('bills.cancel') && (
+        <Button variant="outline" className="text-destructive" onClick={() => setCancelling(true)}>
+          <Ban className="h-4 w-4" /> Cancel
+        </Button>
+      )}
+      <CancelDialog
+        open={cancelling}
+        title={`Cancel bill ${bill.billNo}?`}
+        message="What you owe the supplier goes down by its total, and its goods can be billed again. A bill with payments or returns cannot be cancelled until those are."
+        onClose={() => setCancelling(false)}
+        onConfirm={(reason) => cancel.mutate(reason)}
+        loading={cancel.isPending}
+      />
+    </>
+  );
+}
+
 export function BillDetailDialog({ id, onClose, money , asPage = false }) {
   const { taxIdLabel } = useTaxLabels();
   const { data: bill, isLoading } = useQuery({
@@ -421,7 +461,7 @@ export function BillDetailDialog({ id, onClose, money , asPage = false }) {
     queryFn: async () => (await api.get(`/v1/purchase-bills/${id}`)).data?.data,
   });
   return (
-    <FormShell asPage={asPage} breadcrumbs={[{ label: 'Purchase', to: '/app/purchase-bills' }, { label: 'Supplier Bills', to: '/app/purchase-bills' }, { label: bill?.billNo || 'Bill' }]} open onClose={onClose} size="lg" title={bill ? `${bill.billNo} · ${bill.supplierName}` : 'Bill'} description={bill ? `Supplier invoice ${bill.supplierInvoiceNo} dated ${formatDate(bill.supplierInvoiceDate)} · due ${formatDate(bill.dueDate)}` : ''}>
+    <FormShell asPage={asPage} breadcrumbs={[{ label: 'Purchase', to: '/app/purchase-bills' }, { label: 'Supplier Bills', to: '/app/purchase-bills' }, { label: bill?.billNo || 'Bill' }]} headerActions={asPage && bill ? <BillActions bill={bill} /> : null} open onClose={onClose} size="lg" title={bill ? `${bill.billNo} · ${bill.supplierName}` : 'Bill'} description={bill ? `Supplier invoice ${bill.supplierInvoiceNo} dated ${formatDate(bill.supplierInvoiceDate)} · due ${formatDate(bill.dueDate)}` : ''}>
       {isLoading || !bill ? (
         <Skeleton className="h-40 w-full" />
       ) : (
@@ -495,7 +535,8 @@ export function BookBillPage() {
   const navigate = useNavigate();
   const { company } = useAuth();
   const money = (v) => formatMoney(v || 0, company?.currency);
-  return <BookBillDialog asPage money={money} onClose={() => navigate('/app/purchase-bills')} onSaved={(d) => navigate(d?.id || d?._id ? `/app/purchase-bills/${d.id || d._id}` : '/app/purchase-bills')} />;
+  const [params] = useSearchParams();
+  return <BookBillDialog asPage initialSupplierId={params.get('supplier') || ''} money={money} onClose={() => navigate('/app/purchase-bills')} onSaved={(d) => navigate(d?.id || d?._id ? `/app/purchase-bills/${d.id || d._id}` : '/app/purchase-bills')} />;
 }
 
 /** A supplier bill on its own screen (/app/purchase-bills/:id). */

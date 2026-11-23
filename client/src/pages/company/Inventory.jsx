@@ -1339,10 +1339,12 @@ export function PurchaseOrdersTab({ mode = 'list' } = {}) {
   const money2 = (v) => money(v, company?.currency);
 
   // ---- create ---------------------------------------------------------------
-  const [createOpen, setCreateOpen] = useState(false);
+  const [dialogOpen, setCreateOpen] = useState(false);
   // "create" mode: the form is the whole screen (/app/purchase-orders/new), like orders.
   const navigate = useNavigate();
   const asPage = mode === 'create';
+  // The full-screen form is always open: its options must load.
+  const createOpen = asPage || dialogOpen;
   const openCreate = () => navigate('/app/purchase-orders/new');
   const closeCreate = () => (asPage ? navigate('/app/purchase-orders') : setCreateOpen(false));
   const [form, setForm] = useState({
@@ -1892,10 +1894,12 @@ export function GoodsReceiptsTab({ mode = 'list' } = {}) {
   const money2 = (v) => money(v, company?.currency);
 
   // ---- create ---------------------------------------------------------------
-  const [createOpen, setCreateOpen] = useState(false);
+  const [dialogOpen, setCreateOpen] = useState(false);
   // "create" mode: the form is the whole screen (/app/goods-receipts/new), like orders.
   const navigate = useNavigate();
   const asPage = mode === 'create';
+  // The full-screen form is always open: its options must load.
+  const createOpen = asPage || dialogOpen;
   const openCreate = () => navigate('/app/goods-receipts/new');
   const closeCreate = () => (asPage ? navigate('/app/goods-receipts') : setCreateOpen(false));
   const [form, setForm] = useState({
@@ -1967,6 +1971,12 @@ export function GoodsReceiptsTab({ mode = 'list' } = {}) {
   // Switching PO clears the grid and the warehouse; the new PO repopulates both.
   const selectPo = (poId) =>
     setForm((f) => ({ ...f, purchaseOrder: poId, lines: [], warehouse: '' }));
+
+  // "Receive goods" on a purchase order opens this screen with ?po=<id>.
+  const presetPo = asPage ? params.get('po') || '' : '';
+  useEffect(() => {
+    if (presetPo) setForm((f) => (f.purchaseOrder ? f : { ...f, purchaseOrder: presetPo, lines: [], warehouse: '' }));
+  }, [presetPo]);
 
   // Prefill outstanding quantities once the chosen PO's options arrive.
   useEffect(() => {

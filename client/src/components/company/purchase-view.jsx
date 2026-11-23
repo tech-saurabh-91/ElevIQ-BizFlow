@@ -1,12 +1,17 @@
-import { useQuery } from '@tanstack/react-query';
-import api from '@/api/client';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import api, { apiError } from '@/api/client';
+import { ConfirmDialog } from '@/components/ui/dialog';
+import { CancelDialog } from '@/components/company/payables-shared-dialogs';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { FormShell } from '@/components/ui/form-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/ui/badge';
 import { formatDate, formatDateTime, formatMoney, formatNumber } from '@/utils/format';
-import { Printer } from 'lucide-react';
+import { Ban, FileText, PackagePlus, Printer, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PrintStatus, openDocumentPdf } from '@/components/company/print-control';
 import { useTaxLabels } from '@/hooks/useLocations';
@@ -52,6 +57,104 @@ function TaxRows({ doc, money, label = 'Tax' }) {
   );
 }
 
+const idOf = (v) => (v && typeof v === 'object' ? v.id || v._id : v) || '';
+
+/**
+ * What can be done next with a saved purchase document, as buttons on its own
+ * screen (the same actions as the list's row menu, plus the next step of the
+ * cycle: PO -> receive goods, goods receipt -> book the bill).
+ */
+function PurchaseDocActions({ kind, doc, id }) {
+  const cfg = KINDS[kind];
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const [confirmSend, setConfirmSend] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['company', 'purchase-view', kind, id] });
+    queryClient.invalidateQueries({ queryKey: ['company', 'inventory'] });
+    queryClient.invalidateQueries({ queryKey: ['company', 'payables'] });
+  };
+  const send = useMutation({
+    mutationFn: () => api.post(`/v1/purchase-orders/${id}/send`, {}),
+    onSuccess: () => {
+      toast.success('Purchase order marked as sent');
+      setConfirmSend(false);
+      refresh();
+    },
+    onError: (err) => toast.error(apiError(err).message),
+  });
+  const cancel = useMutation({
+    mutationFn: (reason) => api.post(`/v1/${cfg.path}/${id}/cancel`, { reason }),
+    onSuccess: () => {
+      toast.success(`${cfg.label} cancelled`);
+      setCancelling(false);
+      refresh();
+    },
+    onError: (err) => toast.error(apiError(err).message),
+  });
+
+  const status = doc.status;
+  const supplier = idOf(doc.supplierId);
+  const canCancel =
+    (kind === 'po' && can('purchases.cancel') && ['DRAFT', 'SENT', 'PARTIALLY_RECEIVED'].includes(status)) ||
+    (kind === 'grn' && can('grn.update') && status === 'POSTED') ||
+    (kind === 'payment' && can('supplierpayments.cancel') && status !== 'CANCELLED') ||
+    (kind === 'return' && can('purchasereturns.cancel') && status !== 'CANCELLED');
+
+  return (
+    <>
+      {kind === 'po' && status === 'DRAFT' && can('purchases.update') && (
+        <Button variant="outline" onClick={() => setConfirmSend(true)}>
+          <Send className="h-4 w-4" /> Mark as sent
+        </Button>
+      )}
+      {kind === 'po' && ['SENT', 'PARTIALLY_RECEIVED'].includes(status) && can('grn.create') && (
+        <Button onClick={() => navigate(`/app/goods-receipts/new?po=${id}`)}>
+          <PackagePlus className="h-4 w-4" /> Receive goods
+        </Button>
+      )}
+      {kind === 'grn' && status === 'POSTED' && can('bills.create') && (
+        <Button onClick={() => navigate(`/app/purchase-bills/new${supplier ? `?supplier=${supplier}` : ''}`)}>
+          <FileText className="h-4 w-4" /> Book bill
+        </Button>
+      )}
+      {canCancel && (
+        <Button variant="outline" className="text-destructive" onClick={() => setCancelling(true)}>
+          <Ban className="h-4 w-4" /> Cancel
+        </Button>
+      )}
+      <ConfirmDialog
+        open={confirmSend}
+        onClose={() => setConfirmSend(false)}
+        onConfirm={() => send.mutate()}
+        title="Mark this purchase order as sent?"
+        message="This records that the order has been placed with the supplier."
+        confirmLabel="Mark as sent"
+        tone="default"
+        loading={send.isPending}
+      />
+      <CancelDialog
+        open={cancelling}
+        title={`Cancel ${doc[cfg.no] || cfg.label.toLowerCase()}?`}
+        message={
+          kind === 'po'
+            ? 'No more goods can be received against it.'
+            : kind === 'grn'
+              ? 'The goods come out of stock again.'
+              : kind === 'payment'
+                ? 'The bills it paid become due again and what you owe the supplier goes back up.'
+                : 'The goods go back into stock and the bill amounts come back.'
+        }
+        onClose={() => setCancelling(false)}
+        onConfirm={(reason) => cancel.mutate(reason)}
+        loading={cancel.isPending}
+      />
+    </>
+  );
+}
+
 /** The saved document - as a dialog, or with `asPage` as its own full screen. */
 export function PurchaseDocDialog({ kind, id, onClose, asPage = false }) {
   const cfg = KINDS[kind];
@@ -77,6 +180,7 @@ export function PurchaseDocDialog({ kind, id, onClose, asPage = false }) {
       title={title}
       description={description}
       breadcrumbs={[{ label: 'Purchase', to: '/app/purchase-bills' }, { label: cfg.list, to: `/app/${cfg.path}` }, { label: doc?.[cfg.no] || cfg.label }]}
+      headerActions={asPage && doc ? <PurchaseDocActions kind={kind} doc={doc} id={id} /> : null}
     >
       {isLoading || !doc ? (
         <Skeleton className="h-48 w-full" />
