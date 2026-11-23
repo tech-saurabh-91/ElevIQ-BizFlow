@@ -61,8 +61,9 @@ const schema = z.object({
   if (v.mode === 'CHEQUE' && v.chequeDate && v.chequeDate < (v.paymentDate || todayInput())) {
     ctx.addIssue({ code: 'custom', path: ['chequeDate'], message: 'Cheque date cannot be before the payment date' });
   }
-  if (v.mode === 'CHEQUE' && !String(v.reference || '').trim()) {
-    ctx.addIssue({ code: 'custom', path: ['reference'], message: 'Enter the cheque number' });
+  const needed = { UPI: 'Enter the UPI transaction ID (UTR)', CHEQUE: 'Enter the cheque number', BANK_TRANSFER: 'Enter the bank reference / UTR' }[v.mode];
+  if (needed && !String(v.reference || '').trim()) {
+    ctx.addIssue({ code: 'custom', path: ['reference'], message: needed });
   }
 });
 
@@ -513,7 +514,7 @@ export default function PaymentEditor() {
                 <Field
                   label="Reference / UTR / cheque no"
                   error={errors.reference?.message}
-                  hint={mode === 'CASH' ? 'Optional for cash.' : 'Transaction or cheque reference.'}
+                  hint={['UPI', 'CHEQUE', 'BANK_TRANSFER'].includes(mode) ? 'Required: the UTR or cheque number, to match the bank statement.' : 'Optional.'}
                 >
                   <Input {...register('reference')} placeholder="e.g. UPI987654 or CHQ-123456" />
                 </Field>

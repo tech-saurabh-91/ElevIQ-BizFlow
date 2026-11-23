@@ -304,6 +304,10 @@ export function LineEditor({
       {value.length === 0 && (
         <p className="text-xs text-muted-foreground">Add at least one product line to continue.</p>
       )}
+      {/* Say why the save button is off instead of leaving it greyed out. */}
+      {!signed && qtyKey === 'qty' && value.some((l) => !l.product || !(Number(l[qtyKey]) > 0)) && (
+        <p className="text-xs text-warning-foreground dark:text-warning">Choose a product and enter a quantity above 0 on every line (or remove the empty line).</p>
+      )}
 
       {showTotals && value.length > 0 && (
         <div className="ml-auto w-full max-w-xs space-y-1 rounded-xl border bg-muted/30 p-3 text-sm">

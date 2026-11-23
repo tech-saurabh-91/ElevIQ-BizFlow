@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft,
+  FileText,
   CheckCircle2,
   Circle,
   MapPin,
@@ -127,6 +128,10 @@ export default function OrderDetail() {
   const customer = order.customerId && typeof order.customerId === 'object' ? order.customerId : {};
   const available = orderActionsFor(order, can);
   const isDraft = order.status === 'DRAFT';
+  // Something still to bill on a confirmed order: invoice it from here.
+  const unbilled = (order.items || []).some((i) => Number(i.qty || 0) - Number(i.invoicedQty || 0) > 0.0001);
+  const canInvoice =
+    can('invoices.create') && unbilled && ['CONFIRMED', 'PARTIALLY_INVOICED', 'DISPATCHED', 'DELIVERED'].includes(order.status);
   const billing = addressLines(order.billingAddress);
   const shipping = addressLines(order.shippingAddress);
 
@@ -146,6 +151,11 @@ export default function OrderDetail() {
             {can('orders.print') && (
               <Button variant="outline" onClick={() => openOrderPdf(order)}>
                 <Printer className="h-4 w-4" /> Print / PDF
+              </Button>
+            )}
+            {canInvoice && (
+              <Button onClick={() => navigate(`/app/invoices/new?orderId=${order.id}`)}>
+                <FileText className="h-4 w-4" /> Create invoice
               </Button>
             )}
             <ShareDocumentButtons kind="order" doc={order} />

@@ -35,6 +35,20 @@ export const validToNotPast = (v, ctx) => {
   }
 };
 
+/**
+ * superRefine: money paid by UPI, cheque or bank transfer carries its
+ * reference (UTR / cheque no.) so it can be matched with the bank statement.
+ */
+const REFERENCE_NEEDED = {
+  UPI: 'Enter the UPI transaction ID (UTR)',
+  CHEQUE: 'Enter the cheque number',
+  BANK_TRANSFER: 'Enter the bank reference / UTR',
+};
+export const referenceForMode = (v, ctx) => {
+  const message = REFERENCE_NEEDED[v?.mode];
+  if (message && !String(v.reference || '').trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['reference'], message });
+};
+
 /** superRefine: `later` must not be before `earlier` (both optional). */
 export const dateNotBefore = (later, earlier, message) => (v, ctx) => {
   if (!v?.[later] || !v?.[earlier]) return;

@@ -478,6 +478,8 @@ export const grnFormOptions = asyncHandler(async (req, res) => {
         name: p.name,
         sku: p.sku || '',
         unit: p.unit || 'PCS',
+        // Packs (BOX, CTN...) so the line can be bought by the box.
+        packUnits: (p.packUnits || []).map((u) => ({ unit: u.unit, factor: Number(u.factor), price: Number(u.price || 0) })),
         purchasePrice: Number(p.purchasePrice || 0),
         gstRate: Number(p.gstRate || 0),
         hsnCode: p.hsnCode || '',
@@ -795,6 +797,8 @@ export const poFormOptions = asyncHandler(async (req, res) => {
         name: p.name,
         sku: p.sku || '',
         unit: p.unit || 'PCS',
+        // Packs (BOX, CTN...) so the line can be bought by the box.
+        packUnits: (p.packUnits || []).map((u) => ({ unit: u.unit, factor: Number(u.factor), price: Number(u.price || 0) })),
         purchasePrice: Number(p.purchasePrice || 0),
         gstRate: Number(p.gstRate || 0),
         hsnCode: p.hsnCode || '',

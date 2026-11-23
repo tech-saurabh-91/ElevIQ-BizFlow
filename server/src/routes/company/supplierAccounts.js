@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../../controllers/company/supplierAccountsController.js';
-import { validate, objectIdSchema, notFutureDate } from '../../middlewares/validate.js';
+import { validate, objectIdSchema, notFutureDate, referenceForMode } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
 import { idParamsSchema } from '../../validators/companyValidators.js';
 import { PAYMENT_MODES } from '../../config/constants.js';
@@ -58,7 +58,7 @@ const paymentBody = z.object({
   reference: text(80),
   allocations: z.array(z.object({ bill: objectIdSchema, amount: z.coerce.number().min(0, 'Cannot be negative').max(1e11) })).max(500).optional(),
   notes: text(1000),
-});
+}).superRefine(referenceForMode);
 
 export const payments = Router();
 payments.get('/', authorize('supplierpayments.view'), ctrl.listPayments);

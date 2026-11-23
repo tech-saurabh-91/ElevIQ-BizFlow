@@ -260,7 +260,8 @@ function PayDialog({ onClose, money }) {
     },
     onError: (err) => setError(apiError(err)),
   });
-  const canSave = supplierId && amount > 0 && advance >= -0.009 && !overBill;
+  const needsReference = ['UPI', 'CHEQUE', 'BANK_TRANSFER'].includes(form.mode) && !form.reference.trim();
+  const canSave = supplierId && amount > 0 && advance >= -0.009 && !overBill && !needsReference;
 
   return (
     <Dialog
@@ -298,8 +299,13 @@ function PayDialog({ onClose, money }) {
               ))}
             </Select>
           </Field>
-          <Field label="UTR / cheque no." className="sm:col-span-2">
-            <Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} placeholder="Optional" />
+          <Field
+            label="UTR / cheque no."
+            className="sm:col-span-2"
+            required={['UPI', 'CHEQUE', 'BANK_TRANSFER'].includes(form.mode)}
+            hint={['UPI', 'CHEQUE', 'BANK_TRANSFER'].includes(form.mode) ? 'Required for UPI, cheque and bank transfer' : undefined}
+          >
+            <Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} placeholder={form.mode === 'CASH' ? 'Optional' : 'e.g. HDFCN26112300418'} />
           </Field>
         </div>
 

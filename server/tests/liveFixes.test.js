@@ -173,3 +173,34 @@ describe('Fixes from the live FMCG entry', () => {
     expect(text).not.toMatch(/undefined/);
   });
 });
+
+describe('Fixes for the observations from the live entry', () => {
+  test('a second customer with the same phone is saved only after confirming', async () => {
+    const body = { name: 'Mittal Traders Godown', phone: '+91 98110 77882', address: { country: 'India', state: 'Delhi', city: 'East Delhi' } };
+    const clash = await post('/api/v1/customers', body);
+    expect(clash.status).toBe(409);
+    expect(clash.body.code).toBe('PHONE_IN_USE');
+    expect(clash.body.message).toMatch(/Mittal Super Mart/);
+    const ok = await post('/api/v1/customers', { ...body, allowSharedPhone: true });
+    expect(ok.status).toBe(201);
+    // Editing other fields of a shop that already shares a phone is not blocked.
+    expect((await patch(`/api/v1/customers/${ok.body.data.id}`, { contactPerson: 'Anil' })).status).toBe(200);
+  });
+
+  test('UPI, cheque and bank payments need their reference', async () => {
+    const upi = await post('/api/v1/payments', { customerId: state.delhiId, amount: 100, mode: 'UPI' });
+    expect(upi.status).toBe(422);
+    expect(upi.body.errors[0].message).toMatch(/UTR/);
+    expect((await post('/api/v1/payments', { customerId: state.delhiId, amount: 100, mode: 'CASH' })).status).toBe(201);
+    const bank = await post('/api/v1/supplier-payments', { supplierId: state.supplierId, amount: 100, mode: 'BANK_TRANSFER' });
+    expect(bank.status).toBe(422);
+    expect((await post('/api/v1/supplier-payments', { supplierId: state.supplierId, amount: 100, mode: 'BANK_TRANSFER', reference: 'NEFT123' })).status).toBe(201);
+  });
+
+  test('the purchase order form gets the pack units, so a line can be bought by the box', async () => {
+    await patch(`/api/v1/products/${state.productId}`, { packUnits: [{ unit: 'BOX', factor: 48 }] });
+    const opts = await get('/api/v1/purchase-orders/form-options');
+    const product = opts.body.data.products.find((p) => p.id === state.productId);
+    expect(product.packUnits).toEqual([expect.objectContaining({ unit: 'BOX', factor: 48 })]);
+  });
+});

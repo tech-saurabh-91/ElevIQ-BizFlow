@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema, objectIdSchema, notFutureDate } from '../middlewares/validate.js';
+import { paginationSchema, objectIdSchema, notFutureDate, referenceForMode } from '../middlewares/validate.js';
 import { PAYMENT_STATUS_LIST, PAYMENT_MODES } from '../config/constants.js';
 import { PAYMENT_REASONS } from '../models/Payment.js';
 
@@ -42,10 +42,7 @@ export const paymentCreateSchema = z
     (v) => !v.chequeDate || !v.paymentDate || Date.parse(v.chequeDate) >= Date.parse(v.paymentDate) - 86400000,
     { message: 'Cheque date cannot be before the payment date', path: ['chequeDate'] }
   )
-  .refine((v) => v.mode !== 'CHEQUE' || Boolean(String(v.reference || '').trim()), {
-    message: 'Enter the cheque number',
-    path: ['reference'],
-  });
+  .superRefine(referenceForMode);
 
 export const paymentUpdateSchema = z
   .object({

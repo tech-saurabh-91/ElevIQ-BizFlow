@@ -94,7 +94,7 @@ const checkAddress = async (address = {}, path, errors, cache) => {
  * @param {object} opts    - { isIndia, existingId, cache } (cache: a {} shared across one import)
  * @returns {{ data: object, errors: {field: string, message: string}[] }}
  */
-export const checkCustomer = async (input, { isIndia = false, existingId = null, cache = null } = {}) => {
+export const checkCustomer = async (input, { isIndia = false, existingId = null, cache = null, checkSharedPhone = false } = {}) => {
   await cached(cache, 'locations', 'ready', () => ensureLocations());
   const errors = [];
   const data = { ...input };
@@ -160,6 +160,14 @@ export const checkCustomer = async (input, { isIndia = false, existingId = null,
       ...notSelf,
     });
     if (sameNamePhone) errors.push({ field: 'name', message: 'A customer with this name and phone already exists' });
+    // Another shop with the same phone is often the same shop added twice:
+    // the user confirms it (allowSharedPhone) before it is saved.
+    if (checkSharedPhone && !sameNamePhone) {
+      const other = await Customer.findOne({ phone: data.phone, ...notSelf }).select('name code').lean();
+      if (other) {
+        errors.push({ field: 'phone', code: 'PHONE_IN_USE', message: `${other.name}${other.code ? ` (${other.code})` : ''} already uses this phone` });
+      }
+    }
   }
 
   return { data, errors };

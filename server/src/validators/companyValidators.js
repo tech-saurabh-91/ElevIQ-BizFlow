@@ -95,6 +95,8 @@ export const documentEmailSchema = z.object({
 // Customers
 // ---------------------------------------------------------------------------
 export const customerCreateSchema = z.object({
+  /** Save even though another customer already uses this phone (asked first). */
+  allowSharedPhone: z.boolean().optional(),
   name: z.string().trim().min(2, 'Customer name is required').max(160),
   code: softString(24),
   type: z.enum(CUSTOMER_TYPES).optional(),

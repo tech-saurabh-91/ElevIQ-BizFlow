@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { BookOpenText, LocateFixed, Upload, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { ConfirmDialog } from '@/components/ui/dialog';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
@@ -164,6 +165,9 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
   const isIndia = country?.code === 'IN';
   const [formError, setFormError] = useState('');
   const [serverErrors, setServerErrors] = useState([]);
+  // Another customer already uses this phone: ask before saving anyway.
+  const [phoneClash, setPhoneClash] = useState(null); // { message, payload }
+  const [savingAnyway, setSavingAnyway] = useState(false);
   const { lookups } = useLookups();
   const { company } = useAuth();
   const viewOnly = mode === 'view';
@@ -228,15 +232,24 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
       isActive: values.isActive,
     };
 
+    await save(payload);
+  };
+
+  const save = async (payload) => {
     try {
       const res =
         mode === 'create'
           ? await api.post('/v1/customers', payload)
           : await api.patch(`/v1/customers/${initial.id}`, payload);
       toast.success(mode === 'create' ? `Customer ${res.data?.data?.code || ''} created` : 'Customer updated');
+      setPhoneClash(null);
       onSaved(res.data?.data);
     } catch (err) {
       const info = apiError(err);
+      if (info.code === 'PHONE_IN_USE') {
+        setPhoneClash({ message: info.message, payload });
+        return;
+      }
       const fields = toFieldErrors(info.errors);
       setServerErrors(info.errors);
       setFormError(Object.keys(fields).length ? '' : info.message);
@@ -542,6 +555,20 @@ function CustomerForm({ mode, initial, onClose, onSaved }) {
           submitLabel={mode === 'create' ? 'Create customer' : 'Save changes'}
         />
       )}
+      <ConfirmDialog
+        open={Boolean(phoneClash)}
+        onClose={() => setPhoneClash(null)}
+        title="Phone already in use"
+        message={`${phoneClash?.message || ''}. Is this a different shop with the same phone? Check you are not adding the same customer twice.`}
+        confirmLabel="Save anyway"
+        tone="default"
+        loading={savingAnyway}
+        onConfirm={async () => {
+          setSavingAnyway(true);
+          await save({ ...phoneClash.payload, allowSharedPhone: true });
+          setSavingAnyway(false);
+        }}
+      />
     </form>
   );
 }

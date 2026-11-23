@@ -62,7 +62,7 @@ const rowFromInvoiceOption = (row) => ({
   name: row.name || '',
   sku: row.sku || '',
   unit: row.unit || 'PCS',
-  include: true,
+  include: false, // nothing is credited until the user ticks the lines
   qty: String(row.remainingQty ?? row.qty ?? 1),
   unitPrice: Number(row.unitPrice || 0),
   discountPercent: Number(row.discountPercent || 0),
@@ -511,7 +511,7 @@ export default function CreditNoteEditor() {
               <CardHeader className="pb-3">
                 <CardTitle>Lines to credit</CardTitle>
                 <CardDescription>
-                  Quantities are capped at the uncredited quantity on each invoice line.
+                  Tick the lines being credited and set the quantity. Quantities are capped at the uncredited quantity on each invoice line.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">

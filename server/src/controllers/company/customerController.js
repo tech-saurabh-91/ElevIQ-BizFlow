@@ -38,9 +38,11 @@ const isIndiaCompany = async (req) => (await findCountry(req.company?.address?.c
 
 const failIfErrors = (errors) => {
   if (!errors.length) return;
+  // Only a shared phone left: the user may confirm and save anyway.
+  const onlySharedPhone = errors.every((e) => e.code === 'PHONE_IN_USE');
   throw new AppError(errors[0].message, {
-    status: 422,
-    code: 'VALIDATION_ERROR',
+    status: onlySharedPhone ? 409 : 422,
+    code: onlySharedPhone ? 'PHONE_IN_USE' : 'VALIDATION_ERROR',
     errors: errors.map((e) => ({ field: `body.${e.field}`, message: e.message })),
   });
 };
@@ -93,8 +95,10 @@ const crud = buildCrudController({
     }
 
     SYSTEM_FIELDS.forEach((k) => delete payload[k]);
+    const allowSharedPhone = payload.allowSharedPhone === true;
+    delete payload.allowSharedPhone;
     const refs = await validateRefs(payload);
-    const { data, errors } = await checkCustomer(refs, { isIndia: await isIndiaCompany(req) });
+    const { data, errors } = await checkCustomer(refs, { isIndia: await isIndiaCompany(req), checkSharedPhone: !allowSharedPhone });
     failIfErrors(errors);
 
     // Codes always come from the company's numbering series.
@@ -104,6 +108,8 @@ const crud = buildCrudController({
   },
   beforeUpdate: async (payload, req) => {
     SYSTEM_FIELDS.forEach((k) => delete payload[k]);
+    const allowSharedPhone = payload.allowSharedPhone === true;
+    delete payload.allowSharedPhone;
     const existing = await Customer.findOne({ _id: req.params.id, ...salesScope(req) });
     if (!existing) return payload; // loadDoc reports the 404
 
@@ -126,6 +132,8 @@ const crud = buildCrudController({
     const { data, errors } = await checkCustomer(merged, {
       isIndia: await isIndiaCompany(req),
       existingId: existing._id,
+      // Only when the phone changes: a shop already sharing one stays editable.
+      checkSharedPhone: !allowSharedPhone && refs.phone !== undefined && refs.phone !== current.phone,
     });
     failIfErrors(errors);
 
