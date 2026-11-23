@@ -197,6 +197,33 @@ describe('Customer bulk import', () => {
     expect(saved[0].creditDays).toBe(15);
   });
 
+  test('the template carries realistic sample rows that pass, and are refused if left in', async () => {
+    const template = await request.get('/api/v1/customers/import/template').set(as(state.admin)).buffer(true)
+      .parse((res, cb) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(template.body);
+    expect(wb.worksheets.map((s) => s.name).slice(0, 2)).toEqual(['Customers', 'Sample']);
+    const sample = wb.getWorksheet('Sample');
+    expect(String(sample.getCell(1, 1).value)).toMatch(/SAMPLE ONLY - not imported/);
+    const headers = sample.getRow(2).values.slice(1).map((h) => String(h).replace(/\s*\*$/, ''));
+    const samples = [3, 4, 5].map((r) => Object.fromEntries(headers.map((h, c) => [h, sample.getRow(r).getCell(c + 1).value || undefined])));
+    expect(samples.map((s) => s['Customer name'])).toEqual(['Shree Balaji Kirana Stores', 'Metro Wholesale Traders', 'Krishna Distributors']);
+
+    // Copied in as they are: refused, nothing saved.
+    const asIs = await upload(await workbookWith(samples), false);
+    expect(asIs.body.data.imported).toBe(0);
+    expect(asIs.body.data.errors.filter((e) => /sample row/.test(e.message)).map((e) => e.row)).toEqual([2, 3, 4]);
+
+    // The same rows as real data (own names and phones) are valid as they stand.
+    const own = samples.map((s, i) => ({ ...s, 'Customer name': `Own ${s['Customer name']}`, Phone: `+91 96000 1110${i}` }));
+    const check = await upload(await workbookWith(own), true);
+    expect(check.body.data).toMatchObject({ total: 3, valid: 3, errors: [] });
+  });
+
   test('only .xlsx files are accepted', async () => {
     const res = await request
       .post('/api/v1/customers/import?dryRun=true')

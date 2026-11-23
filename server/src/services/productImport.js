@@ -6,6 +6,7 @@ import Warehouse from '../models/Warehouse.js';
 import { productCreateSchema } from '../validators/companyValidators.js';
 import { AppError } from '../utils/errors.js';
 import { checkProduct, ensureCatalog, nextProductCodes, GST_RATES_IN } from './catalogService.js';
+import { addSampleSheet, isSampleRow, sampleRowError, PRODUCT_SAMPLES, PRODUCT_SAMPLE_NOTES } from './importSamples.js';
 
 /**
  * Bulk product import from the downloadable Excel template. Same contract as
@@ -63,7 +64,7 @@ const loadRefs = async (isIndia) => {
     Unit.find({ isActive: { $ne: false } }).sort({ code: 1 }).lean(),
     ProductCategory.find({ isActive: { $ne: false } }).sort({ name: 1 }).lean(),
     // Opening stock is held in main / sub warehouses (vans are loaded by transfer).
-    Warehouse.find({ isActive: { $ne: false }, type: { $in: ['MAIN', 'SUB'] } }).select('name code').lean(),
+    Warehouse.find({ isActive: { $ne: false }, type: { $in: ['MAIN', 'SUB'] } }).select('name code isDefault').lean(),
   ]);
   const names = (level) => [...new Set(groups.filter((g) => g.level === level).map((g) => g.name))];
   return {
@@ -95,6 +96,12 @@ export const buildTemplate = async ({ isIndia }) => {
     head.getCell(i + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: c.required ? 'FF1D4ED8' : 'FF475569' } };
     if (c.note) head.getCell(i + 1).note = c.note;
   });
+
+  // Tax columns only mean something in India: leave them blank elsewhere.
+  // Opening stock sits in one of the company's own godowns.
+  const godown = (refs.warehouses.find((w) => w.isDefault) || refs.warehouses[0])?.code || 'MAIN';
+  const samples = PRODUCT_SAMPLES.map(({ hsnCode, gstRate, ...rest }) => ({ ...rest, openingWarehouse: godown, ...(isIndia ? { hsnCode, gstRate } : {}) }));
+  addSampleSheet(wb, { columns: COLUMNS, rows: samples, target: 'Products', notes: PRODUCT_SAMPLE_NOTES });
 
   const listSheet = wb.addWorksheet('Lists', { state: 'veryHidden' });
   const ranges = {};
@@ -132,9 +139,10 @@ export const buildTemplate = async ({ isIndia }) => {
     { header: 'Notes', key: 'n', width: 60 },
   ];
   help.getRow(1).font = { bold: true };
-  COLUMNS.forEach((c) => help.addRow({ h: c.header, r: c.required ? 'Yes' : '', e: c.example, n: c.note || '' }));
+  COLUMNS.forEach((c) => help.addRow({ h: c.header, r: c.required ? 'Yes' : '', e: samples[0][c.key] ?? c.example, n: c.note || '' }));
   help.addRow({});
   help.addRow({ h: 'How to import', n: 'One product per row on the "Products" sheet. Product codes are generated automatically.' });
+  help.addRow({ n: 'See the "Sample" sheet for three filled rows (a biscuit sold by the box, salt at 0% tax sold by the bag, a detergent sold by the carton). It is never imported.' });
   help.addRow({ n: 'Classification, category, sub-category and units must already exist in Categories & Units.' });
   help.addRow({ n: `Up to ${MAX_IMPORT_ROWS} rows per file. Nothing is saved unless every row is valid.` });
   return wb.xlsx.writeBuffer();
@@ -234,6 +242,11 @@ export const importProducts = async (buffer, { company, isIndia, dryRun = true, 
       throw new AppError(`Too many rows: the limit is ${MAX_IMPORT_ROWS} per file.`, { status: 422, code: 'TOO_MANY_ROWS' });
     }
     const add = (field, message) => errors.push({ row: r, field, column: headerOf(field), message });
+    const raw = (key) => (columnIndex[key] ? cellText(row.getCell(columnIndex[key])) : '');
+    if (isSampleRow({ name: raw('name'), customCode: raw('customCode'), barcode: raw('barcode') }, PRODUCT_SAMPLES, ['name', 'customCode', 'barcode'])) {
+      add('name', sampleRowError);
+      continue;
+    }
 
     const read = readRow(row, columnIndex, refs);
     read.errors.forEach((e) => add(e.field, e.message));

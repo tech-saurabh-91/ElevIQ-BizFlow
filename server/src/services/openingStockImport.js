@@ -6,6 +6,7 @@ import StockMovement from '../models/StockMovement.js';
 import { AppError, BadRequestError } from '../utils/errors.js';
 import { MOVEMENT_TYPES } from '../config/constants.js';
 import { recordMovement } from './inventoryService.js';
+import { addSampleSheet, OPENING_STOCK_SAMPLES } from './importSamples.js';
 
 /**
  * Opening stock for a warehouse from Excel (e.g. a newly created godown).
@@ -72,6 +73,23 @@ export const buildTemplate = async (warehouse) => {
       };
     });
   }
+  addSampleSheet(wb, {
+    columns: [
+      { key: 'code', header: 'Product code', required: true },
+      { key: 'name', header: 'Product name', width: 36 },
+      { key: 'unit', header: 'Base unit', width: 10 },
+      { key: 'qty', header: 'Opening qty', required: true, width: 14, type: 'number' },
+      { key: 'cost', header: 'Unit cost', width: 12, type: 'number' },
+    ],
+    // The company's own first products with example counts (else a generic example).
+    rows: products.length
+      ? products.slice(0, 3).map((p, i) => ({ code: p.sku, name: p.name, unit: p.unit, qty: [120, 48, 250][i], cost: i === 2 ? '' : p.purchasePrice || '' }))
+      : OPENING_STOCK_SAMPLES,
+    target: 'Opening stock',
+    notes: [
+      `Your products are already listed there: just type the quantity counted in ${warehouse.name} today, in the base unit. Leave the quantity blank for products you do not hold. A blank unit cost uses the product's purchase price.`,
+    ],
+  });
   return wb.xlsx.writeBuffer();
 };
 

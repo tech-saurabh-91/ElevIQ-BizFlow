@@ -10,6 +10,7 @@ import { customerCreateSchema } from '../validators/companyValidators.js';
 import { AppError } from '../utils/errors.js';
 import { checkCustomer, nextCustomerCodes } from './customerService.js';
 import { ensureLocations, findCountry } from './locationService.js';
+import { addSampleSheet, isSampleRow, sampleRowError, CUSTOMER_SAMPLES, CUSTOMER_SAMPLE_NOTES } from './importSamples.js';
 
 /**
  * Bulk customer import from the downloadable Excel template.
@@ -96,6 +97,8 @@ export const buildTemplate = async (company) => {
     if (c.note) head.getCell(i + 1).note = c.note;
   });
 
+  addSampleSheet(wb, { columns: COLUMNS, rows: CUSTOMER_SAMPLES, target: 'Customers', notes: CUSTOMER_SAMPLE_NOTES });
+
   // Dropdown sources live on a hidden sheet so the lists can be long.
   const lists = {
     types: CUSTOMER_TYPES.map(titleCase),
@@ -155,9 +158,10 @@ export const buildTemplate = async (company) => {
     { header: 'Notes', key: 'n', width: 60 },
   ];
   help.getRow(1).font = { bold: true };
-  COLUMNS.forEach((c) => help.addRow({ h: c.header, r: c.required ? 'Yes' : '', e: c.example, n: c.note || '' }));
+  COLUMNS.forEach((c) => help.addRow({ h: c.header, r: c.required ? 'Yes' : '', e: CUSTOMER_SAMPLES[0][c.key] ?? c.example, n: c.note || '' }));
   help.addRow({});
   help.addRow({ h: 'How to import', n: 'Fill one customer per row on the "Customers" sheet (row 1 is the header).' });
+  help.addRow({ n: 'See the "Sample" sheet for three filled rows (a kirana shop, a wholesaler with a separate godown, an out-of-state distributor). It is never imported.' });
   help.addRow({ n: 'Customer codes are generated automatically - do not add a code column.' });
   help.addRow({ n: `Up to ${MAX_IMPORT_ROWS} rows per file. Nothing is saved unless every row is valid.` });
 
@@ -288,6 +292,11 @@ export const importCustomers = async (buffer, { company, isIndia, dryRun = true,
 
     const add = (field, message) =>
       errors.push({ row: r, field, column: header(field.replace(/^body\./, '')), message });
+    const raw = (key) => (columnIndex[key] ? cellText(row.getCell(columnIndex[key])) : '');
+    if (isSampleRow({ name: raw('name'), phone: raw('phone') }, CUSTOMER_SAMPLES, ['name', 'phone'])) {
+      add('name', sampleRowError);
+      continue;
+    }
     const read = readRow(row, columnIndex, refs);
     read.errors.forEach((e) => add(e.field, e.message));
 

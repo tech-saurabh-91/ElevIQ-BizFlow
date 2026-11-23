@@ -287,4 +287,38 @@ describe('Product import', () => {
     expect(two.packUnits[0]).toMatchObject({ unit: 'PKT', factor: 12 });
     expect(two.stock).toBe(24);
   });
+
+  test('the template carries realistic sample rows that pass, and are refused if left in', async () => {
+    // The sample categories, as a company would have set them up.
+    const cats = (await api.get('/api/v1/product-categories?limit=200')).body.data;
+    const biscuits = cats.find((c) => c.name === 'Biscuits');
+    await api.post('/api/v1/product-categories', { level: 'SUBCATEGORY', name: 'Glucose biscuits', parent: biscuits.id });
+    const staples = await api.post('/api/v1/product-categories', { level: 'CATEGORY', name: 'Staples', parent: state.food });
+    await api.post('/api/v1/product-categories', { level: 'SUBCATEGORY', name: 'Salt', parent: staples.body.data.id });
+    const home = await api.post('/api/v1/product-categories', { level: 'CLASSIFICATION', name: 'Home Care' });
+    const det = await api.post('/api/v1/product-categories', { level: 'CATEGORY', name: 'Detergents', parent: home.body.data.id });
+    await api.post('/api/v1/product-categories', { level: 'SUBCATEGORY', name: 'Detergent powder', parent: det.body.data.id });
+
+    const tpl = await request.get('/api/v1/products/import/template').set(as(state.admin)).buffer(true)
+      .parse((res, cb) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(tpl.body);
+    expect(wb.worksheets.map((s) => s.name).slice(0, 2)).toEqual(['Products', 'Sample']);
+    const sample = wb.getWorksheet('Sample');
+    const headers = sample.getRow(2).values.slice(1).map((h) => String(h).replace(/\s*\*$/, ''));
+    const samples = [3, 4, 5].map((r) => Object.fromEntries(headers.map((h, c) => [h, sample.getRow(r).getCell(c + 1).value || undefined])));
+    expect(samples.map((s) => s['Product name'])).toEqual(['Parle-G Gold Biscuit 100g', 'Tata Salt 1kg', 'Surf Excel Easy Wash 1kg']);
+
+    const asIs = await upload(samples, false);
+    expect(asIs.body.data.imported).toBe(0);
+    expect(asIs.body.data.errors.filter((e) => /sample row/.test(e.message)).map((e) => e.row)).toEqual([2, 3, 4]);
+
+    const own = samples.map((s, i) => ({ ...s, 'Product name': `Own ${s['Product name']}`, 'Your product code': `OWN-${i}`, Barcode: undefined }));
+    const check = await upload(own, true);
+    expect(check.body.data).toMatchObject({ total: 3, valid: 3, errors: [] });
+  });
 });

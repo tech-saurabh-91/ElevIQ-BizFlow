@@ -115,7 +115,7 @@ export default function BulkImport({ open, onClose, endpoint, noun, invalidate =
             <span>
               <span className="font-medium">1. Download the template</span>
               <span className="block text-xs text-muted-foreground">
-                Columns marked * are required. {hint}
+                Columns marked * are required. The &quot;Sample&quot; sheet shows filled example rows (it is not imported). {hint}
               </span>
             </span>
             <Button type="button" variant="outline" size="sm" onClick={downloadTemplate} loading={busy === 'template'} disabled={!ready}>
