@@ -23,6 +23,7 @@ import {
   PAYMENT_MODES,
   PAYMENT_TERMS,
   paymentModeLabel,
+  paymentTermLabel,
 } from '@/components/company/order-shared';
 import {
   computeInvoicePreview,
@@ -872,7 +873,7 @@ export default function InvoiceEditor() {
                   <Select {...register('paymentTerms')}>
                     {PAYMENT_TERMS.map((term) => (
                       <option key={term} value={term}>
-                        {term === 'IMMEDIATE' ? 'Immediate' : term.replace('NET_', 'Net ')}
+                        {paymentTermLabel(term)}
                       </option>
                     ))}
                   </Select>

@@ -144,10 +144,14 @@ export const apiError = (error) => {
     };
   }
   const data = res.data || {};
+  const errors = Array.isArray(data.errors) ? data.errors : [];
+  // "Validation failed" says nothing on a toast: say what failed instead.
+  const generic = !data.message || /^validation failed\.?$/i.test(String(data.message).trim());
+  const specific = errors.map((e) => e?.message).filter(Boolean);
   return {
-    message: data.message || 'Something went wrong',
+    message: generic && specific.length ? [...new Set(specific)].slice(0, 2).join(' · ') : data.message || 'Something went wrong',
     code: data.code || 'ERROR',
-    errors: Array.isArray(data.errors) ? data.errors : [],
+    errors,
     status: res.status,
     requestId: data.requestId,
     details: data.details,

@@ -7,6 +7,7 @@ import { BookOpenText, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { usePermissions } from '@/hooks/usePermissions';
+import { paymentTermLabel } from '@/components/company/order-shared';
 
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
@@ -250,7 +251,7 @@ function SupplierForm({ mode, initial, onClose, onSaved }) {
           <Select {...register('paymentTerms')}>
             {PAYMENT_TERMS.map((t) => (
               <option key={t} value={t}>
-                {t === 'IMMEDIATE' ? 'Immediate' : t.replace('NET_', 'Net ')}
+                {paymentTermLabel(t)}
               </option>
             ))}
           </Select>

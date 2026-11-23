@@ -2,6 +2,7 @@ import Supplier from '../../models/Supplier.js';
 import { buildCrudController } from './_crud.js';
 import { autoCode } from './_helpers.js';
 import { assertIdentity, panFromGstin } from '../../services/identityRules.js';
+import { creditDaysFor } from '../../services/customerService.js';
 
 // Same contact / tax rules as the company itself (India: GSTIN, PAN, IFSC).
 const PATHS = {
@@ -53,6 +54,8 @@ const crud = buildCrudController({
     const out = normalise({ ...payload });
     if (!out.code) out.code = await autoCode(req, 'SUPPLIER', 'SUP', 5, Supplier);
     if (out.outstanding === undefined) out.outstanding = out.openingBalance ?? 0;
+    // Net 30 means 30 days of credit (bills fall due 30 days after their date).
+    if (out.paymentTerms) out.creditDays = creditDaysFor(out.paymentTerms, out.creditDays);
     return out;
   },
   beforeUpdate: async (payload, req) => {
@@ -64,7 +67,11 @@ const crud = buildCrudController({
       bank: { ...(current.bank || {}), ...(payload.bank || {}) },
     };
     await assertIdentity(valuesOf(merged, req), PATHS, changedOf(payload));
-    return normalise({ ...payload });
+    const out = normalise({ ...payload });
+    if (out.paymentTerms !== undefined || out.creditDays !== undefined) {
+      out.creditDays = creditDaysFor(merged.paymentTerms, out.creditDays ?? merged.creditDays);
+    }
+    return out;
   },
 });
 

@@ -231,8 +231,10 @@ export const recordMovement = async ({
   });
 
   // Keep the company-wide total in lockstep. `Product.stock` is what order
-  // booking and invoicing read, so it must always equal the net of all deltas.
-  product.stock = round2(Number(product.stock || 0) + delta);
+  // booking and invoicing read, so it is the net of all sellable deltas:
+  // damaged-goods warehouses hold returns that cannot be sold.
+  const warehouseType = warehouse ? warehouse.type || (await Warehouse.findById(warehouse._id).select('type').lean())?.type : null;
+  if (warehouseType !== 'DAMAGED') product.stock = round2(Number(product.stock || 0) + delta);
   if (type === MOVEMENT_TYPES.PURCHASE_RECEIPT && Math.abs(avg - Number(product.avgCost || 0)) >= 0.005) {
     product.costChangedAt = new Date(); // selling price may need a look
   }
@@ -409,7 +411,7 @@ export const assertWarehouseStock = async (warehouse, lines, settings, { exclude
   wanted.forEach((w, key) => {
     const available = round2(Math.max(0, free.get(key) || 0));
     if (w.qty > available + EPSILON) {
-      errors.push({ field: 'items', message: `${w.name || 'Item'}: ${available} available in ${wh.name || wh.code}, ${round2(w.qty)} needed` });
+      errors.push({ field: 'items', message: `${w.name || 'Item'}: ${available} available in ${wh?.name || wh?.code || 'the warehouse'}, ${round2(w.qty)} needed` });
     }
   });
   if (errors.length) {
@@ -509,14 +511,20 @@ export const dispatchOrderStock = async (order, { settings = null, movedBy = nul
 // Reservations -> available view (used by inventory list)
 // ---------------------------------------------------------------------------
 
-/** Recompute `Product.stock` from the sum of all warehouse balances. */
+/**
+ * Recompute `Product.stock` (the sellable stock shown on the product list,
+ * low-stock alerts and dashboards) from the warehouse balances. Damaged-goods
+ * warehouses hold returns that cannot be sold, so they are left out.
+ */
 export const recomputeProductStock = async (productId) => {
+  const damaged = await Warehouse.distinct('_id', { type: 'DAMAGED' });
   const totals = await StockBalance.aggregate([
     {
       $match: {
         companyId: new mongoose.Types.ObjectId(getCompanyId()),
         isDeleted: { $ne: true },
         product: new mongoose.Types.ObjectId(String(productId)),
+        ...(damaged.length ? { warehouse: { $nin: damaged } } : {}),
       },
     },
     { $group: { _id: null, qty: { $sum: '$qty' } } },

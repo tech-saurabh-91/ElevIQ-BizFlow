@@ -29,7 +29,7 @@ export const PAYMENT_REASONS = [
   'OTHER',
 ];
 
-export const paymentModeLabel = (value) => titleCase(String(value || '').replace(/_/g, ' '));
+export const paymentModeLabel = (value) => (value === 'UPI' ? 'UPI' : titleCase(String(value || '').replace(/_/g, ' ')));
 
 export const paymentReasonLabel = (value) => titleCase(String(value || '').replace(/_/g, ' '));
 

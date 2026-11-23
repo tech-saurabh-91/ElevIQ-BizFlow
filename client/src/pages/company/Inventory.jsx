@@ -1717,13 +1717,16 @@ export function PurchaseOrdersTab() {
               <label className="mb-1.5 block text-sm font-medium" htmlFor="po-terms">
                 Payment terms
               </label>
-              <Input
-                id="po-terms"
-                value={form.paymentTerms}
-                onChange={(e) => setForm((f) => ({ ...f, paymentTerms: e.target.value }))}
-                placeholder="e.g. Net 30"
-                maxLength={30}
-              />
+              <Select id="po-terms" value={form.paymentTerms} onChange={(e) => setForm((f) => ({ ...f, paymentTerms: e.target.value }))}>
+                <option value="">Supplier&apos;s terms</option>
+                <option value="IMMEDIATE">Immediate</option>
+                <option value="NET_7">Net 7</option>
+                <option value="NET_15">Net 15</option>
+                <option value="NET_30">Net 30</option>
+                <option value="NET_45">Net 45</option>
+                <option value="NET_60">Net 60</option>
+                <option value="CUSTOM">Custom</option>
+              </Select>
             </div>
 
             <div>

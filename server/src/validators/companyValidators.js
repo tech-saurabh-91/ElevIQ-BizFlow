@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema, objectIdSchema, dateNotBefore } from '../middlewares/validate.js';
+import { paginationSchema, objectIdSchema, dateNotBefore, validToNotPast } from '../middlewares/validate.js';
 import {
   CUSTOMER_TYPES,
   PAYMENT_TERMS,
@@ -360,7 +360,7 @@ const priceListBaseSchema = z.object({
 });
 
 const validToAfterFrom = dateNotBefore('validTo', 'validFrom', 'Valid to cannot be before valid from');
-export const priceListCreateSchema = priceListBaseSchema.superRefine(validToAfterFrom);
+export const priceListCreateSchema = priceListBaseSchema.superRefine(validToAfterFrom).superRefine(validToNotPast);
 export const priceListUpdateSchema = priceListBaseSchema.partial().superRefine(validToAfterFrom);
 
 export const priceListListQuerySchema = paginationSchema.extend({

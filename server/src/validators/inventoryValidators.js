@@ -26,6 +26,20 @@ const optionalDate = z
 
 const refId = objectIdSchema.optional().or(z.literal(''));
 
+/**
+ * Payment terms of a purchase order. People type "Net 30", "net30" or
+ * "Immediate"; the stored value is the code (NET_30, IMMEDIATE...).
+ */
+const PO_TERMS = ['IMMEDIATE', 'NET_7', 'NET_15', 'NET_30', 'NET_45', 'NET_60', 'CUSTOM'];
+const poTerms = z.preprocess(
+  (v) => {
+    if (typeof v !== 'string') return v;
+    const t = v.trim().toUpperCase().replace(/[\s-]+/g, '_').replace(/^NET_?(\d+)(_DAYS)?$/, 'NET_$1');
+    return t === '' ? undefined : t;
+  },
+  z.enum(PO_TERMS, { errorMap: () => ({ message: 'Choose Immediate, Net 7, Net 15, Net 30, Net 45, Net 60 or Custom' }) }).optional()
+);
+
 /** Signed quantity for adjustments (may be negative). */
 const signedQty = z.coerce.number().refine((n) => Number.isFinite(n) && n !== 0, {
   message: 'Quantity must be a non-zero number',
@@ -82,7 +96,7 @@ export const poCreateSchema = z.object({
   warehouse: refId,
   poDate: optionalDate.refine(notFutureDate, { message: 'PO date cannot be in the future' }),
   expectedDate: optionalDate,
-  paymentTerms: z.string().trim().max(30).optional(),
+  paymentTerms: poTerms,
   leadDays: z.coerce.number().min(0).max(365).optional(),
   poReference: softString(60),
   notes: softString(1000),
@@ -98,7 +112,7 @@ export const poUpdateSchema = z
     warehouse: refId,
     poDate: optionalDate.refine(notFutureDate, { message: 'PO date cannot be in the future' }),
     expectedDate: optionalDate,
-    paymentTerms: z.string().trim().max(30).optional(),
+    paymentTerms: poTerms,
     leadDays: z.coerce.number().min(0).max(365).optional(),
     poReference: softString(60),
     notes: softString(1000),

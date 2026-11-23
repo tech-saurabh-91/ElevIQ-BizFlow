@@ -21,6 +21,7 @@ import { taxBreakupFor, sellerStateOf } from '../../services/orderService.js';
 import { recordMovement, assertWarehouseStock } from '../../services/inventoryService.js';
 import { nextSeries, getFinancialYearTag } from '../../utils/numberSeries.js';
 import { companyToday, tzOf } from '../../utils/companyTime.js';
+import { creditDaysFor } from '../../services/customerService.js';
 
 /**
  * Accounts payable: supplier bills, supplier payments and purchase returns.
@@ -315,7 +316,8 @@ export const createBill = asyncHandler(async (req, res) => {
     supplierState: supplier.address?.state || '',
     supplierInvoiceNo: body.supplierInvoiceNo.trim(),
     supplierInvoiceDate: invoiceDate,
-    dueDate: dayjs(invoiceDate).add(Number(supplier.creditDays || 0), 'day').toDate(),
+    // The supplier's credit days; else what its terms imply (Net 30 = 30) - suppliers saved before terms set the days.
+    dueDate: dayjs(invoiceDate).add(Number(supplier.creditDays) || creditDaysFor(supplier.paymentTerms, 0), 'day').toDate(),
     grns: grns.map((g) => g._id),
     grnNos: grns.map((g) => g.grnNo),
     items,

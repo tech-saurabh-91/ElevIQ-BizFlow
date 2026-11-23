@@ -299,7 +299,10 @@ const snapshotFor = ({ customer, order, payload, settings, req, existing = null 
     creditDays,
     poReference: resolve('poReference', order?.poReference || existing?.poReference || ''),
     // Place of supply is where the buyer receives the goods (decides CGST/SGST vs IGST).
-    placeOfSupply: resolve('placeOfSupply', existing?.placeOfSupply || buyerStateOf(customer) || ''),
+    // A blank value from the form means "not chosen": fall back to the buyer's
+    // state, never to '' (a blank state was read as same-state -> CGST/SGST on
+    // an inter-state sale).
+    placeOfSupply: String(resolve('placeOfSupply', '') || '').trim() || existing?.placeOfSupply || buyerStateOf(customer) || '',
 
     notes: resolve('notes', order?.notes || existing?.notes || ''),
     terms: resolve('terms', settings?.invoice?.terms || existing?.terms || ''),

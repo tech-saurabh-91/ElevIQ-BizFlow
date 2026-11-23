@@ -45,8 +45,14 @@ export const PAYMENT_TERMS = ['IMMEDIATE', 'NET_7', 'NET_15', 'NET_30', 'NET_45'
 
 export const statusLabel = (status) => titleCase(status || '');
 
+/** "NET_30" -> "Net 30", "CUSTOM" -> "Custom". */
+export const paymentTermLabel = (term) =>
+  term === 'IMMEDIATE' ? 'Immediate' : term === 'CUSTOM' ? 'Custom' : String(term || '').replace('NET_', 'Net ');
+
 export const paymentModeLabel = (mode) =>
-  String(mode || '')
+  mode === 'UPI'
+    ? 'UPI'
+    : String(mode || '')
     .replace(/_/g, ' ')
     .toLowerCase()
     .replace(/\b\w/g, (c) => c.toUpperCase());

@@ -22,6 +22,19 @@ export const objectIdSchema = z
  */
 export const notFutureDate = (v) => !v || Number.isNaN(Date.parse(v)) || Date.parse(v) <= Date.now() + 14 * 3600000;
 
+/**
+ * An end date ("valid to") that has not passed yet. A bare YYYY-MM-DD is UTC
+ * midnight; the whole day plus 14 h of slack counts, so "today" is always fine.
+ */
+export const notPastDate = (v) => !v || Number.isNaN(Date.parse(v)) || Date.parse(v) >= Date.now() - (24 + 14) * 3600000;
+
+/** superRefine for a NEW price list / discount / scheme: it must not end before it starts working. */
+export const validToNotPast = (v, ctx) => {
+  if (v?.validTo && !notPastDate(v.validTo)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['validTo'], message: 'Valid to has already passed: use today or a later date' });
+  }
+};
+
 /** superRefine: `later` must not be before `earlier` (both optional). */
 export const dateNotBefore = (later, earlier, message) => (v, ctx) => {
   if (!v?.[later] || !v?.[earlier]) return;

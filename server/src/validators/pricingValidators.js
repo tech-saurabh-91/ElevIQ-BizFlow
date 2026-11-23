@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { paginationSchema, objectIdSchema, dateNotBefore } from '../middlewares/validate.js';
+import { paginationSchema, objectIdSchema, dateNotBefore, validToNotPast } from '../middlewares/validate.js';
 import { CUSTOMER_TYPES } from '../config/constants.js';
 
 /** Discount master, trade schemes and the sale pricing preview. */
@@ -56,7 +56,7 @@ const discountChecks = (v, ctx) => {
   scopeFilled(v, ctx);
   validToAfterFrom(v, ctx);
 };
-export const discountCreateSchema = discountBase.superRefine(discountChecks);
+export const discountCreateSchema = discountBase.superRefine(discountChecks).superRefine(validToNotPast);
 export const discountUpdateSchema = discountBase.partial().superRefine(discountChecks);
 export const discountListQuerySchema = paginationSchema.extend({
   sort: z.enum(['createdAt', 'name', 'code', 'discountPercent']).optional(),
@@ -101,6 +101,7 @@ const schemeChecks = (v, ctx) => {
 };
 export const schemeCreateSchema = schemeBase.superRefine((v, ctx) => {
   schemeChecks(v, ctx);
+  validToNotPast(v, ctx);
   if ((v.type === 'QTY_DISCOUNT' || v.type === 'VALUE_DISCOUNT') && v.slabs === undefined) {
     ctx.addIssue({ code: 'custom', path: ['slabs'], message: 'Add at least one slab' });
   }

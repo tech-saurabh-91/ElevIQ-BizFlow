@@ -33,6 +33,7 @@ import {
   findPriceEntry,
   orderIdOf,
   paymentModeLabel,
+  paymentTermLabel,
 } from '@/components/company/order-shared';
 import { breakupRows, buyerStateOf } from '@/utils/tax';
 import { useTaxLabels } from '@/hooks/useLocations';
@@ -648,7 +649,7 @@ export default function OrderEditor() {
                   <Select {...register('paymentTerms')}>
                     {PAYMENT_TERMS.map((term) => (
                       <option key={term} value={term}>
-                        {term === 'IMMEDIATE' ? 'Immediate' : term.replace('NET_', 'Net ')}
+                        {paymentTermLabel(term)}
                       </option>
                     ))}
                   </Select>

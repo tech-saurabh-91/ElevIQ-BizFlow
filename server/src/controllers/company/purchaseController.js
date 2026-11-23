@@ -207,6 +207,9 @@ export const createPo = asyncHandler(async (req, res) => {
 
   applyPoTotals(doc, settings, req.company);
   pushHistory(doc, PURCHASE_ORDER_STATUS.DRAFT, req, 'Created');
+  // Check the document first: a number taken by a save that then fails would
+  // leave a gap in the PO series.
+  await doc.validate();
   doc.poNo = await nextPurchaseOrderNumber(req.companyId, settings, doc.poDate);
   await doc.save();
 
@@ -877,6 +880,17 @@ export const exportPos = asyncHandler(async (req, res) => {
 // Line builders / totals
 // ---------------------------------------------------------------------------
 
+/**
+ * Purchase rates are always before tax, like the goods receipt and the
+ * supplier's bill that follow from the PO ("prices include tax" is about the
+ * company's own selling prices). Without this a PO priced the same lines
+ * tax-inclusive while its bill added the tax on top.
+ */
+const purchaseTaxSettings = (settings) => ({
+  tax: { regime: settings?.tax?.regime, enableCgstSgst: settings?.tax?.enableCgstSgst, taxInclusive: false },
+  invoice: { rounding: settings?.invoice?.rounding },
+});
+
 /** Price PO lines server-side using the purchase rate, then compute totals. */
 const buildPoLines = async (raw = [], settings) => {
   const ids = [...new Set(raw.map((l) => String(l.product)).filter(Boolean))];
@@ -919,7 +933,7 @@ const buildPoLines = async (raw = [], settings) => {
       hsnCode: product.hsnCode || '',
       receivedQty: 0,
       freeQty: Number(input.freeQty || 0),
-      ...priceLineValues({ ...input, unitPrice, taxRate }, settings),
+      ...priceLineValues({ ...input, unitPrice, taxRate }, purchaseTaxSettings(settings)),
     };
   });
 
@@ -928,7 +942,7 @@ const buildPoLines = async (raw = [], settings) => {
 
 // On a purchase the supplier sells to us: their state vs ours decides the split.
 const applyPoTotals = (doc, settings, company) => {
-  const { totals } = computeTotals(doc.items, settings);
+  const { totals } = computeTotals(doc.items, purchaseTaxSettings(settings));
   const taxBreakup = taxBreakupFor(totals.taxTotal, settings, {
     sellerState: doc.supplierAddress?.state || '',
     buyerState: sellerStateOf(settings, company),
