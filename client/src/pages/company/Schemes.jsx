@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
@@ -10,6 +10,7 @@ import ResourcePage from '@/components/company/ResourcePage';
 import { FormActions, FormSection, dateInput, opt, todayInput } from '@/components/company/form-utils';
 import { ScopeFields, customerScopeText, productScopeText, scopeDefaults, scopeIssues, scopePayload } from '@/components/company/pricing-shared';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
+import { SearchSelect, productOptions } from '@/components/ui/search-select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -184,15 +185,20 @@ function SchemeForm({ mode, initial, onClose, onSaved }) {
             <Input inputMode="decimal" {...register('freeQty')} error={!!errors.freeQty} placeholder="1" />
           </Field>
           <Field label="Free product" error={errors.freeProduct?.message} hint="Blank = the same product the customer buys">
-            <Select {...register('freeProduct')}>
-              <option value="">Same product</option>
-              {(lookups.products || []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.sku ? ` (${p.sku})` : ''}
-                </option>
-              ))}
-            </Select>
+            <Controller
+              control={control}
+              name="freeProduct"
+              render={({ field: f }) => (
+                <SearchSelect
+                  value={f.value || ''}
+                  onChange={f.onChange}
+                  onBlur={f.onBlur}
+                  options={[{ value: '', label: 'Same product' }, ...productOptions(lookups.products || [])]}
+                  placeholder="Same product"
+                  aria-label="Free product"
+                />
+              )}
+            />
           </Field>
           <Checkbox label="Repeat for every multiple" description="On: buying 25 with 10+1 gives 2 free. Off: 1 free once the 10 is reached." {...register('repeat')} />
         </FormSection>

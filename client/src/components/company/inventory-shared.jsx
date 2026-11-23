@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
+import { SearchSelect, productOptions } from '@/components/ui/search-select';
 import { cn } from '@/utils/cn';
 import { titleCase, formatMoney } from '@/utils/format';
 import { unitOf, unitOptions } from '@/utils/units';
@@ -142,6 +144,7 @@ export function LineEditor({
   const exact = r2(subtotal + taxTotal);
   const grand = Math.round(exact);
   const byId = (id) => products.find((p) => p.id === id);
+  const options = useMemo(() => productOptions(products), [products]);
 
   // Product, qty, cost[, tax] + a trailing remove button (and unit hint row).
   const cols = showCost
@@ -207,19 +210,13 @@ export function LineEditor({
         const product = byId(line.product);
         return (
           <div key={idx} className={cn('grid items-center gap-2', cols)}>
-            <Select
+            <SearchSelect
               value={line.product || ''}
-              onChange={(e) => setProduct(idx, e.target.value)}
+              onChange={(id) => setProduct(idx, id)}
+              options={options}
+              placeholder="Type product name or code…"
               aria-label={`Product for line ${idx + 1}`}
-            >
-              <option value="">Select a product…</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.sku ? ` (${p.sku})` : ''}
-                </option>
-              ))}
-            </Select>
+            />
 
             <Input
               type="number"
@@ -271,7 +268,7 @@ export function LineEditor({
                   <Select
                     value={line.unit || product.unit}
                     onChange={(e) => setUnit(idx, e.target.value)}
-                    className="h-7 w-auto text-xs"
+                    className="h-7 w-auto py-0 pl-2 pr-6 text-xs"
                     aria-label={`Unit for line ${idx + 1}`}
                   >
                     {unitOptions(product).map((u, i, all) => (

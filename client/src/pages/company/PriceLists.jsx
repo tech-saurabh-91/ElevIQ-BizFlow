@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import { useMemo, useState } from 'react';
+import { Controller, useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
@@ -9,6 +9,7 @@ import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
 import { FormActions, FormSection, dateInput, num, numInput, todayInput } from '@/components/company/form-utils';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
+import { SearchSelect, productOptions } from '@/components/ui/search-select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -98,6 +99,8 @@ function PriceListForm({ mode, initial, onClose, onSaved }) {
 
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
 
+  const productChoices = useMemo(() => productOptions(lookups.products || []), [lookups.products]);
+
   const addItem = () => append({ product: '', price: '', discountPercent: '', minQty: '' });
 
   const pickProduct = (index, productId) => {
@@ -105,22 +108,6 @@ function PriceListForm({ mode, initial, onClose, onSaved }) {
     if (product && product.sellingPrice != null) {
       setValue(`items.${index}.price`, String(product.sellingPrice), { shouldValidate: true });
     }
-  };
-
-  /**
-   * Registering the product <select> with a plain onChange would replace RHF's
-   * own handler, leaving the field unregistered ("Select a product" forever).
-   * Compose both so RHF gets the value and we can auto-fill the list price.
-   */
-  const registerProduct = (index) => {
-    const field = register(`items.${index}.product`);
-    return {
-      ...field,
-      onChange: (event) => {
-        field.onChange(event);
-        pickProduct(index, event.target.value);
-      },
-    };
   };
 
   const onSubmit = async (values) => {
@@ -244,18 +231,24 @@ function PriceListForm({ mode, initial, onClose, onSaved }) {
                   error={itemError(index, 'product')}
                   className="sm:col-span-5"
                 >
-                  <Select
-                    {...registerProduct(index)}
-                    error={!!itemError(index, 'product')}
-                  >
-                    <option value="">Select a product</option>
-                    {lookups.products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                        {p.sku ? ` (${p.sku})` : ''}
-                      </option>
-                    ))}
-                  </Select>
+                  <Controller
+                    control={control}
+                    name={`items.${index}.product`}
+                    render={({ field: f }) => (
+                      <SearchSelect
+                        value={f.value || ''}
+                        onChange={(id) => {
+                          f.onChange(id);
+                          pickProduct(index, id);
+                        }}
+                        onBlur={f.onBlur}
+                        options={productChoices}
+                        placeholder="Type product name or code…"
+                        error={!!itemError(index, 'product')}
+                        aria-label={`Product for line ${index + 1}`}
+                      />
+                    )}
+                  />
                 </Field>
                 <Field label="Price" required error={itemError(index, 'price')} className="sm:col-span-3">
                   <Input

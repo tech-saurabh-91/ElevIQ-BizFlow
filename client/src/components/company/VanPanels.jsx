@@ -7,6 +7,7 @@ import api, { apiError } from '@/api/client';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input, Select, Field, Textarea } from '@/components/ui/input';
+import { SearchSelect, productOptions } from '@/components/ui/search-select';
 import { Tabs } from '@/components/ui/tabs';
 import { LoadingState } from '@/components/ui/misc';
 import { ErrorAlert } from '@/components/ui/alert';
@@ -66,15 +67,13 @@ function MoveLines({ lines, setLines, products }) {
         const product = byId(l.product);
         return (
           <div key={i} className="grid grid-cols-[minmax(0,1fr)_5.5rem_6.5rem_2rem] items-center gap-2">
-            <Select value={l.product} onChange={(e) => update(i, { product: e.target.value, unit: byId(e.target.value)?.unit || '' })} aria-label={`Product ${i + 1}`}>
-              <option value="">Select product…</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.hint ? ` · ${p.hint}` : ''}
-                </option>
-              ))}
-            </Select>
+            <SearchSelect
+              value={l.product}
+              onChange={(id) => update(i, { product: id, unit: byId(id)?.unit || '' })}
+              options={productOptions(products)}
+              placeholder="Type product name or code…"
+              aria-label={`Product ${i + 1}`}
+            />
             <Input inputMode="decimal" value={l.qty} onChange={(e) => update(i, { qty: e.target.value.replace(/[^\d.]/g, '') })} placeholder="Qty" aria-label={`Quantity ${i + 1}`} />
             <Select value={l.unit || product?.unit || ''} onChange={(e) => update(i, { unit: e.target.value })} disabled={!product} aria-label={`Unit ${i + 1}`}>
               {unitOptions(product).map((u) => (

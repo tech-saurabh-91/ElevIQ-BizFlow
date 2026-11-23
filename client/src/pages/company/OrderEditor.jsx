@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useForm, useFieldArray, useWatch } from 'react-hook-form';
+import { Controller, useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -18,6 +18,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select, Textarea } from '@/components/ui/input';
+import { SearchSelect, productOptions } from '@/components/ui/search-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription, ErrorAlert } from '@/components/ui/alert';
@@ -229,6 +230,7 @@ export default function OrderEditor() {
   });
 
   const options = optionsQuery.data;
+  const productChoices = useMemo(() => productOptions(options?.products || []), [options?.products]);
 
   const productMap = useMemo(() => {
     const map = new Map();
@@ -724,21 +726,24 @@ export default function OrderEditor() {
                         return (
                           <tr key={field.id} className="mb-3 grid grid-cols-3 gap-x-3 rounded-lg border p-3 sm:mb-0 sm:table-row sm:rounded-none sm:border-x-0 sm:border-t-0 sm:p-0 sm:last:border-0">
                             <td className="col-span-3 py-1 pr-2 align-top sm:py-2">
-                              <Select
-                                {...register(`items.${index}.product`, {
-                                  onChange: (e) => changeProduct(index, e.target.value),
-                                })}
-                                error={!!errors.items?.[index]?.product}
-                                aria-label={`Product for line ${index + 1}`}
-                              >
-                                <option value="">Select product…</option>
-                                {(options?.products || []).map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name}
-                                    {p.sku ? ` · ${p.sku}` : ''}
-                                  </option>
-                                ))}
-                              </Select>
+                              <Controller
+                                control={control}
+                                name={`items.${index}.product`}
+                                render={({ field: f }) => (
+                                  <SearchSelect
+                                    value={f.value || ''}
+                                    onChange={(id) => {
+                                      f.onChange(id);
+                                      changeProduct(index, id);
+                                    }}
+                                    onBlur={f.onBlur}
+                                    options={productChoices}
+                                    placeholder="Type product name or code…"
+                                    error={!!errors.items?.[index]?.product}
+                                    aria-label={`Product for line ${index + 1}`}
+                                  />
+                                )}
+                              />
                               {errors.items?.[index]?.product && (
                                 <p className="mt-1 text-xs text-destructive">
                                   {errors.items[index].product.message}
