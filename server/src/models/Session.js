@@ -10,8 +10,10 @@ const sessionSchema = new mongoose.Schema(
     companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', default: null },
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     platformUser: { type: mongoose.Schema.Types.ObjectId, ref: 'PlatformUser', default: null, index: true },
+    // A customer's portal login (scope 'customer').
+    customerAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomerAccount', default: null, index: true },
 
-    scope: { type: String, enum: ['company', 'platform'], default: 'company', index: true },
+    scope: { type: String, enum: ['company', 'platform', 'customer'], default: 'company', index: true },
 
     jti: { type: String, required: true, unique: true, index: true },
     refreshTokenHash: { type: String, required: true, select: false },

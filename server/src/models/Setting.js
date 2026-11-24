@@ -85,6 +85,24 @@ const settingSchema = new mongoose.Schema(
         allowNegativeStock: { type: Boolean, default: BUSINESS_DEFAULTS.allowNegativeStock },
         defaultPaymentMode: { type: String, default: 'CREDIT' },
         showStockOnOrder: { type: Boolean, default: true },
+        // Remind when a confirmed order is still not invoiced after this many
+        // days (its stock stays reserved meanwhile). 0 = no reminder.
+        staleConfirmedDays: { type: Number, default: 7 },
+      },
+      default: () => ({}),
+    },
+
+    // Customer self-ordering portal (needs the plan's customerPortal module).
+    portal: {
+      type: {
+        enabled: { type: Boolean, default: false },
+        // A request nobody accepts or rejects within this many days expires.
+        requestExpiryDays: { type: Number, default: 3 },
+        minOrderValue: { type: Number, default: 0 },
+        // In stock / low / out of stock on products (never the quantity).
+        showStockStatus: { type: Boolean, default: true },
+        // Outstanding balance on the customer's home and statement.
+        showOutstanding: { type: Boolean, default: true },
       },
       default: () => ({}),
     },

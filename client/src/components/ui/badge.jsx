@@ -42,6 +42,7 @@ export const STATUS_TONE = {
   DISPATCHED: 'info',
   DELIVERED: 'success',
   REJECTED: 'destructive',
+  REQUESTED: 'warning',
   ISSUED: 'info',
   POSTED: 'info',
   PARTIALLY_PAID: 'warning',

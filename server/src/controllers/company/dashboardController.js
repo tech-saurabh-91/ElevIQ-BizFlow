@@ -103,7 +103,8 @@ export const summary = asyncHandler(async (req, res) => {
   const loadOrders = async () => {
     try {
       const { default: Order } = await import('../../models/Order.js');
-      const moneyStatuses = { $nin: ['CANCELLED', 'REJECTED'] };
+      // Customer requests are not sales until accepted.
+      const moneyStatuses = { $nin: ['CANCELLED', 'REJECTED', 'REQUESTED', 'EXPIRED'] };
       const tenantId = new mongoose.Types.ObjectId(companyId);
 
       const [ordersToday, pendingSales, pending, recent, today] = await Promise.all([

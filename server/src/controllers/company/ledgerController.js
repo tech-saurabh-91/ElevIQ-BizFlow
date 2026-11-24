@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import BalanceConfirmation from '../../models/BalanceConfirmation.js';
 import dayjs from 'dayjs';
 
 import Setting from '../../models/Setting.js';
@@ -57,6 +58,13 @@ const balanceWords = (kind, amount) => {
 /** GET /ledgers/:kind/:id */
 export const show = asyncHandler(async (req, res) => {
   const ledger = await ledgerOf(req);
+  // The customer's latest answer from the online portal (confirmed / disputed).
+  if (req.params.kind === 'customer') {
+    const latest = await BalanceConfirmation.findOne({ customer: req.params.id }).sort({ createdAt: -1 }).lean();
+    ledger.confirmation = latest
+      ? { status: latest.status, asOf: latest.asOf, balance: latest.balance, note: latest.note, at: latest.createdAt }
+      : null;
+  }
   return success(res, { data: ledger });
 });
 

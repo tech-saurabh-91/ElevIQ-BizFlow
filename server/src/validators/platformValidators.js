@@ -126,7 +126,7 @@ export const createCompanySchema = z.object({
   endDate: optionalDate,
 
   // Modules on top of the plan (e.g. a sales-only company without Purchase).
-  modules: z.object({ purchase: z.boolean() }).partial().optional(),
+  modules: z.object({ purchase: z.boolean(), customerPortal: z.boolean() }).partial().optional(),
 
   admin: adminSchema,
 }).superRefine(dateNotBefore('endDate', 'startDate', 'End date cannot be before the start date'));
@@ -186,6 +186,7 @@ const planFeatures = z
     barcode: z.boolean().optional(),
     schemes: z.boolean().optional(),
     purchase: z.boolean().optional(),
+    customerPortal: z.boolean().optional(),
   })
   .partial()
   .optional();

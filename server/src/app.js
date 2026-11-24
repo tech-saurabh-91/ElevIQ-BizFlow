@@ -20,6 +20,7 @@ import { ensureUploadDirs } from './middlewares/upload.js';
 
 import platformRoutes from './routes/platform/index.js';
 import companyRoutes from './routes/company/index.js';
+import portalRoutes from './routes/portal/index.js';
 import authRoutes from './routes/auth/index.js';
 import { locationReadRoutes } from './routes/locations.js';
 import { healthRouter, readyRouter } from './routes/health.js';
@@ -66,6 +67,7 @@ app.use('/api', apiLimiter);
 // ---- API routers ----------------------------------------------------------
 app.use('/api/platform', platformRoutes);
 app.use('/api/v1', companyRoutes);
+app.use('/api/portal', portalRoutes); // customer self-ordering portal
 app.use('/api/locations', locationReadRoutes);
 app.use('/api', authRoutes); // /api/auth/* (login/refresh shared entrypoints)
 

@@ -101,6 +101,20 @@ const ReportAccess = lazy(() => import('@/pages/company/ReportAccess'));
 const DashboardCustomize = lazy(() => import('@/pages/company/DashboardCustomize'));
 const Notifications = lazy(() => import('@/pages/company/Notifications'));
 
+// ---- customer portal (a company's customers ordering online) ---------------
+const PortalLayout = lazy(() => import('@/portal/PortalLayout'));
+const PortalLogin = lazy(() => import('@/portal/PortalLogin'));
+const portalPage = (name) => lazy(() => import('@/portal/PortalPages').then((m) => ({ default: m[name] })));
+const PortalHome = portalPage('PortalHome');
+const PortalOrders = portalPage('PortalOrders');
+const PortalOrderDetail = portalPage('PortalOrderDetail');
+const PortalInvoices = portalPage('PortalInvoices');
+const PortalStatement = portalPage('PortalStatement');
+const PortalAccount = portalPage('PortalAccount');
+const PortalChangePin = portalPage('PortalChangePin');
+const PortalCatalog = lazy(() => import('@/portal/PortalShop').then((m) => ({ default: m.PortalCatalog })));
+const PortalCart = lazy(() => import('@/portal/PortalShop').then((m) => ({ default: m.PortalCart })));
+
 // ---- guards ---------------------------------------------------------------
 
 function FullPageLoader({ label = 'Loading your workspace…' }) {
@@ -329,6 +343,22 @@ export default function App() {
           />
 
           <Route path="*" element={<Navigate to="/app" replace />} />
+        </Route>
+
+        {/* ---------------- Customer portal ---------------- */}
+        {/* Its own session (portal/portalStore.js): never the staff guards above. */}
+        <Route path="/portal/:code/login" element={<PortalLogin />} />
+        <Route path="/portal/:code" element={<PortalLayout />}>
+          <Route index element={<PortalHome />} />
+          <Route path="catalog" element={<PortalCatalog />} />
+          <Route path="cart" element={<PortalCart />} />
+          <Route path="orders" element={<PortalOrders />} />
+          <Route path="orders/:id" element={<PortalOrderDetail />} />
+          <Route path="invoices" element={<PortalInvoices />} />
+          <Route path="statement" element={<PortalStatement />} />
+          <Route path="account" element={<PortalAccount />} />
+          <Route path="account/pin" element={<PortalChangePin />} />
+          <Route path="*" element={<PortalHome />} />
         </Route>
 
         {/* Convenience aliases */}

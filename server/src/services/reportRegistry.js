@@ -5,6 +5,7 @@ import Invoice from '../models/Invoice.js';
 import CreditNote from '../models/CreditNote.js';
 import Payment from '../models/Payment.js';
 import Order from '../models/Order.js';
+import { NON_SALE_ORDER_STATUSES } from '../config/constants.js';
 import Customer from '../models/Customer.js';
 import Product from '../models/Product.js';
 import Supplier from '../models/Supplier.js';
@@ -275,12 +276,12 @@ const orderRegister = {
   icon: 'ShoppingCart',
   requires: ['orders.view'],
   filters: ['dateRange', 'customer', 'salesman', 'status'],
-  statuses: [['', 'All booked'], ['PENDING_APPROVAL', 'Pending approval'], ['CONFIRMED', 'Confirmed'], ['DELIVERED', 'Delivered'], ['CANCELLED', 'Cancelled'], ['REJECTED', 'Rejected']],
+  statuses: [['', 'All booked'], ['PENDING_APPROVAL', 'Pending approval'], ['CONFIRMED', 'Confirmed'], ['DELIVERED', 'Delivered'], ['CANCELLED', 'Cancelled'], ['REJECTED', 'Rejected'], ['REQUESTED', 'Customer requests'], ['EXPIRED', 'Expired requests']],
   run: async (p, ctx) => {
     const { from, to } = windowOf(p, ctx.tz);
     const docs = await Order.find({
       orderDate: { $gte: from, $lt: to },
-      status: p.status || { $ne: 'DRAFT' },
+      status: p.status || { $nin: ['DRAFT', 'REQUESTED', 'EXPIRED'] },
       ...by(p, 'customer', 'customerId'),
       ...by(p, 'salesman'),
       ...ownScope(ctx),
@@ -1322,7 +1323,7 @@ const salesmanPerformance = {
     const repMatch = (field) => (p.salesman ? { [field]: oid(p.salesman) } : scopeIds ? { [field]: { $in: scopeIds } } : {});
     const [orders, invoices, payments] = await Promise.all([
       Order.aggregate([
-        { $match: { ...base, ...repMatch('salesman'), orderDate: { $gte: from, $lt: to }, status: { $nin: ['DRAFT', 'CANCELLED', 'REJECTED'] } } },
+        { $match: { ...base, ...repMatch('salesman'), orderDate: { $gte: from, $lt: to }, status: { $nin: NON_SALE_ORDER_STATUSES } } },
         { $group: { _id: '$salesman', orders: { $sum: 1 }, orderValue: { $sum: '$total' }, customers: { $addToSet: '$customerId' } } },
       ]),
       Invoice.aggregate([

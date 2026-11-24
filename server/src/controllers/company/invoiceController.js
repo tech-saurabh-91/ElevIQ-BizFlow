@@ -46,7 +46,7 @@ import { companyToday, tzOf } from '../../utils/companyTime.js';
 import { numberOutOfYear } from '../../utils/numberSeries.js';
 
 /** Relations returned on every invoice read so the UI never needs a second call. */
-const POPULATE = [
+export const POPULATE = [
   {
     path: 'customerId',
     select:
@@ -1259,10 +1259,6 @@ const money2 = (n) => Number(n || 0).toFixed(2);
 
 export const pdf = asyncHandler(async (req, res) => {
   const invoice = await loadInvoice(req, req.params.id);
-  const settings = await settingsOf(req);
-  const company = sellerFor(invoice, req.company || {});
-  const loc = await pdfLocale(settings, company);
-  const customer = invoice.customerId || {};
   const print = await notePrint(req, {
     docType: 'INVOICE',
     docId: invoice._id,
@@ -1270,6 +1266,26 @@ export const pdf = asyncHandler(async (req, res) => {
     partyName: invoice.customerName,
     draft: invoice.status === 'DRAFT',
   });
+  await renderInvoicePdf(req, res, invoice, print);
+
+  audit(req, {
+    action: AUDIT_ACTIONS.EXPORT,
+    entityType: 'Invoice',
+    entityId: invoice._id,
+    entityLabel: labelOf(invoice),
+    description: `Printed invoice ${labelOf(invoice)}${print.copyLabel ? ` (${print.copyLabel.toLowerCase()})` : ''}`,
+  });
+});
+
+/**
+ * Write one invoice's PDF to `res`. `print` = { copyLabel, watermark, printedBy }
+ * (staff prints go through notePrint; the customer portal passes its own label).
+ */
+export const renderInvoicePdf = async (req, res, invoice, print = {}) => {
+  const settings = await settingsOf(req);
+  const company = sellerFor(invoice, req.company || {});
+  const loc = await pdfLocale(settings, company);
+  const customer = invoice.customerId || {};
 
   // Order no. of each billed order (an invoice may bill several of one customer).
   const orderNos = invoice.orderNos?.length ? invoice.orderNos.filter(Boolean) : invoice.orderNo ? [invoice.orderNo] : [];
@@ -1337,15 +1353,7 @@ export const pdf = asyncHandler(async (req, res) => {
     qr,
     signatures: ["Customer's signature", 'Authorised signatory'],
   });
-
-  audit(req, {
-    action: AUDIT_ACTIONS.EXPORT,
-    entityType: 'Invoice',
-    entityId: invoice._id,
-    entityLabel: labelOf(invoice),
-    description: `Printed invoice ${labelOf(invoice)}${print.copyLabel ? ` (${print.copyLabel.toLowerCase()})` : ''}`,
-  });
-});
+};
 
 export default {
   list,

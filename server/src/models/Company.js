@@ -77,6 +77,8 @@ const companySchema = new mongoose.Schema(
         barcode: { type: Boolean, default: true },
         schemes: { type: Boolean, default: true },
         purchase: { type: Boolean, default: true },
+        // Customer self-ordering portal. Off unless a plan includes it.
+        customerPortal: { type: Boolean, default: false },
       },
       default: () => ({}),
     },

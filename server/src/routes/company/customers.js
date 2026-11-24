@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import * as ctrl from '../../controllers/company/customerController.js';
+import * as portalCtrl from '../../controllers/company/customerPortalController.js';
+import { portalAccessSchema } from '../../validators/portalValidators.js';
 import { validate } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
 import { spreadsheetUpload } from '../../middlewares/upload.js';
@@ -19,6 +21,16 @@ router.post('/', authorize('customers.create'), validate({ body: customerCreateS
 // Bulk import: download the template, then upload it (dryRun=true validates only).
 router.get('/import/template', authorize('customers.create'), ctrl.importTemplate);
 router.post('/import', authorize('customers.create'), spreadsheetUpload.single('file'), ctrl.importFile);
+
+// Customer portal login for this customer (mobile + PIN).
+router.get('/:id/portal-access', authorize('customers.portal'), validate({ params: idParamsSchema }), portalCtrl.show);
+router.put(
+  '/:id/portal-access',
+  authorize('customers.portal'),
+  validate({ params: idParamsSchema, body: portalAccessSchema }),
+  portalCtrl.save
+);
+router.post('/:id/portal-access/reset-pin', authorize('customers.portal'), validate({ params: idParamsSchema }), portalCtrl.resetPin);
 
 router
   .route('/:id')
