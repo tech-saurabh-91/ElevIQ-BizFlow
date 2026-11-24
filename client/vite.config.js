@@ -18,8 +18,8 @@ export default defineConfig(({ mode }) => {
         injectRegister: false,
         includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
         manifest: {
-          name: 'ElevIQ SFA',
-          short_name: 'ElevIQ SFA',
+          name: 'ElevIQ BizFlow',
+          short_name: 'ElevIQ BizFlow',
           description: 'Sales force automation: orders, invoices, collections and field visits.',
           start_url: '/',
           scope: '/',

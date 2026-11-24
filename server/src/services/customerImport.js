@@ -80,7 +80,7 @@ const loadRefs = async (companyCountry) => {
 export const buildTemplate = async (company) => {
   const refs = await loadRefs(company?.address?.country);
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'ElevIQ SFA';
+  wb.creator = 'ElevIQ BizFlow';
 
   const sheet = wb.addWorksheet('Customers', { views: [{ state: 'frozen', ySplit: 1 }] });
   sheet.columns = COLUMNS.map((c) => ({ header: c.required ? `${c.header} *` : c.header, key: c.key, width: c.width || 16 }));

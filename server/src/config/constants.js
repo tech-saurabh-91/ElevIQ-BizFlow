@@ -1,9 +1,9 @@
 /**
- * ElevIQ SFA - central constants & permission matrix.
+ * ElevIQ BizFlow - central constants & permission matrix.
  * Keep every enum/status/role here so models, validators and frontend agree.
  */
 
-export const APP_NAME = 'ElevIQ SFA';
+export const APP_NAME = 'ElevIQ BizFlow';
 
 // ---------------------------------------------------------------------------
 // Platform (Service Provider) roles

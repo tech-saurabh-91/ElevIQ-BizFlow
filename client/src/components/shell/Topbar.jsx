@@ -19,7 +19,7 @@ import HelpPanel from '@/components/help/HelpPanel';
  *
  * Deliberately shows BOTH identities side by side:
  *   [Company name]            ← who signed in (tenant workspace)
- *   ElevIQ SFA                ← the product, always visible underneath
+ *   ElevIQ BizFlow                ← the product, always visible underneath
  *
  * While a platform admin is impersonating a tenant, a persistent amber banner
  * sits above the bar with a one-click "Exit workspace".

@@ -125,7 +125,7 @@ export default function PlatformReports() {
       <div>
         <PageHeader
           title="Platform Reports"
-          description="Cross-tenant analytics for the ElevIQ SFA platform."
+          description="Cross-tenant analytics for the ElevIQ BizFlow platform."
         />
         <EmptyState
           icon="error"

@@ -22,7 +22,7 @@ Multi-tenant Sales Force Automation + Order & Invoice SaaS.
 **Tenancy:** every tenant document carries an indexed \`companyId\`, injected
 automatically from the verified JWT. Requests may never choose their own tenant.
       `,
-      contact: { name: 'ElevIQ SFA', email: 'support@eleviqsfa.com' },
+      contact: { name: 'ElevIQ BizFlow', email: 'support@eleviqsfa.com' },
     },
     servers: [
       { url: `http://localhost:${env.port}`, description: 'Local' },

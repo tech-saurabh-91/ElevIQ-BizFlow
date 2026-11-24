@@ -19,7 +19,7 @@ export const GUIDES = [
     id: 'start',
     title: 'Getting started and finding your way',
     body: [
-      { p: 'ElevIQ Bizflow runs your distribution business: sales orders, invoices, collections, returns, stock, purchases, the field team and reports. Everyone signs in with their own email or phone and sees only the screens their role allows.' },
+      { p: 'ElevIQ BizFlow runs your distribution business: sales orders, invoices, collections, returns, stock, purchases, the field team and reports. Everyone signs in with their own email or phone and sees only the screens their role allows.' },
       { h: 'Moving around' },
       { p: 'The menu on the left lists the screens you can use. On a phone, tap the menu button at the top left, or use the bar at the bottom. If something you need is missing from your menu, your role does not include it: ask your admin or manager.' },
       { h: 'The bell' },

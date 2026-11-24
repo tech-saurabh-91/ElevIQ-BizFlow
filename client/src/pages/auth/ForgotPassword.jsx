@@ -152,7 +152,7 @@ export default function ForgotPassword() {
             Sign in
           </Link>
         </span>
-        <span className="font-semibold text-foreground">ElevIQ SFA</span>
+        <span className="font-semibold text-foreground">ElevIQ BizFlow</span>
       </div>
     </div>
   );

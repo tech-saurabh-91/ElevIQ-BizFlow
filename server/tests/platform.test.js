@@ -163,7 +163,7 @@ describe('Phase 2 - Company provisioning', () => {
     const data = login.body.data;
     expect(data.company.name).toBe('Alpha Logistics Pvt Ltd');
     expect(data.user.mustChangePassword).toBe(true);
-    expect(data.branding.app).toBe('ElevIQ SFA');
+    expect(data.branding.app).toBe('ElevIQ BizFlow');
     expect(data.branding.company).toBe('Alpha Logistics Pvt Ltd');
   });
 

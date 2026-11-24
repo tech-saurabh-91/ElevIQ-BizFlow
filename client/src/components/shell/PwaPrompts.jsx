@@ -75,7 +75,7 @@ export function InstallButton() {
       type="button"
       onClick={install}
       className="hidden h-9 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium hover:bg-accent focus-ring sm:inline-flex"
-      title="Install ElevIQ SFA on this device"
+      title="Install ElevIQ BizFlow on this device"
     >
       <Download className="h-4 w-4" /> Install app
     </button>
@@ -114,7 +114,7 @@ function InstallSheet() {
         <div className="flex items-start gap-3">
           <img src="/pwa-192x192.png" alt="" className="h-12 w-12 shrink-0 rounded-xl" />
           <div className="min-w-0 flex-1">
-            <p className="font-semibold">Install ElevIQ SFA</p>
+            <p className="font-semibold">Install ElevIQ BizFlow</p>
             <p className="mt-0.5 text-sm text-muted-foreground">
               Add the app to your home screen: it opens full screen, faster, like any other app.
             </p>

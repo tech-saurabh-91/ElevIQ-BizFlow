@@ -901,7 +901,7 @@ export const exportXlsx = asyncHandler(async (req, res) => {
   const orders = await fetchForExport(req);
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'ElevIQ SFA';
+  workbook.creator = 'ElevIQ BizFlow';
   workbook.created = new Date();
   const sheet = workbook.addWorksheet('Orders', {
     views: [{ state: 'frozen', ySplit: 1 }],

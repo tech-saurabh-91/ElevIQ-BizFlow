@@ -118,7 +118,7 @@ describe('Phase 1 - Company auth', () => {
     const data = await loginCompany(companyA.creds);
     expect(data.company.name).toBe('Alpha Traders');
     expect(data.company.code).toBe('AAAA01');
-    expect(data.branding.app).toBe('ElevIQ SFA');
+    expect(data.branding.app).toBe('ElevIQ BizFlow');
     expect(data.branding.company).toBe('Alpha Traders');
     expect(data.user.role).toBe('COMPANY_ADMIN');
     expect(data.accessToken).toBeTruthy();
@@ -141,7 +141,7 @@ describe('Phase 1 - Company auth', () => {
       .set('Authorization', `Bearer ${data.accessToken}`);
     expect(res.status).toBe(200);
     expect(res.body.data.company.name).toBe('Alpha Traders');
-    expect(res.body.data.branding).toEqual({ app: 'ElevIQ SFA', company: 'Alpha Traders' });
+    expect(res.body.data.branding).toEqual({ app: 'ElevIQ BizFlow', company: 'Alpha Traders' });
     expect(res.body.data.permissions).toBeTruthy(); // RBAC matrix
   });
 

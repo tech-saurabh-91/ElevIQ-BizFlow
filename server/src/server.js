@@ -10,7 +10,7 @@ const start = async () => {
     startJobs();
 
     const server = app.listen(env.port, () => {
-      logger.info(`${'ElevIQ SFA'} API server listening on :${env.port} [${env.nodeEnv}]`);
+      logger.info(`${'ElevIQ BizFlow'} API server listening on :${env.port} [${env.nodeEnv}]`);
       logger.info(`API docs: http://localhost:${env.port}/api-docs`);
     });
 

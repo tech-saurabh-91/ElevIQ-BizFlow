@@ -262,7 +262,7 @@ function Scene({ compact, onPhase, phase }) {
             innerRef={refs.hub}
             className="rounded-full bg-brand-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xl shadow-brand-900/40"
           >
-            ElevIQ Bizflow
+            ElevIQ BizFlow
           </Floating>
           {[
             ['shop', 'Customers & orders'],

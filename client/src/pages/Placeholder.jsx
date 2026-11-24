@@ -32,7 +32,7 @@ export default function Placeholder({ title = 'Coming soon', phase = '?', descri
           </div>
           <h2 className="text-lg font-semibold">{title} — under construction</h2>
           <p className="mt-2 max-w-md text-sm text-muted-foreground">
-            This screen is scheduled for <strong>Phase {phase}</strong> of the ElevIQ SFA build
+            This screen is scheduled for <strong>Phase {phase}</strong> of the ElevIQ BizFlow build
             plan. The backend contracts and navigation are already wired, so it will light up as
             soon as the module ships.
           </p>

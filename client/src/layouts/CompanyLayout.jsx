@@ -18,7 +18,7 @@ import { useInventoryMode } from '@/components/company/cost-margin';
 /**
  * Company workspace shell: /app/*
  *
- * The signed-in company name + "ElevIQ SFA" are shown in the top bar
+ * The signed-in company name + "ElevIQ BizFlow" are shown in the top bar
  * (see Topbar -> WorkspaceBadge), and again in the footer.
  */
 export default function CompanyLayout() {
@@ -99,7 +99,7 @@ export default function CompanyLayout() {
           </PageErrorBoundary>
         </main>
         <footer className="border-t px-4 py-3 text-center text-[11px] text-muted-foreground sm:px-6">
-          {company?.name ? `${company.name} · ` : ''}Powered by <span className="font-semibold">ElevIQ SFA</span> ·
+          {company?.name ? `${company.name} · ` : ''}Powered by <span className="font-semibold">ElevIQ BizFlow</span> ·
           v1.0.0
         </footer>
       </div>

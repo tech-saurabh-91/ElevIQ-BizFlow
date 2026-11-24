@@ -8,7 +8,7 @@ import { ChevronLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
  * Sidebar navigation.
  * - Sections + items from the nav registry (already permission-filtered)
  * - Desktop only (lg and up), collapsible to icons; phones use BottomNav
- * - Brand block at the top always shows "ElevIQ SFA"
+ * - Brand block at the top always shows "ElevIQ BizFlow"
  */
 export default function Sidebar({ sections = [], footer, onNavigate, variant = 'company' }) {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);

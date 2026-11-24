@@ -54,7 +54,7 @@ export default function PlatformLogin() {
         </div>
         <h1 className="text-2xl font-bold tracking-tight">Platform admin sign in</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Manage companies, plans, subscriptions and revenue for ElevIQ SFA.
+          Manage companies, plans, subscriptions and revenue for ElevIQ BizFlow.
         </p>
       </div>
 

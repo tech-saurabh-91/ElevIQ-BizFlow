@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useAuthStore } from '@/store/authStore';
 
 /**
- * Axios instance for the ElevIQ SFA API.
+ * Axios instance for the ElevIQ BizFlow API.
  *
  * - Access token (15 min) lives in memory (Zustand) and is attached as Bearer.
  * - Refresh token is an httpOnly cookie, so we never read/write it in JS.

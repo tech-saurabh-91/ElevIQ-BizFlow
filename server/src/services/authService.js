@@ -593,18 +593,18 @@ export const forgotPassword = async ({ email, scope }) => {
     const { sendMail } = await import('./mailer.js');
     await sendMail({
       to,
-      subject: 'Reset your ElevIQ SFA password',
+      subject: 'Reset your ElevIQ BizFlow password',
       text: [
         `Hi ${user.name || ''},`.trim(),
         '',
-        'We received a request to reset your ElevIQ SFA password.',
+        'We received a request to reset your ElevIQ BizFlow password.',
         'Open the link below within 30 minutes to choose a new one:',
         '',
         resetUrl,
         '',
         'If you did not request this, you can safely ignore this email - your password stays unchanged.',
         '',
-        '— ElevIQ SFA',
+        '— ElevIQ BizFlow',
       ].join('\n'),
     });
   } else {

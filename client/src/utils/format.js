@@ -2,7 +2,7 @@
  * Shared formatting helpers. Money is handled as plain numbers (already
  * rounded to 2dp on the server).
  */
-export const APP_NAME = 'ElevIQ SFA';
+export const APP_NAME = 'ElevIQ BizFlow';
 
 /**
  * Workspace-wide formatting defaults. CompanyLayout calls `setFormatDefaults`

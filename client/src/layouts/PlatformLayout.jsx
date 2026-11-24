@@ -10,7 +10,7 @@ import { platformNav, platformMobileTabs } from '@/routes/navigation';
 
 /**
  * Platform (Service Provider) shell: /platform/*
- * Topbar badge shows the SaaS owner's own org name + ElevIQ SFA.
+ * Topbar badge shows the SaaS owner's own org name + ElevIQ BizFlow.
  */
 export default function PlatformLayout() {
   const { user, logout, bootstrapping } = useAuth();
@@ -50,7 +50,7 @@ export default function PlatformLayout() {
           </PageErrorBoundary>
         </main>
         <footer className="border-t px-4 py-3 text-center text-[11px] text-muted-foreground sm:px-6">
-          ElevIQ SFA · Service Provider Console · v1.0.0
+          ElevIQ BizFlow · Service Provider Console · v1.0.0
         </footer>
       </div>
       <BottomNav sections={platformNav} primary={platformMobileTabs} homeTo="/platform" />

@@ -339,7 +339,7 @@ export const exportStock = asyncHandler(async (req, res) => {
     .lean();
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'ElevIQ SFA';
+  workbook.creator = 'ElevIQ BizFlow';
   workbook.created = new Date();
   const sheet = workbook.addWorksheet('Stock', { views: [{ state: 'frozen', ySplit: 1 }] });
 

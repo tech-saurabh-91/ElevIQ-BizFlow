@@ -123,7 +123,7 @@ export const exportXlsx = asyncHandler(async (req, res) => {
   const scope = ownOnly(req) ? { salesman: toOid(req.user.id) } : {};
 
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'ElevIQ SFA';
+  workbook.creator = 'ElevIQ BizFlow';
   workbook.created = new Date();
 
   let sheet;

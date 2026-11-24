@@ -306,7 +306,7 @@ const seedOptionalModules = async (company, users) => {
 };
 
 const run = async () => {
-  logger.info('---- ElevIQ SFA seeding started ----');
+  logger.info('---- ElevIQ BizFlow seeding started ----');
   await connectDB();
 
   try {

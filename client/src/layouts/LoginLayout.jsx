@@ -16,9 +16,9 @@ export default function LoginLayout({ children }) {
   const desktop = useMediaQuery('(min-width: 1024px)');
 
   useEffect(() => {
-    document.title = 'Sign in · ElevIQ Bizflow';
+    document.title = 'Sign in · ElevIQ BizFlow';
     return () => {
-      document.title = 'ElevIQ SFA';
+      document.title = 'ElevIQ BizFlow';
     };
   }, []);
 

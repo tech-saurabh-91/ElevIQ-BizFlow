@@ -29,7 +29,7 @@ describe('App bootstrap', () => {
     const res = await request(app).get('/health');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.data.app).toBe('ElevIQ SFA');
+    expect(res.body.data.app).toBe('ElevIQ BizFlow');
   });
 
   test('root returns API info', async () => {
@@ -52,7 +52,7 @@ describe('App bootstrap', () => {
     const res = await request(app).get('/api-docs.json');
     expect(res.status).toBe(200);
     expect(res.body.openapi).toBe('3.0.3');
-    expect(res.body.info.title).toContain('ElevIQ SFA');
+    expect(res.body.info.title).toContain('ElevIQ BizFlow');
   });
 
   test('company login without body returns validation error', async () => {

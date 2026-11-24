@@ -59,7 +59,7 @@ export default function PlatformDashboard() {
     <div>
       <PageHeader
         title={`Welcome back, ${user?.name?.split(' ')[0] || 'admin'}`}
-        description="Monitor companies, revenue and platform health across ElevIQ SFA."
+        description="Monitor companies, revenue and platform health across ElevIQ BizFlow."
         actions={
           <Badge tone="info" dot>
             {health.apiStatus || 'All systems operational'}

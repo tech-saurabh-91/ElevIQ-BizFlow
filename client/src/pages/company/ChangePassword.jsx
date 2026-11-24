@@ -82,7 +82,7 @@ export default function ChangePassword() {
     <div className="max-w-xl">
       <PageHeader
         title="Change password"
-        description="Update the password for your ElevIQ SFA account."
+        description="Update the password for your ElevIQ BizFlow account."
         breadcrumbs={[{ label: 'Workspace', to: '/app' }, { label: 'Change password' }]}
       />
 

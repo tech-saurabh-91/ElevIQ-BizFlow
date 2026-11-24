@@ -115,7 +115,7 @@ export default function Companies() {
     <div className="space-y-6">
       <PageHeader
         title="Companies"
-        description="Tenant accounts on the ElevIQ SFA platform"
+        description="Tenant accounts on the ElevIQ BizFlow platform"
         actions={
           <>
             {me?.role === 'SUPER_ADMIN' && (

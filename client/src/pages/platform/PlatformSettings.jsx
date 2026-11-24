@@ -45,7 +45,7 @@ export default function PlatformSettings() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Platform settings"
-        description="Environment, branding and service health for this ElevIQ SFA instance"
+        description="Environment, branding and service health for this ElevIQ BizFlow instance"
       />
 
       <div className="grid gap-4 sm:grid-cols-2">

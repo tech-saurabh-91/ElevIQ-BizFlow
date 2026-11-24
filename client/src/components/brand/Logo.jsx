@@ -1,9 +1,9 @@
 import { cn } from '@/utils/cn';
 
 /**
- * ElevIQ SFA brand mark.
+ * ElevIQ BizFlow brand mark.
  * Used in the sidebar, auth screens and the footer — always with the
- * "ElevIQ SFA" wordmark so the product identity is present everywhere.
+ * "ElevIQ BizFlow" wordmark so the product identity is present everywhere.
  */
 export function LogoMark({ className, size = 32 }) {
   return (
@@ -34,7 +34,7 @@ export function Logo({ size = 'md', className, showTagline = false, compact = fa
       <LogoMark size={markSizes} />
       <span className="flex flex-col leading-tight">
         <span className={cn('font-bold tracking-tight', textSizes)}>
-          ElevIQ <span className="text-brand-500">SFA</span>
+          ElevIQ <span className="text-brand-500">BizFlow</span>
         </span>
         {showTagline && (
           <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
@@ -46,8 +46,8 @@ export function Logo({ size = 'md', className, showTagline = false, compact = fa
   );
 }
 
-/** "Workspace" badge: shows ElevIQ SFA + the signed-in company name. */
-export function WorkspaceBadge({ appName = 'ElevIQ SFA', companyName, className, logo }) {
+/** "Workspace" badge: shows ElevIQ BizFlow + the signed-in company name. */
+export function WorkspaceBadge({ appName = 'ElevIQ BizFlow', companyName, className, logo }) {
   if (!companyName) return <Logo className={className} />;
   return (
     <span className={cn('flex min-w-0 items-center gap-3', className)}>

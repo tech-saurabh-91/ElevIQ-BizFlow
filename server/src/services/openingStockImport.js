@@ -45,7 +45,7 @@ export const loadStockWarehouse = async (id) => {
 export const buildTemplate = async (warehouse) => {
   const products = await Product.find({ isActive: { $ne: false } }).select('sku customCode name unit purchasePrice').sort({ name: 1 }).lean();
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'ElevIQ SFA';
+  wb.creator = 'ElevIQ BizFlow';
   const sheet = wb.addWorksheet('Opening stock', { views: [{ state: 'frozen', ySplit: 1 }] });
   sheet.columns = [
     { header: 'Product code *', key: 'code', width: 16 },

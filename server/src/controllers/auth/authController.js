@@ -77,7 +77,7 @@ export const companyLogin = asyncHandler(async (req, res) => {
       accessToken: result.accessToken,
       company: result.company,
       user: result.user,
-      branding: { app: 'ElevIQ SFA', company: result.company.name },
+      branding: { app: 'ElevIQ BizFlow', company: result.company.name },
     },
   });
 });
@@ -123,7 +123,7 @@ export const companyMe = asyncHandler(async (req, res) => {
             },
           }
         : null,
-      branding: { app: 'ElevIQ SFA', company: req.company?.businessName },
+      branding: { app: 'ElevIQ BizFlow', company: req.company?.businessName },
     },
   });
 });

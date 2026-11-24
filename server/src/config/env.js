@@ -79,7 +79,7 @@ export const env = {
   // password reset and notifications keep working in development.
   mail: {
     url: process.env.SMTP_URL || '',
-    from: process.env.EMAIL_FROM || 'ElevIQ SFA <no-reply@eleviqsfa.com>',
+    from: process.env.EMAIL_FROM || 'ElevIQ BizFlow <no-reply@eleviqsfa.com>',
     // Public base URL of the web app (used to build reset links).
     appUrl: (process.env.APP_URL || process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, ''),
   },

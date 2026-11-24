@@ -123,7 +123,7 @@ export const exportXlsx = asyncHandler(async (req, res) => {
   const window = report.filters.includes('dateRange') ? windowOf(req.query, ctx.tz) : null;
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'ElevIQ SFA';
+  wb.creator = 'ElevIQ BizFlow';
   const sheet = wb.addWorksheet(ctx.word(report.title).slice(0, 31));
   const company = req.company?.businessName || '';
   sheet.addRow([company]).font = { bold: true, size: 13 };

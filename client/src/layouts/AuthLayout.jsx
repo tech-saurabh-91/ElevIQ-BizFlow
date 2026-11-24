@@ -8,9 +8,9 @@ export default function AuthLayout({ children, variant = 'company' }) {
   const location = useLocation();
 
   useEffect(() => {
-    document.title = `${variant === 'platform' ? 'Platform Admin' : 'Sign in'} · ElevIQ SFA`;
+    document.title = `${variant === 'platform' ? 'Platform Admin' : 'Sign in'} · ElevIQ BizFlow`;
     return () => {
-      document.title = 'ElevIQ SFA';
+      document.title = 'ElevIQ BizFlow';
     };
   }, [variant]);
 
@@ -39,7 +39,7 @@ export default function AuthLayout({ children, variant = 'company' }) {
           </span>
           <div className="leading-tight">
             <p className="text-lg font-bold">
-              ElevIQ <span className="text-brand-400">SFA</span>
+              ElevIQ <span className="text-brand-400">BizFlow</span>
             </p>
             <p className="text-[10px] uppercase tracking-[0.18em] text-white/50">
               {isPlatform ? 'Service Provider Console' : 'Sales Force Automation'}
@@ -71,7 +71,7 @@ export default function AuthLayout({ children, variant = 'company' }) {
         </div>
 
         <p className="relative text-xs text-white/40">
-          © {new Date().getFullYear()} ElevIQ SFA · Multi-tenant SaaS
+          © {new Date().getFullYear()} ElevIQ BizFlow · Multi-tenant SaaS
         </p>
       </aside>
 
@@ -85,7 +85,7 @@ export default function AuthLayout({ children, variant = 'company' }) {
             </span>
             <div className="leading-tight">
               <p className="font-bold">
-                ElevIQ <span className="text-brand-500">SFA</span>
+                ElevIQ <span className="text-brand-500">BizFlow</span>
               </p>
               <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
                 {isPlatform ? 'Service Provider Console' : 'Sales Force Automation'}
@@ -96,7 +96,7 @@ export default function AuthLayout({ children, variant = 'company' }) {
           {children}
 
           <p className="mt-8 text-center text-xs text-muted-foreground">
-            © {new Date().getFullYear()} ElevIQ SFA. All rights reserved.
+            © {new Date().getFullYear()} ElevIQ BizFlow. All rights reserved.
           </p>
         </div>
       </main>

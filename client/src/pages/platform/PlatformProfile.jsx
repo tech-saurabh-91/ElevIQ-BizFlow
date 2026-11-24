@@ -95,7 +95,7 @@ export default function PlatformProfile() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <PageHeader title="My profile" description="Your service provider account on ElevIQ SFA" />
+      <PageHeader title="My profile" description="Your service provider account on ElevIQ BizFlow" />
 
       <Card>
         <CardContent className="flex items-center gap-4 py-6">

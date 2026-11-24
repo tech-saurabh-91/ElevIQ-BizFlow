@@ -197,7 +197,7 @@ export default function CompanyLogin() {
             Service Provider Console
           </Link>
         </span>
-        <span className="font-semibold text-foreground">ElevIQ Bizflow</span>
+        <span className="font-semibold text-foreground">ElevIQ BizFlow</span>
       </div>
     </div>
   );
