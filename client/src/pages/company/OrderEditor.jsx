@@ -18,7 +18,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select, Textarea } from '@/components/ui/input';
-import { SearchSelect, productOptions } from '@/components/ui/search-select';
+import { SearchSelect, productOptions, partyOptions } from '@/components/ui/search-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription, ErrorAlert } from '@/components/ui/alert';
@@ -578,16 +578,21 @@ export default function OrderEditor() {
                       <Input value={options?.customer?.name || customerOptions.find((c) => c.id === lockedCustomer)?.name || ''} readOnly title="Booked for the shop you are checked in at (Sales visit)." />
                     </>
                   ) : (
-                    <Select {...register('customerId')} error={!!errors.customerId}>
-                      <option value="">Select a customer…</option>
-                      {customerOptions.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                          {c.code ? ` (${c.code})` : ''}
-                          {c.phone ? ` · ${c.phone}` : ''}
-                        </option>
-                      ))}
-                    </Select>
+                    <Controller
+                      control={control}
+                      name="customerId"
+                      render={({ field: f }) => (
+                        <SearchSelect
+                          value={f.value || ''}
+                          onChange={f.onChange}
+                          onBlur={f.onBlur}
+                          options={partyOptions(customerOptions)}
+                          placeholder="Type shop name, code or phone…"
+                          error={!!errors.customerId}
+                          aria-label="Customer"
+                        />
+                      )}
+                    />
                   )}
                 </Field>
 

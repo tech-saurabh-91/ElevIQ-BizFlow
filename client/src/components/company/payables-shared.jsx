@@ -3,6 +3,7 @@ import { AlertTriangle, CalendarClock, ReceiptIndianRupee, Wallet } from 'lucide
 import api from '@/api/client';
 import { StatCard, STAT_GRID } from '@/components/company/stat-card';
 import { Field, Select } from '@/components/ui/input';
+import { SearchSelect, partyOptions } from '@/components/ui/search-select';
 import { useLookups } from '@/hooks/useLookups';
 import { formatMoney } from '@/utils/format';
 
@@ -43,15 +44,14 @@ export function SupplierSelect({ value, onChange, label = 'Supplier', required =
   const { lookups } = useLookups();
   return (
     <Field label={label} required={required} error={error}>
-      <Select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Supplier">
-        <option value="">Select a supplier…</option>
-        {(lookups.suppliers || []).map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-            {s.code ? ` (${s.code})` : ''}
-          </option>
-        ))}
-      </Select>
+      <SearchSelect
+        value={value}
+        onChange={onChange}
+        options={partyOptions(lookups.suppliers || [])}
+        placeholder="Type supplier name or code…"
+        error={!!error}
+        aria-label="Supplier"
+      />
     </Field>
   );
 }

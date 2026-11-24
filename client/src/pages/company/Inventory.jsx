@@ -10,6 +10,7 @@ import { FilterPanel, FILTER_CARD, FILTER_ROW } from '@/components/ui/filter-pan
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Select, Field } from '@/components/ui/input';
+import { SearchSelect, partyOptions } from '@/components/ui/search-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
@@ -1669,19 +1670,14 @@ export function PurchaseOrdersTab({ mode = 'list' } = {}) {
               <label className="mb-1.5 block text-sm font-medium" htmlFor="po-supplier">
                 Supplier <span className="text-destructive">*</span>
               </label>
-              <Select
+              <SearchSelect
                 id="po-supplier"
                 value={form.supplierId}
-                onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))}
-              >
-                <option value="">Select a supplier…</option>
-                {(options?.suppliers || []).map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                    {s.code ? ` (${s.code})` : ''}
-                  </option>
-                ))}
-              </Select>
+                onChange={(id) => setForm((f) => ({ ...f, supplierId: id }))}
+                options={partyOptions((options?.suppliers || []))}
+                placeholder="Type supplier name or code…"
+                aria-label="Supplier"
+              />
             </div>
 
             <div>
@@ -2283,19 +2279,14 @@ export function GoodsReceiptsTab({ mode = 'list' } = {}) {
                 <label className="mb-1.5 block text-sm font-medium" htmlFor="grn-supplier">
                   Supplier <span className="text-destructive">*</span>
                 </label>
-                <Select
+                <SearchSelect
                   id="grn-supplier"
                   value={form.supplierId}
-                  onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))}
-                >
-                  <option value="">Select a supplier…</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                      {s.code ? ` (${s.code})` : ''}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(id) => setForm((f) => ({ ...f, supplierId: id }))}
+                  options={partyOptions(suppliers)}
+                  placeholder="Type supplier name or code…"
+                  aria-label="Supplier"
+                />
                 <p className="mt-1 text-xs text-muted-foreground">
                   Choose a purchase order to pick the supplier automatically.
                 </p>

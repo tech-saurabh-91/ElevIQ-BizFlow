@@ -27,6 +27,7 @@ import { FilterPanel, FILTER_CARD, FILTER_ROW } from '@/components/ui/filter-pan
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
+import { SearchSelect, partyOptions } from '@/components/ui/search-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
@@ -223,18 +224,14 @@ function ExpenseForm({ open, mode, initial, onClose, onSaved }) {
           <label className="mb-1.5 block text-sm font-medium" htmlFor="exp-customer">
             Customer (optional)
           </label>
-          <Select
+          <SearchSelect
             id="exp-customer"
             value={form.customer}
-            onChange={(e) => set('customer', e.target.value)}
-          >
-            <option value="">No customer</option>
-            {(options?.customers || []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
+            onChange={(id) => set('customer', id)}
+            options={[{ value: '', label: 'No customer' }, ...partyOptions(options?.customers || [])]}
+            placeholder="No customer"
+            aria-label="Customer"
+          />
         </div>
 
         <div className="sm:col-span-2">

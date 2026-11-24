@@ -211,4 +211,13 @@ export const productOptions = (products = [], hintOf) =>
     keywords: [p.barcode, p.brand, p.code, p.sku].filter(Boolean).join(' '),
   }));
 
+/** Customer / supplier options: name, with the code and phone shown and searchable. */
+export const partyOptions = (parties = []) =>
+  parties.map((c) => ({
+    value: c.id,
+    label: c.name,
+    hint: [c.code, c.phone].filter(Boolean).join(' · '),
+    keywords: [c.city, c.address?.city, c.gstin].filter(Boolean).join(' '),
+  }));
+
 export default SearchSelect;

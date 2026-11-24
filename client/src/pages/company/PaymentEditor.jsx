@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select, Textarea } from '@/components/ui/input';
+import { SearchSelect, partyOptions } from '@/components/ui/search-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription, ErrorAlert } from '@/components/ui/alert';
@@ -454,19 +455,14 @@ export default function PaymentEditor() {
                       title="Booked for the shop you are checked in at (Sales visit)."
                     />
                   ) : (
-                    <Select
+                    <SearchSelect
                       value={customerId}
-                      onChange={(e) => selectCustomer(e.target.value)}
+                      onChange={selectCustomer}
+                      options={partyOptions(lookups.customers || [])}
+                      placeholder="Type shop name, code or phone…"
                       error={!!errors.customerId}
-                    >
-                      <option value="">Select a customer…</option>
-                      {(lookups.customers || []).map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                          {c.code ? ` (${c.code})` : ''}
-                        </option>
-                      ))}
-                    </Select>
+                      aria-label="Customer"
+                    />
                   )}
                 </Field>
 

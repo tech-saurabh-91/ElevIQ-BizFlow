@@ -27,6 +27,7 @@ import StatCard from '@/components/company/stat-card';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
+import { SearchSelect, partyOptions } from '@/components/ui/search-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
@@ -371,20 +372,14 @@ export default function Invoices() {
               ))}
             </Select>
 
-            <Select
+            <SearchSelect
               value={customerId}
-              onChange={(e) => setParam({ customerId: e.target.value, page: 1 })}
-              className="w-48"
+              onChange={(id) => setParam({ customerId: id, page: 1 })}
+              options={[{ value: '', label: 'All customers' }, ...partyOptions(lookups.customers || [])]}
+              placeholder="All customers"
+              className="w-56"
               aria-label="Filter by customer"
-            >
-              <option value="">All customers</option>
-              {(lookups.customers || []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.code ? ` (${c.code})` : ''}
-                </option>
-              ))}
-            </Select>
+            />
 
             <Input
               type="date"
