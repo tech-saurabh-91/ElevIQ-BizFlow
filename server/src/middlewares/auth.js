@@ -13,6 +13,8 @@ import { dataScopeFor } from './rbac.js';
 import Setting from '../models/Setting.js';
 import logger from '../utils/logger.js';
 
+const STAFF_SCOPES = new Set(['company', 'platform', 'impersonate']);
+
 /** 503 raised for non-admin users while the company is in maintenance mode. */
 export const maintenanceError = (settings) =>
   new AppError(settings?.maintenanceMessage?.trim() || 'The workspace is under maintenance. Please try again later.', {
@@ -34,6 +36,9 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
 
   const decoded = verifyAccessToken(token);
   const scope = decoded.scope || 'company';
+  // Only staff tokens here: a customer portal token (scope 'customer') never
+  // opens the workspace or platform APIs.
+  if (!STAFF_SCOPES.has(scope)) throw new UnauthorizedError('Authentication required', 'TOKEN_INVALID');
 
   // ---- Platform admin ----------------------------------------------------
   if (scope === 'platform') {

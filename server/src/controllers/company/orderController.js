@@ -54,7 +54,7 @@ import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
 import { companyToday, tzOf } from '../../utils/companyTime.js';
 
 /** Relations returned on every order read so the UI never needs a second call. */
-const POPULATE = [
+export const POPULATE = [
   { path: 'customerId', select: 'name code phone email gstin type creditLimit creditDays paymentTerms outstanding priceList route warehouse address shippingAddress' },
   { path: 'salesman', select: 'name email role title' },
   { path: 'route', select: 'name code' },
@@ -75,6 +75,7 @@ const FILTERS_SPEC = {
   route: { type: 'objectId' },
   warehouse: { type: 'objectId' },
   paymentMode: { type: 'string' },
+  source: { type: 'string' },
 };
 
 const SORT_ALLOWED = ['orderDate', 'createdAt', 'updatedAt', 'total', 'orderNo', 'status', 'customerName'];
@@ -97,7 +98,7 @@ const aggregateScope = (req) => {
 
 const settingsOf = async (req) => req.settings || (await Setting.forCompany(req.companyId));
 
-const serialize = (doc) => {
+export const serialize = (doc) => {
   const plain = toPlain(doc);
   const customer = plain?.customerId;
   if (customer && typeof customer === 'object' && customer.name) {
@@ -127,7 +128,7 @@ const getCustomer = async (customerId) => {
   return customer;
 };
 
-const getPriceList = async (customer, overrideId) => {
+export const getPriceList = async (customer, overrideId) => {
   const id = refOrNull(overrideId) || refOrNull(customer?.priceList);
   if (id) {
     const list = await PriceList.findById(id).lean();
@@ -136,13 +137,13 @@ const getPriceList = async (customer, overrideId) => {
   return PriceList.findOne({ isDefault: true }).lean();
 };
 
-const loadProducts = async (items = []) => {
+export const loadProducts = async (items = []) => {
   const ids = [...new Set(items.map((i) => String(i.product)))];
   const docs = await Product.find({ _id: { $in: ids } }).lean();
   return new Map(docs.map((d) => [String(d._id), d]));
 };
 
-const normalizeItems = (items = []) =>
+export const normalizeItems = (items = []) =>
   items.map((i) => ({
     product: String(i.product?._id || i.product),
     qty: Number(i.qty),
@@ -171,7 +172,7 @@ const validateRefs = async (payload) => {
 };
 
 /** Header snapshot + defaults, resolved from payload, existing order and customer. */
-const snapshotFrom = (customer, payload, settings, priceList, req, existing = null) => {
+export const snapshotFrom = (customer, payload, settings, priceList, req, existing = null) => {
   const resolve = (key, fallback) => {
     if (payload[key] !== undefined) return payload[key];
     if (existing && existing[key] !== undefined && existing[key] !== null) return existing[key];
@@ -184,7 +185,7 @@ const snapshotFrom = (customer, payload, settings, priceList, req, existing = nu
 
   const salesmanFallback =
     customer.assignedTo ||
-    (req.user.role === 'SALESMAN' ? req.user.id : null);
+    (req.user?.role === 'SALESMAN' ? req.user.id : null);
 
   return {
     customerId: customer._id,
@@ -313,7 +314,10 @@ const syncCustomerCounters = async (order, direction) => {
 
 /** Submit a draft: re-check stock/credit, then auto-confirm or request approval. */
 const submitDraft = async (req, order, settings, note = '') => {
-  if (order.status !== ORDER_STATUS.DRAFT) {
+  // A customer's portal request is accepted the same way a draft is submitted:
+  // only now does it go to approval or get confirmed (and reserve stock).
+  const fromRequest = order.status === ORDER_STATUS.REQUESTED;
+  if (order.status !== ORDER_STATUS.DRAFT && !fromRequest) {
     throw new ConflictError('Only draft orders can be submitted', 'ORDER_NOT_DRAFT');
   }
 
@@ -331,7 +335,15 @@ const submitDraft = async (req, order, settings, note = '') => {
   const approvalRequired = next === ORDER_STATUS.PENDING_APPROVAL;
 
   await transition(req, order, next, {
-    note: note || (approvalRequired ? 'Submitted for approval' : 'Submitted and confirmed'),
+    note:
+      note ||
+      (fromRequest
+        ? approvalRequired
+          ? 'Customer request accepted, sent for approval'
+          : 'Customer request accepted and confirmed'
+        : approvalRequired
+          ? 'Submitted for approval'
+          : 'Submitted and confirmed'),
     extra: { approvalRequired },
   });
 
@@ -369,6 +381,10 @@ const submitDraft = async (req, order, settings, note = '') => {
 export const list = asyncHandler(async (req, res) => {
   const filter = { ...scopeFilter(req) };
   if (req.query.pendingApproval) filter.status = ORDER_STATUS.PENDING_APPROVAL;
+  // Orders sitting in a status for longer than N days (the "confirmed but not
+  // invoiced" reminder links here).
+  const olderThanDays = Number(req.query.olderThanDays || 0);
+  if (olderThanDays > 0) filter.orderDate = { $lt: dayjs().subtract(olderThanDays, 'day').toDate() };
 
   const result = await listDocuments(Order, {
     filter,
@@ -396,7 +412,10 @@ export const stats = asyncHandler(async (req, res) => {
 
   // Today / this month in the company's timezone (servers run on UTC).
   const { today: startOfDay, monthStart: startOfMonth } = companyToday(tzOf(req));
-  const moneyStatuses = { $nin: [ORDER_STATUS.CANCELLED, ORDER_STATUS.REJECTED] };
+  // Customer requests (and expired ones) are not sales until staff accept them.
+  const moneyStatuses = {
+    $nin: [ORDER_STATUS.CANCELLED, ORDER_STATUS.REJECTED, ORDER_STATUS.REQUESTED, ORDER_STATUS.EXPIRED],
+  };
 
   const [byStatus, today, month, overall] = await Promise.all([
     Order.aggregate([
@@ -434,6 +453,7 @@ export const stats = asyncHandler(async (req, res) => {
       byStatus: counts,
       valuesByStatus: values,
       pendingApprovals: counts[ORDER_STATUS.PENDING_APPROVAL] || 0,
+      portalRequests: counts[ORDER_STATUS.REQUESTED] || 0,
       today: {
         count: today?.[0]?.count || 0,
         value: Math.round((today?.[0]?.value || 0) * 100) / 100,
@@ -519,13 +539,19 @@ export const create = asyncHandler(async (req, res) => {
 export const update = asyncHandler(async (req, res) => {
   const settings = await settingsOf(req);
   const order = await loadOrder(req, req.params.id);
-  if (order.status !== ORDER_STATUS.DRAFT) {
+  const isRequest = order.status === ORDER_STATUS.REQUESTED;
+  if (order.status !== ORDER_STATUS.DRAFT && !isRequest) {
     throw new ConflictError('Only draft orders can be edited', 'ORDER_LOCKED');
   }
 
   const before = toPlain(order);
   const payload = await validateRefs({ ...req.body });
   delete payload.submit;
+  // A customer's request stays that customer's: quantities and lines can be
+  // changed before accepting it, the customer cannot.
+  if (isRequest && payload.customerId && String(payload.customerId) !== String(order.customerId?._id || order.customerId)) {
+    throw new ConflictError("A customer's request cannot be moved to another customer", 'ORDER_LOCKED');
+  }
 
   const customer = await getCustomer(payload.customerId || order.customerId);
   const priceList = await getPriceList(
@@ -653,7 +679,7 @@ export const approve = asyncHandler(async (req, res) => {
 
 export const reject = asyncHandler(async (req, res) => {
   const order = await loadOrder(req, req.params.id);
-  if (order.status !== ORDER_STATUS.PENDING_APPROVAL) {
+  if (order.status !== ORDER_STATUS.PENDING_APPROVAL && order.status !== ORDER_STATUS.REQUESTED) {
     throw new ConflictError(
       'Only orders pending approval can be rejected',
       ErrorCodes.INVALID_STATUS_TRANSITION

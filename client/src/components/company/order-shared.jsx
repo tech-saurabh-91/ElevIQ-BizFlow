@@ -29,7 +29,12 @@ export const ORDER_STATUSES = [
   'DELIVERED',
   'CANCELLED',
   'REJECTED',
+  'REQUESTED',
+  'EXPIRED',
 ];
+
+/** Where an order came from: staff (web / mobile / import) or the customer portal. */
+export const isPortalOrder = (order) => order?.source === 'PORTAL';
 
 export const PAYMENT_MODES = [
   'CASH',
@@ -43,7 +48,8 @@ export const PAYMENT_MODES = [
 
 export const PAYMENT_TERMS = ['IMMEDIATE', 'NET_7', 'NET_15', 'NET_30', 'NET_45', 'NET_60', 'CUSTOM'];
 
-export const statusLabel = (status) => titleCase(status || '');
+export const statusLabel = (status) =>
+  status === 'REQUESTED' ? 'Customer request' : status === 'EXPIRED' ? 'Expired request' : titleCase(status || '');
 
 /** "NET_30" -> "Net 30", "CUSTOM" -> "Custom". */
 export const paymentTermLabel = (term) =>
@@ -67,13 +73,16 @@ export const orderActionsFor = (order, can) => {
   const out = [];
 
   if (status === 'DRAFT' && can('orders.update')) out.push('submit');
+  // A customer's portal request: accept (reserves stock / goes to approval) or reject.
+  if (status === 'REQUESTED' && can('orders.update')) out.push('accept');
+  if (status === 'REQUESTED' && can('orders.approve')) out.push('reject');
   if (status === 'PENDING_APPROVAL' && can('orders.approve')) out.push('approve', 'reject');
   // No manual dispatch: issuing the invoice takes the stock out and a fully
   // invoiced order is marked delivered automatically. "Mark delivered" stays
   // only for orders dispatched under the old flow.
   if (status === 'DISPATCHED' && can('orders.dispatch')) out.push('deliver');
   if (
-    ['DRAFT', 'PENDING_APPROVAL', 'CONFIRMED', 'PARTIALLY_INVOICED'].includes(status) &&
+    ['DRAFT', 'REQUESTED', 'PENDING_APPROVAL', 'CONFIRMED', 'PARTIALLY_INVOICED'].includes(status) &&
     can('orders.cancel')
   ) {
     out.push('cancel');
@@ -82,6 +91,16 @@ export const orderActionsFor = (order, can) => {
 };
 
 const ACTION_META = {
+  accept: {
+    title: "Accept the customer's order?",
+    description:
+      'Check quantities first (Edit to change them). Accepting confirms the order and reserves its stock, or sends it for approval when it is above the approval limit.',
+    confirmLabel: 'Accept order',
+    field: 'note',
+    fieldLabel: 'Note (optional)',
+    tone: 'primary',
+    endpoint: 'submit',
+  },
   submit: {
     title: 'Submit this order?',
     description: 'Stock and credit limits are checked again before the order is confirmed.',
@@ -99,7 +118,7 @@ const ACTION_META = {
   },
   reject: {
     title: 'Reject this order?',
-    description: 'The salesman will see the rejection reason on the order.',
+    description: 'The salesman (and the customer, for an online order) will see the reason.',
     confirmLabel: 'Reject order',
     field: 'reason',
     fieldLabel: 'Rejection reason',
@@ -146,7 +165,7 @@ export function OrderActionDialog({ action, order, open, onClose, onDone }) {
   const mutation = useMutation({
     mutationFn: async () => {
       const body = text.trim() ? { [meta.field]: text.trim() } : {};
-      const { data } = await api.post(`/v1/orders/${order.id}/${action}`, body);
+      const { data } = await api.post(`/v1/orders/${order.id}/${meta.endpoint || action}`, body);
       return data;
     },
     onSuccess: (payload) => {

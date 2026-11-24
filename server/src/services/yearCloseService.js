@@ -263,7 +263,7 @@ export const checklist = async (company, tag) => {
     StockAdjustment.countDocuments({ status: 'DRAFT', ...upTo('adjustmentDate') }),
     StockTransfer.countDocuments({ status: 'DISPATCHED', ...upTo('transferDate') }),
     StockTransfer.countDocuments({ status: 'DRAFT', ...upTo('transferDate') }),
-    Order.countDocuments({ status: { $in: ['PENDING_APPROVAL', 'CONFIRMED', 'PARTIALLY_INVOICED'] }, ...upTo('orderDate') }),
+    Order.countDocuments({ status: { $in: ['REQUESTED', 'PENDING_APPROVAL', 'CONFIRMED', 'PARTIALLY_INVOICED'] }, ...upTo('orderDate') }),
     PurchaseOrder.countDocuments({ status: { $in: ['SENT', 'PARTIALLY_RECEIVED', 'APPROVED'] }, ...upTo('poDate') }),
     Expense.countDocuments({ status: 'DRAFT', ...upTo('expenseDate') }),
     Expense.countDocuments({ status: 'SUBMITTED', ...upTo('expenseDate') }),

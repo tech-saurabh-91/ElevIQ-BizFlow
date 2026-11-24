@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import tenantPlugin from './plugins/tenantPlugin.js';
 import { money, round2 } from './helpers.js';
 import { addressSchema } from './common.js';
-import { ORDER_STATUS, ORDER_STATUS_LIST, PAYMENT_TERMS } from '../config/constants.js';
+import { ORDER_STATUS, ORDER_STATUS_LIST, ORDER_SOURCES, PAYMENT_TERMS } from '../config/constants.js';
 
 /**
  * Sales order (order booking).
@@ -150,7 +150,23 @@ const orderSchema = new mongoose.Schema(
     internalNotes: { type: String, default: '', maxlength: 1000 },
     deliveryInstructions: { type: String, default: '', maxlength: 1000 },
 
-    source: { type: String, enum: ['WEB', 'MOBILE', 'IMPORT', 'API'], default: 'WEB' },
+    source: { type: String, enum: ORDER_SOURCES, default: 'WEB', index: true },
+    // The customer's portal login that placed it (source PORTAL).
+    portalAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'CustomerAccount', default: null },
+    // What the customer asked for, kept as sent so the portal can show what
+    // staff changed before accepting (quantities, lines added or removed).
+    requestedItems: {
+      type: [
+        {
+          _id: false,
+          product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+          name: String,
+          unit: String,
+          qty: Number,
+        },
+      ],
+      default: undefined,
+    },
   },
   { timestamps: true }
 );

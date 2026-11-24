@@ -54,6 +54,7 @@ const shape = {
   graceDays: z.coerce.number().int().min(0, 'Cannot be negative').max(60, 'Max 60 days').optional(),
   userLimit: z.coerce.number().int().min(1, 'At least 1').max(10000).optional(),
   purchaseModule: z.boolean(),
+  portalModule: z.boolean(),
 };
 const schema = z.object(shape).superRefine((v, ctx) => checkContact(v, ctx, { phone: 'phone', gstin: 'gstin', pan: 'pan' }, isIndiaCountry(v.country)));
 /** Server errors for fields the form shows inline; the rest go to the alert. */
@@ -134,6 +135,7 @@ export default function CompanyEdit() {
       graceDays: company.graceDays ?? 7,
       userLimit: company.userLimit ?? company.limits?.maxUsers ?? 5,
       purchaseModule: company.featureFlags?.purchase !== false,
+      portalModule: company.featureFlags?.customerPortal === true,
     });
   }, [company, reset]);
 
@@ -157,7 +159,7 @@ export default function CompanyEdit() {
         financialYearStartMonth: Number(v.financialYearStartMonth),
         graceDays: v.graceDays,
         userLimit: v.userLimit,
-        modules: { purchase: Boolean(v.purchaseModule) },
+        modules: { purchase: Boolean(v.purchaseModule), customerPortal: Boolean(v.portalModule) },
       };
       const res = await api.patch(`/platform/companies/${id}`, payload);
       return res.data.data;
@@ -331,6 +333,16 @@ export default function CompanyEdit() {
                 Purchase orders, goods receipts, supplier bills, supplier payments and purchase returns. Turn off for a
                 sales-only company - they still get orders, invoices, collections and full inventory. The company admin
                 cannot change this.
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 sm:col-span-2">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" {...register('portalModule')} />
+            <span>
+              <span className="block text-sm font-medium">Customer portal</span>
+              <span className="block text-xs text-muted-foreground">
+                The company's customers order online on its own link (mobile + PIN), see their orders, invoices and
+                statement. Orders arrive for review; nothing is reserved until the company accepts them.
               </span>
             </span>
           </label>

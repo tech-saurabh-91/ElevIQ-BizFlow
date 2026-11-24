@@ -163,6 +163,15 @@ const schema = z.object({
     allowNegativeStock: z.boolean(),
     defaultPaymentMode: z.enum(['CASH', 'CREDIT']),
     showStockOnOrder: z.boolean(),
+    staleConfirmedDays: str(3).refine((v) => !v || (/^\d+$/.test(v) && Number(v) <= 365), 'Whole days, 0 to 365'),
+  }),
+
+  portal: z.object({
+    enabled: z.boolean(),
+    requestExpiryDays: str(2).refine((v) => /^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 60, '1 to 60 days'),
+    minOrderValue: str(14),
+    showStockStatus: z.boolean(),
+    showOutstanding: z.boolean(),
   }),
 
   approvals: z.object({
@@ -273,6 +282,15 @@ const toDefaults = (data) => ({
     allowNegativeStock: data?.order?.allowNegativeStock ?? false,
     defaultPaymentMode: data?.order?.defaultPaymentMode || 'CREDIT',
     showStockOnOrder: data?.order?.showStockOnOrder ?? true,
+    staleConfirmedDays: String(data?.order?.staleConfirmedDays ?? 7),
+  },
+
+  portal: {
+    enabled: data?.portal?.enabled ?? false,
+    requestExpiryDays: String(data?.portal?.requestExpiryDays ?? 3),
+    minOrderValue: String(data?.portal?.minOrderValue ?? 0),
+    showStockStatus: data?.portal?.showStockStatus ?? true,
+    showOutstanding: data?.portal?.showOutstanding ?? true,
   },
 
   approvals: {
@@ -308,6 +326,9 @@ const toDefaults = (data) => ({
 
 function SettingsForm({ data, canUpdate, tab }) {
   const queryClient = useQueryClient();
+  // Customer portal: only when the plan includes it.
+  const portalModule = useAuthStore((s) => s.company?.featureFlags?.customerPortal === true);
+  const companyCode = useAuthStore((s) => s.company?.code || '');
   const { lookups } = useLookups();
   const [formError, setFormError] = useState('');
 
@@ -394,7 +415,20 @@ function SettingsForm({ data, canUpdate, tab }) {
 
       tax: { ...values.tax, defaultTaxRate: num(values.tax.defaultTaxRate) },
       invoice: { ...values.invoice, defaultDueDays: num(values.invoice.defaultDueDays) },
-      order: { ...values.order, approvalThreshold: num(values.order.approvalThreshold) },
+      order: {
+        ...values.order,
+        approvalThreshold: num(values.order.approvalThreshold),
+        staleConfirmedDays: num(values.order.staleConfirmedDays) ?? 0,
+      },
+      ...(portalModule
+        ? {
+            portal: {
+              ...values.portal,
+              requestExpiryDays: num(values.portal.requestExpiryDays),
+              minOrderValue: num(values.portal.minOrderValue) ?? 0,
+            },
+          }
+        : {}),
       inventory: {
         ...values.inventory,
         defaultWarehouse: opt(values.inventory.defaultWarehouse),
@@ -461,6 +495,7 @@ function SettingsForm({ data, canUpdate, tab }) {
 
   const disabled = !canUpdate;
   const readOnly = disabled ? { disabled: true } : {};
+  const portalLink = `${window.location.origin}/portal/${companyCode}`;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
@@ -861,9 +896,80 @@ function SettingsForm({ data, canUpdate, tab }) {
                   disabled={disabled}
                 />
               </div>
+              <Field
+                label="Remind about confirmed orders not invoiced after (days)"
+                error={errors.order?.staleConfirmedDays?.message}
+                hint="Their stock stays reserved until invoiced or cancelled. A daily reminder goes to approvers and each salesman. 0 = no reminder."
+              >
+                <Input type="number" min="0" max="365" {...register('order.staleConfirmedDays')} {...readOnly} />
+              </Field>
             </FormSection>
           </CardContent>
         </Card>
+
+        {portalModule && (
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>Customer portal (online ordering)</CardTitle>
+              <CardDescription>
+                Your customers order on their own from your link. Their orders arrive as customer requests: nothing is
+                reserved until you accept them.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FormSection>
+                <div className="space-y-2 sm:col-span-2">
+                  <Checkbox
+                    label="Let customers order online"
+                    description="Then give each customer a login from Customers → ⋯ → Online ordering."
+                    {...register('portal.enabled')}
+                    disabled={disabled}
+                  />
+                  <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                    <span className="text-muted-foreground">Your ordering link:</span>
+                    <code className="break-all font-medium">{portalLink}</code>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => navigator.clipboard?.writeText(portalLink).then(() => toast.success('Link copied'))}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+                <Field
+                  label="Requests expire after (days)"
+                  error={errors.portal?.requestExpiryDays?.message}
+                  hint="A customer request nobody accepts or rejects in time expires; the customer sees it."
+                >
+                  <Input type="number" min="1" max="60" {...register('portal.requestExpiryDays')} {...readOnly} />
+                </Field>
+                <Field
+                  label="Minimum order value"
+                  error={errors.portal?.minOrderValue?.message}
+                  hint="0 = no minimum."
+                >
+                  <Input type="number" min="0" step="0.01" {...register('portal.minOrderValue')} {...readOnly} />
+                </Field>
+                <div className="space-y-2 sm:col-span-2">
+                  <Checkbox
+                    label="Show stock status on products"
+                    description="In stock / Low / Out of stock only, never the quantity."
+                    {...register('portal.showStockStatus')}
+                    disabled={disabled}
+                  />
+                  <Checkbox
+                    label="Show balance and statement"
+                    description="Outstanding amount on their home screen, statement of account, and online balance confirmation."
+                    {...register('portal.showOutstanding')}
+                    disabled={disabled}
+                  />
+                </div>
+              </FormSection>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* ---------------- Operations ---------------- */}

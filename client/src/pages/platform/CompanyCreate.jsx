@@ -70,6 +70,7 @@ const schema = z
 
     planId: z.string().optional().or(z.literal('')),
     purchaseModule: z.boolean(),
+    portalModule: z.boolean(),
     startMode: z.enum(['TRIAL', 'PAID', 'CUSTOM']),
     trialDays: z.coerce.number().int().min(0, 'Cannot be negative').max(120, 'Max 120 days').optional(),
     billingCycle: z.enum(['MONTHLY', 'QUARTERLY', 'YEARLY', 'ONCE']).optional(),
@@ -121,6 +122,7 @@ const DEFAULTS = {
   pincode: '',
   planId: '',
   purchaseModule: true,
+  portalModule: false,
   startMode: 'TRIAL',
   trialDays: 14,
   billingCycle: 'YEARLY',
@@ -217,7 +219,10 @@ export default function CompanyCreate() {
   const selectedPlan = plans.find((p) => p.id === watch('planId'));
   // Modules start from the chosen plan; the platform may still switch them.
   useEffect(() => {
-    if (selectedPlan) setValue('purchaseModule', selectedPlan.features?.purchase !== false);
+    if (selectedPlan) {
+      setValue('purchaseModule', selectedPlan.features?.purchase !== false);
+      setValue('portalModule', selectedPlan.features?.customerPortal === true);
+    }
   }, [selectedPlan?.id]);
 
   const mutation = useMutation({
@@ -247,7 +252,7 @@ export default function CompanyCreate() {
         ...(values.financialYearStartMonth ? { financialYearStartMonth: Number(values.financialYearStartMonth) } : {}),
         ...(values.taxRegime ? { taxRegime: values.taxRegime } : {}),
         planId: values.planId,
-        modules: { purchase: Boolean(values.purchaseModule) },
+        modules: { purchase: Boolean(values.purchaseModule), customerPortal: Boolean(values.portalModule) },
         startMode: values.startMode,
         trialDays: values.startMode === 'TRIAL' ? values.trialDays : undefined,
         billingCycle: values.startMode === 'TRIAL' ? undefined : values.billingCycle,
@@ -393,6 +398,16 @@ export default function CompanyCreate() {
                 Purchase orders, goods receipts, supplier bills, supplier payments and purchase returns. Turn off for a
                 sales-only company - they still get orders, invoices, collections and full inventory. The company admin
                 cannot change this.
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 sm:col-span-2">
+            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" {...register('portalModule')} />
+            <span>
+              <span className="block text-sm font-medium">Customer portal</span>
+              <span className="block text-xs text-muted-foreground">
+                The company's customers order online on its own link (mobile + PIN), see their orders, invoices and
+                statement. Orders arrive for review; nothing is reserved until the company accepts them.
               </span>
             </span>
           </label>

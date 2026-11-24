@@ -333,6 +333,8 @@ export const refreshTokens = async ({ token, ip, userAgent, res }) => {
   const decoded = verifyRefreshToken(token);
   const { jti, scope, sub: userId, companyId } = decoded;
   if (!jti) throw new UnauthorizedError('Invalid refresh token', 'TOKEN_INVALID');
+  // Customer portal sessions refresh on /portal/auth/refresh only.
+  if (scope !== 'company' && scope !== 'platform') throw new UnauthorizedError('Invalid refresh token', 'TOKEN_INVALID');
 
   const session = await Session.findOne({ jti }).select('+refreshTokenHash').lean();
 

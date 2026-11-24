@@ -21,6 +21,14 @@
 | Notifications | In-app inbox (unread counts, filters, overdue reminders) |
 | Settings | Company profile, users & roles, tax/numbering, sessions & security |
 
+**Customer portal** (`/portal/<COMPANY_CODE>`, plan module `customerPortal`, off by default) — a company's customers (shops) sign in with mobile + PIN and:
+
+- browse products at their own price list prices, with offers and stock shown as In stock / Few left / Out (never quantities);
+- place orders, which arrive as **customer requests** (`REQUESTED`): no stock is reserved until staff accept them (Orders → Accept, optionally after changing quantities). Accepting follows the normal submit rules (approval limit, then confirmed and stock reserved). The order is credited to the customer's salesman;
+- track their orders (with any quantity changes), reorder, download invoices, see their statement and confirm or dispute their balance.
+
+Staff give a customer access from Customers → ⋯ → Online ordering (the PIN is shown once; the customer sets their own on first sign-in). Company settings: Settings → Order rules → Customer portal. A daily job (03:00) expires requests not reviewed within *N* days and reminds approvers and salesmen about confirmed orders not invoiced after *N* days (their stock stays reserved). API: `/api/portal/*` (own token audience and refresh cookie; never accepted by the staff APIs and vice versa).
+
 ## Tech stack
 
 - **Server**: Node.js LTS · Express 4 (ESM) · Mongoose · MongoDB Atlas · Zod validation on every endpoint · JWT (15 m access + 7 d rotating refresh cookie) · bcrypt · helmet/CORS/rate-limit/mongo-sanitize/hpp · winston · node-cron · pdfkit · exceljs · swagger-ui

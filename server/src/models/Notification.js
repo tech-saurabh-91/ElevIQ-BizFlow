@@ -29,6 +29,8 @@ const notificationSchema = new mongoose.Schema(
         'CREDIT_LIMIT',
         'STOCK_REQUEST',
         'EXPENSE_REJECTED',
+        'PORTAL_ORDER',
+        'STALE_ORDER',
       ],
       default: 'SYSTEM',
       index: true,
