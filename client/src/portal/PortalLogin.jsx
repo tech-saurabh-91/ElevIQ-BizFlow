@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { KeyRound, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/input';
@@ -30,6 +31,10 @@ export default function PortalLogin() {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Sign in with a one-time code instead of the PIN (when the company allows it).
+  const [useOtp, setUseOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
 
   const info = useQuery({
     queryKey: ['portal', 'company', code],
@@ -43,12 +48,29 @@ export default function PortalLogin() {
 
   if (token && session?.company?.code === code) return <Navigate to={portalPath(code)} replace />;
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const sendCode = async () => {
     setBusy(true);
     setError(null);
     try {
-      const { data } = await portalApi.post('/auth/login', { companyCode: code, mobile, pin });
+      const { data } = await portalApi.post('/auth/otp', { companyCode: code, mobile });
+      setOtpSent(true);
+      toast.success(data.message);
+    } catch (err) {
+      setError(apiError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (useOtp && !otpSent) return sendCode();
+    setBusy(true);
+    setError(null);
+    try {
+      const { data } = useOtp
+        ? await portalApi.post('/auth/otp/verify', { companyCode: code, mobile, otp })
+        : await portalApi.post('/auth/login', { companyCode: code, mobile, pin });
       usePortalStore.getState().setSession(data.data);
       const from = location.state?.from;
       navigate(from && from.startsWith(portalPath(code)) ? from : portalPath(code), { replace: true });
@@ -100,6 +122,21 @@ export default function PortalLogin() {
                     />
                   </div>
                 </Field>
+                {useOtp ? (
+                  otpSent && (
+                    <Field label="Code sent to your mobile">
+                      <Input
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        className="text-center text-lg tracking-[0.5em]"
+                        placeholder="000000"
+                        autoFocus
+                      />
+                    </Field>
+                  )
+                ) : (
                 <Field label="PIN">
                   <div className="relative">
                     <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -115,10 +152,37 @@ export default function PortalLogin() {
                     />
                   </div>
                 </Field>
+                )}
                 {error && <ErrorAlert title={TITLES[error.code] || 'Could not sign in'} message={error.message} />}
-                <Button type="submit" className="w-full" loading={busy} disabled={!mobile || pin.length < 4}>
-                  Sign in
+                <Button
+                  type="submit"
+                  className="w-full"
+                  loading={busy}
+                  disabled={!mobile || (useOtp ? otpSent && otp.length !== 6 : pin.length < 4)}
+                >
+                  {useOtp && !otpSent ? 'Send code' : 'Sign in'}
                 </Button>
+                {info.data.otp && (
+                  <div className="flex justify-center gap-4 text-sm">
+                    <button
+                      type="button"
+                      className="font-medium text-primary"
+                      onClick={() => {
+                        setUseOtp(!useOtp);
+                        setOtpSent(false);
+                        setOtp('');
+                        setError(null);
+                      }}
+                    >
+                      {useOtp ? 'Use my PIN instead' : 'Get a code by SMS instead'}
+                    </button>
+                    {useOtp && otpSent && (
+                      <button type="button" className="text-muted-foreground" onClick={sendCode} disabled={busy}>
+                        Send again
+                      </button>
+                    )}
+                  </div>
+                )}
                 <p className="text-center text-xs text-muted-foreground">
                   Forgot your PIN? Ask your salesman or the company for a new one.
                 </p>

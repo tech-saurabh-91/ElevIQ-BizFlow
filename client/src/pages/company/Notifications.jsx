@@ -56,6 +56,8 @@ const KIND = {
   TARGET_ACHIEVED: { icon: Trophy, label: 'Target', tint: 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400' },
   CREDIT_LIMIT: { icon: CreditCard, label: 'Credit', tint: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
   PORTAL_ORDER: { icon: Globe, label: 'Online order', tint: 'bg-sky-500/12 text-sky-600 dark:text-sky-400' },
+  PAYMENT_CLAIM: { icon: Wallet, label: 'Payment to check', tint: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400' },
+  RETURN_REQUEST: { icon: PackageX, label: 'Return / complaint', tint: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
   STALE_ORDER: { icon: Clock, label: 'Not invoiced', tint: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
   ANNOUNCEMENT: { icon: Megaphone, label: 'Announcement', tint: 'bg-violet-500/12 text-violet-600 dark:text-violet-400' },
   SYSTEM: { icon: Info, label: 'System', tint: 'bg-muted text-muted-foreground' },

@@ -8,13 +8,13 @@ import { BadRequestError, AppError } from '../utils/errors.js';
 
 const uploadRoot = path.resolve(process.cwd(), env.upload.dir);
 export const ensureUploadDirs = () => {
-  ['logos', 'products', 'kyc', 'expenses', 'avatars', 'temp'].forEach((d) => {
+  ['logos', 'products', 'kyc', 'expenses', 'avatars', 'claims', 'returns', 'temp'].forEach((d) => {
     const p = path.join(uploadRoot, d);
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
   });
 };
 
-const ALLOWED_SUBFOLDERS = ['logos', 'products', 'kyc', 'expenses', 'avatars', 'temp'];
+const ALLOWED_SUBFOLDERS = ['logos', 'products', 'kyc', 'expenses', 'avatars', 'claims', 'returns', 'temp'];
 
 const storage = multer.diskStorage({
   destination(req, _file, cb) {

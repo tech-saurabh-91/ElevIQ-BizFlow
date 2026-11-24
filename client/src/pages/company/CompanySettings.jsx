@@ -164,6 +164,7 @@ const schema = z.object({
     defaultPaymentMode: z.enum(['CASH', 'CREDIT']),
     showStockOnOrder: z.boolean(),
     staleConfirmedDays: str(3).refine((v) => !v || (/^\d+$/.test(v) && Number(v) <= 365), 'Whole days, 0 to 365'),
+    autoCancelDays: str(3).refine((v) => !v || (/^\d+$/.test(v) && Number(v) <= 365), 'Whole days, 0 to 365'),
   }),
 
   portal: z.object({
@@ -172,6 +173,11 @@ const schema = z.object({
     minOrderValue: str(14),
     showStockStatus: z.boolean(),
     showOutstanding: z.boolean(),
+    otpLogin: z.boolean(),
+    sendMessages: z.boolean(),
+    autoConfirm: z.boolean(),
+    paymentClaims: z.boolean(),
+    returns: z.boolean(),
   }),
 
   approvals: z.object({
@@ -283,6 +289,7 @@ const toDefaults = (data) => ({
     defaultPaymentMode: data?.order?.defaultPaymentMode || 'CREDIT',
     showStockOnOrder: data?.order?.showStockOnOrder ?? true,
     staleConfirmedDays: String(data?.order?.staleConfirmedDays ?? 7),
+    autoCancelDays: String(data?.order?.autoCancelDays ?? 0),
   },
 
   portal: {
@@ -291,6 +298,11 @@ const toDefaults = (data) => ({
     minOrderValue: String(data?.portal?.minOrderValue ?? 0),
     showStockStatus: data?.portal?.showStockStatus ?? true,
     showOutstanding: data?.portal?.showOutstanding ?? true,
+    otpLogin: data?.portal?.otpLogin ?? false,
+    sendMessages: data?.portal?.sendMessages ?? false,
+    autoConfirm: data?.portal?.autoConfirm ?? false,
+    paymentClaims: data?.portal?.paymentClaims ?? true,
+    returns: data?.portal?.returns ?? true,
   },
 
   approvals: {
@@ -419,6 +431,7 @@ function SettingsForm({ data, canUpdate, tab }) {
         ...values.order,
         approvalThreshold: num(values.order.approvalThreshold),
         staleConfirmedDays: num(values.order.staleConfirmedDays) ?? 0,
+        autoCancelDays: num(values.order.autoCancelDays) ?? 0,
       },
       ...(portalModule
         ? {
@@ -903,6 +916,13 @@ function SettingsForm({ data, canUpdate, tab }) {
               >
                 <Input type="number" min="0" max="365" {...register('order.staleConfirmedDays')} {...readOnly} />
               </Field>
+              <Field
+                label="Cancel confirmed orders not invoiced after (days)"
+                error={errors.order?.autoCancelDays?.message}
+                hint="Frees their reserved stock automatically. Orders already part-invoiced are left alone. 0 = never (recommended unless orders often go stale)."
+              >
+                <Input type="number" min="0" max="365" {...register('order.autoCancelDays')} {...readOnly} />
+              </Field>
             </FormSection>
           </CardContent>
         </Card>
@@ -964,6 +984,45 @@ function SettingsForm({ data, canUpdate, tab }) {
                     description="Outstanding amount on their home screen, statement of account, and online balance confirmation."
                     {...register('portal.showOutstanding')}
                     disabled={disabled}
+                  />
+                  <Checkbox
+                    label="Customers can tell you about payments"
+                    description="They send the amount, UPI / bank reference and a screenshot. Your accountant checks the bank and records the receipt (Sales → Online Requests)."
+                    {...register('portal.paymentClaims')}
+                    disabled={disabled}
+                  />
+                  <Checkbox
+                    label="Customers can raise returns and complaints"
+                    description="Damaged, expired, wrong or short goods, with photos. You accept, reject or resolve them."
+                    {...register('portal.returns')}
+                    disabled={disabled}
+                  />
+                  <Checkbox
+                    label="Confirm orders from trusted customers automatically"
+                    description="For customers marked trusted (Customers → ⋯ → Online ordering): confirmed at once when stock is free, the credit limit is not crossed and the order is below the approval limit. Otherwise they wait for review as usual."
+                    {...register('portal.autoConfirm')}
+                    disabled={disabled}
+                  />
+                </div>
+                <div className="space-y-2 rounded-md border p-3 sm:col-span-2">
+                  <p className="text-sm font-medium">SMS / WhatsApp</p>
+                  {!data?.messagingReady && (
+                    <p className="text-xs text-muted-foreground">
+                      No SMS / WhatsApp provider is set up on the server yet, so these stay off: customers sign in with their PIN and
+                      see updates in their portal inbox. Ask your service provider to connect one.
+                    </p>
+                  )}
+                  <Checkbox
+                    label="Sign in with a one-time code (OTP)"
+                    description="Customers can get a 6-digit code on their mobile instead of typing the PIN."
+                    {...register('portal.otpLogin')}
+                    disabled={disabled || !data?.messagingReady}
+                  />
+                  <Checkbox
+                    label="Send order, invoice and payment updates by SMS / WhatsApp"
+                    description="The same updates they see in the portal inbox. Each message may cost money with your provider."
+                    {...register('portal.sendMessages')}
+                    disabled={disabled || !data?.messagingReady}
                   />
                 </div>
               </FormSection>

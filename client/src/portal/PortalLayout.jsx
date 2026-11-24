@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { ClipboardList, Home, LogOut, ShoppingBag, ShoppingCart, UserRound } from 'lucide-react';
+import { Bell, ClipboardList, Home, LogOut, ShoppingBag, ShoppingCart, UserRound } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { LoadingState } from '@/components/ui/misc';
 import { setFormatDefaults } from '@/utils/format';
 import { cn } from '@/utils/cn';
@@ -64,6 +65,14 @@ export default function PortalLayout() {
   const location = useLocation();
   const { session, state } = usePortalSession(code);
   const cartCount = usePortalStore((s) => (s.carts[code] || []).length);
+  // Unread updates (same query the home screen uses).
+  const me = useQuery({
+    queryKey: ['portal', 'me', code],
+    enabled: state === 'ready' && Boolean(session) && !session?.account?.mustChangePin,
+    queryFn: async () => (await portalApi.get('/me')).data.data,
+    refetchInterval: 120000,
+  });
+  const unread = me.data?.unread || 0;
   useCompanyManifest(code);
 
   useEffect(() => {
@@ -115,6 +124,18 @@ export default function PortalLayout() {
               <span className="block truncate text-sm font-semibold leading-tight">{company.name}</span>
               <span className="block truncate text-xs text-muted-foreground">{customer.name}</span>
             </span>
+          </Link>
+          <Link
+            to={portalPath(code, 'inbox')}
+            className="relative inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-accent"
+            aria-label={`Updates, ${unread} new`}
+          >
+            <Bell className="h-5 w-5" />
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 min-w-[1.25rem] rounded-full bg-destructive px-1 text-center text-[11px] font-bold leading-5 text-white">
+                {unread}
+              </span>
+            )}
           </Link>
           <Link
             to={portalPath(code, 'cart')}

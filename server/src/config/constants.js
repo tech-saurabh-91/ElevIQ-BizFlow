@@ -443,6 +443,10 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
   'customers.export': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
   // Give a customer a portal login, reset its PIN, switch it off.
   'customers.portal': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER],
+  // Customers' "I have paid" claims from the portal: check and record or reject.
+  'payments.claims': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
+  // Customers' return / complaint requests from the portal.
+  'returns.manage': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
 
   'products.view': ALL_ROLES,
   'products.create': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.WAREHOUSE],

@@ -76,6 +76,16 @@ export default function PaymentEditor() {
   const returnTo = (searchParams.get('returnTo') || '').startsWith('/app/') ? searchParams.get('returnTo') : '';
   const presetCustomerId = searchParams.get('customerId') || '';
   const presetInvoiceId = searchParams.get('invoiceId') || '';
+  // Recording a customer's "I have paid" claim from the portal.
+  const claimId = searchParams.get('claimId') || '';
+  const claimPreset = claimId
+    ? {
+        amount: searchParams.get('amount') || '',
+        mode: searchParams.get('mode') || 'UPI',
+        reference: searchParams.get('reference') || '',
+        paymentDate: searchParams.get('paidOn') || '',
+      }
+    : null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { company, user } = useAuth();
@@ -101,10 +111,10 @@ export default function PaymentEditor() {
     resolver: zodResolver(schema),
     defaultValues: {
       customerId: presetCustomerId,
-      amount: '',
-      paymentDate: todayInput(),
-      mode: 'CASH',
-      reference: '',
+      amount: claimPreset?.amount || '',
+      paymentDate: claimPreset?.paymentDate || todayInput(),
+      mode: claimPreset?.mode || 'CASH',
+      reference: claimPreset?.reference || '',
       bankName: '',
       chequeDate: '',
       reason: 'INVOICE_SETTLEMENT',
@@ -268,6 +278,7 @@ export default function PaymentEditor() {
       const { data } = await api.post('/v1/payments', {
         ...payload,
         receive: pendingIntent.current === 'receive',
+        ...(claimId ? { claimId } : {}),
       });
       return data;
     },
@@ -279,6 +290,7 @@ export default function PaymentEditor() {
       queryClient.invalidateQueries({ queryKey: ['company', 'invoices'] });
       queryClient.invalidateQueries({ queryKey: ['company', 'dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['company', 'customers'] });
+      queryClient.invalidateQueries({ queryKey: ['company', 'customer-requests'] });
       if (returnTo) navigate(returnTo, { replace: true });
       else if (saved?.id) navigate(`/app/payments/${saved.id}`, { replace: true });
       else navigate('/app/payments', { replace: true });
@@ -390,8 +402,12 @@ export default function PaymentEditor() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={isEdit ? `Edit ${payment?.paymentNo || 'draft payment'}` : 'New payment'}
-        description="Record money received from a customer and settle one or more invoices, or hold it as an advance."
+        title={isEdit ? `Edit ${payment?.paymentNo || 'draft payment'}` : claimId ? "Record the customer's payment" : 'New payment'}
+        description={
+          claimId
+            ? 'Filled in from what the customer told you online. Check it against your bank, choose the invoices it settles and receive it.'
+            : 'Record money received from a customer and settle one or more invoices, or hold it as an advance.'
+        }
         breadcrumbs={[
           { label: 'Payments & Collections', to: '/app/payments' },
           { label: isEdit ? payment?.paymentNo || 'Edit draft' : 'New payment' },

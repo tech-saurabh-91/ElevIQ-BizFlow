@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { assertClaimOpen, closeClaimWithPayment } from './portalRequestsController.js';
 import ExcelJS from 'exceljs';
 import { renderDocumentPdf, companyBlock, dateText, money2 } from '../../services/docPdf.js';
 import { notePrint } from '../../services/printControl.js';
@@ -320,6 +321,8 @@ export const create = asyncHandler(async (req, res) => {
   const customer = await Customer.findById(payload.customerId);
   if (!customer) throw new BadRequestError('Customer not found', 'INVALID_REFERENCE');
 
+  if (payload.claimId) await assertClaimOpen(payload.claimId, customer._id);
+
   const allocations = normalizeAllocations(payload.allocations || []);
   assertAllocationsWithinAmount(payload.amount, allocations);
 
@@ -365,6 +368,7 @@ export const create = asyncHandler(async (req, res) => {
     await receivePayment(req, payment, 'Received on create');
     message = 'Payment received';
   }
+  if (payload.claimId) await closeClaimWithPayment(req, payload.claimId, payment);
 
   const full = await loadDoc(Payment, payment._id, { populate: POPULATE, label: 'Payment' });
   return created(res, { message, data: serialize(full) });

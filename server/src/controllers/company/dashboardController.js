@@ -44,6 +44,7 @@ export const summary = asyncHandler(async (req, res) => {
     overdueCount: 0,
     lowStockCount: 0,
     pendingApprovals: 0,
+    portalRequests: 0,
     recentOrders: [],
   };
 
@@ -125,7 +126,11 @@ export const summary = asyncHandler(async (req, res) => {
           },
           { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$total' } } },
         ]),
-        Order.countDocuments({ ...bySalesman, status: 'PENDING_APPROVAL' }),
+        Promise.all([
+          Order.countDocuments({ ...bySalesman, status: 'PENDING_APPROVAL' }),
+          // Customers' online orders waiting for review.
+          Order.countDocuments({ ...bySalesman, status: 'REQUESTED' }),
+        ]),
         Order.find({ ...bySalesman })
           .sort({ createdAt: -1 })
           .limit(5)
@@ -150,7 +155,8 @@ export const summary = asyncHandler(async (req, res) => {
         salesToday: Math.round((today?.[0]?.total || 0) * 100) / 100,
         ordersMtd: pendingSales?.[0]?.count || 0,
         salesMtd: Math.round((pendingSales?.[0]?.total || 0) * 100) / 100,
-        pendingApprovals: pending,
+        pendingApprovals: pending[0],
+        portalRequests: pending[1],
         recentOrders: recent.map((o) => ({
           id: String(o._id),
           orderNo: o.orderNo,

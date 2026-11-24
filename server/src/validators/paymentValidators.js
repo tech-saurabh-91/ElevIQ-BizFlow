@@ -37,6 +37,8 @@ export const paymentCreateSchema = z
     notes: softString(1000),
     allocations: z.array(allocationSchema).max(100).optional(),
     receive: z.boolean().optional(),
+    // Recorded from a customer's "I have paid" claim (portal).
+    claimId: objectIdSchema.optional().or(z.literal('')),
   })
   .refine(
     (v) => !v.chequeDate || !v.paymentDate || Date.parse(v.chequeDate) >= Date.parse(v.paymentDate) - 86400000,

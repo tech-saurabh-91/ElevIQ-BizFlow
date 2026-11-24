@@ -10,11 +10,17 @@ import { escapeRegex } from '../../utils/query.js';
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors.js';
 import { ORDER_STATUS, INVOICE_STATUS } from '../../config/constants.js';
 import { buildSaleLines, loadPricingContext, productFit, schemeSummary, bestRule } from '../../services/pricingService.js';
-import { resolveLinePricing, nextOrderNumber, taxBreakupFor, sellerStateOf, buyerStateOf } from '../../services/orderService.js';
+import { resolveLinePricing, nextOrderNumber, taxBreakupFor, sellerStateOf, buyerStateOf, submittedStatus } from '../../services/orderService.js';
+import { reserveStock } from '../../services/inventoryService.js';
+import { baseQtyOf } from '../../services/catalogService.js';
+import PaymentClaim from '../../models/PaymentClaim.js';
+import ReturnRequest from '../../models/ReturnRequest.js';
+import PortalNotification from '../../models/PortalNotification.js';
+import { nextSeries } from '../../utils/numberSeries.js';
 import { unitOptions } from '../../services/catalogService.js';
 import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
 import { buildLedger } from '../../services/ledgerService.js';
-import { getPriceList, snapshotFrom, normalizeItems } from '../company/orderController.js';
+import { getPriceList, snapshotFrom, normalizeItems, syncCustomerCounters } from '../company/orderController.js';
 import { POPULATE as INVOICE_POPULATE, renderInvoicePdf } from '../company/invoiceController.js';
 import * as ledgerCtrl from '../company/ledgerController.js';
 import { portalSessionView } from '../../services/portalAuthService.js';
@@ -57,6 +63,7 @@ export const me = asyncHandler(async (req, res) => {
     .select('orderNo orderDate status total source items.isFree')
     .lean();
   data.lastOrder = lastOrder ? orderSummary(lastOrder) : null;
+  data.unread = await PortalNotification.countDocuments({ customer: req.portal.customerId, readAt: null });
   return success(res, { data });
 });
 
@@ -261,11 +268,29 @@ export const placeOrder = asyncHandler(async (req, res) => {
     ],
   });
   order.orderNo = await nextOrderNumber(req.companyId, req.settings, order.orderDate);
+
+  // Trusted customer: confirmed at once when stock, credit and approval allow.
+  const auto = await autoConfirmCheck(req, priced, order.total);
+  if (auto.ok) {
+    order.status = ORDER_STATUS.CONFIRMED;
+    order.statusHistory.push({
+      status: ORDER_STATUS.CONFIRMED,
+      at: new Date(),
+      by: null,
+      byName: 'System',
+      note: 'Confirmed automatically (trusted customer)',
+    });
+  }
   await order.save();
+  if (auto.ok) {
+    await syncCustomerCounters(order, 1);
+    await order.save();
+    await reserveStock(order.items, { warehouseId: order.warehouse || null, settings: req.settings });
+  }
 
   const message = {
     type: 'PORTAL_ORDER',
-    title: `New online order ${order.orderNo}`,
+    title: auto.ok ? `Online order ${order.orderNo} confirmed automatically` : `New online order ${order.orderNo}`,
     body: `${customer.name} · ${Number(order.total || 0).toFixed(2)} · ${priced.lines.filter((l) => !l.isFree).length} products`,
     link: `/app/orders/${order._id}`,
     entityType: 'Order',
@@ -275,8 +300,42 @@ export const placeOrder = asyncHandler(async (req, res) => {
   if (order.salesman) await notifyUsers([order.salesman], message);
   await notifyPermission(req.companyId, 'orders.approve', { ...message, exclude: order.salesman ? String(order.salesman) : null });
 
-  return created(res, { message: 'Order sent', data: orderView(order.toObject()) });
+  return created(res, {
+    message: auto.ok ? 'Order confirmed' : 'Order sent',
+    data: orderView(order.toObject()),
+  });
 });
+
+/**
+ * Can this order be confirmed without a person looking at it? Only for a
+ * customer staff marked trusted, with the company setting on, and when:
+ * every product is available (on hand less reserved), the credit limit is not
+ * crossed and the order is below the approval limit.
+ */
+const autoConfirmCheck = async (req, priced, total) => {
+  if (!portalSettings(req).autoConfirm || !req.customer.portalAutoConfirm) return { ok: false };
+  if (submittedStatus(total, req.settings) !== ORDER_STATUS.CONFIRMED) return { ok: false, why: 'approval' };
+  const limit = Number(req.customer.creditLimit || 0);
+  if (limit > 0 && Number(req.customer.outstanding || 0) + Number(total || 0) > limit) return { ok: false, why: 'credit' };
+
+  const wanted = new Map();
+  priced.lines.forEach((l) => {
+    const key = String(l.product);
+    wanted.set(key, (wanted.get(key) || 0) + baseQtyOf(l));
+  });
+  const ids = [...wanted.keys()].map(oid);
+  const [products, reserved] = await Promise.all([
+    Product.find({ _id: { $in: ids } }).select('stock').lean(),
+    StockBalance.aggregate([
+      { $match: { companyId: oid(req.companyId), isDeleted: { $ne: true }, product: { $in: ids } } },
+      { $group: { _id: '$product', reserved: { $sum: '$reservedQty' } } },
+    ]),
+  ]);
+  const held = new Map(reserved.map((r) => [String(r._id), r.reserved]));
+  const enough = products.length === ids.length &&
+    products.every((p) => Number(p.stock || 0) - Number(held.get(String(p._id)) || 0) >= wanted.get(String(p._id)));
+  return enough ? { ok: true } : { ok: false, why: 'stock' };
+};
 
 // ---------------------------------------------------------------------------
 // My orders
@@ -523,6 +582,198 @@ export const confirmBalance = asyncHandler(async (req, res) => {
     message: req.body.status === 'CONFIRMED' ? 'Thank you for confirming' : 'Sent to the company',
     data: { status: doc.status, asOf: doc.asOf, balance: doc.balance, note: doc.note, at: doc.createdAt },
   });
+});
+
+// ---------------------------------------------------------------------------
+// "I have paid" claims
+// ---------------------------------------------------------------------------
+const claimView = (c) => ({
+  id: String(c._id),
+  amount: c.amount,
+  paidOn: c.paidOn,
+  mode: c.mode,
+  reference: c.reference,
+  note: c.note,
+  proof: c.proof,
+  status: c.status,
+  rejectReason: c.rejectReason || '',
+  createdAt: c.createdAt,
+  reviewedAt: c.reviewedAt,
+});
+
+const assertFeature = (req, key, label) => {
+  if (portalSettings(req)[key] === false) throw new ForbiddenError(`${label} is not available online. Please contact the company.`, 'FEATURE_OFF');
+};
+
+/** GET /portal/payments - the customer's payment claims. */
+export const listClaims = asyncHandler(async (req, res) => {
+  const rows = await PaymentClaim.find({ customer: req.portal.customerId }).sort({ createdAt: -1 }).limit(50).lean();
+  return success(res, { data: rows.map(claimView) });
+});
+
+/** POST /portal/payments (multipart: proof) - "I have paid". */
+export const createClaim = asyncHandler(async (req, res) => {
+  assertFeature(req, 'paymentClaims', 'Telling us about payments');
+  const invoiceIds = req.body.invoices || [];
+  if (invoiceIds.length) {
+    const own = await Invoice.countDocuments({ _id: { $in: invoiceIds }, customerId: req.portal.customerId });
+    if (own !== invoiceIds.length) throw new NotFoundError('Invoice not found');
+  }
+  const claim = await PaymentClaim.create({
+    customer: req.portal.customerId,
+    customerName: req.customer.name,
+    account: req.portal.accountId,
+    amount: Math.round(Number(req.body.amount) * 100) / 100,
+    paidOn: new Date(req.body.paidOn),
+    mode: req.body.mode,
+    reference: req.body.reference,
+    note: req.body.note,
+    proof: req.file ? `/uploads/claims/${req.file.filename}` : '',
+    invoices: invoiceIds,
+  });
+  await notifyPermission(req.companyId, 'payments.claims', {
+    type: 'PAYMENT_CLAIM',
+    title: `${req.customer.name} says they paid ${claim.amount.toFixed(2)}`,
+    body: `${claim.mode.replace('_', ' ')}${claim.reference ? ` · ref ${claim.reference}` : ''} · check the bank and record it`,
+    link: '/app/payment-claims',
+    entityType: 'PaymentClaim',
+    entityId: claim._id,
+    priority: 'HIGH',
+  });
+  return created(res, { message: 'Sent. The company will check and record it.', data: claimView(claim) });
+});
+
+// ---------------------------------------------------------------------------
+// Returns & complaints
+// ---------------------------------------------------------------------------
+const returnView = (r) => ({
+  id: String(r._id),
+  requestNo: r.requestNo,
+  kind: r.kind,
+  reason: r.reason,
+  invoiceNo: r.invoiceNo,
+  items: r.items,
+  note: r.note,
+  photos: r.photos,
+  status: r.status,
+  staffNote: r.staffNote,
+  history: r.history,
+  createdAt: r.createdAt,
+});
+
+/** GET /portal/returns */
+export const listReturns = asyncHandler(async (req, res) => {
+  const rows = await ReturnRequest.find({ customer: req.portal.customerId }).sort({ createdAt: -1 }).limit(50).lean();
+  return success(res, { data: rows.map(returnView) });
+});
+
+/** GET /portal/invoices/:id - lines of one own invoice (to pick what to return). */
+export const getInvoice = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw new NotFoundError('Invoice not found');
+  const inv = await Invoice.findOne({ _id: req.params.id, customerId: req.portal.customerId, status: VISIBLE_INVOICE }).lean();
+  if (!inv) throw new NotFoundError('Invoice not found');
+  return success(res, {
+    data: {
+      id: String(inv._id),
+      invoiceNo: inv.invoiceNo,
+      invoiceDate: inv.invoiceDate,
+      total: inv.total,
+      balanceDue: inv.balanceDue,
+      status: inv.status,
+      items: (inv.items || []).map((l) => ({
+        product: String(l.product),
+        name: l.name,
+        unit: l.unit,
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        lineTotal: l.lineTotal,
+        isFree: Boolean(l.isFree),
+      })),
+    },
+  });
+});
+
+/** POST /portal/returns (multipart: photos[]) */
+export const createReturn = asyncHandler(async (req, res) => {
+  assertFeature(req, 'returns', 'Returns and complaints');
+  let invoice = null;
+  if (req.body.invoice) {
+    invoice = await Invoice.findOne({ _id: req.body.invoice, customerId: req.portal.customerId, status: VISIBLE_INVOICE }).lean();
+    if (!invoice) throw new NotFoundError('Invoice not found');
+  }
+  const items = req.body.items || [];
+  if (req.body.kind === 'RETURN' && !items.length) {
+    throw new AppError('Choose the products and quantities to return', { status: 422, code: 'VALIDATION_ERROR' });
+  }
+  // Lines are named from the invoice (or the catalogue); never more than billed.
+  const billed = new Map((invoice?.items || []).filter((l) => !l.isFree).map((l) => [`${l.product}|${l.unit}`, l]));
+  const products = new Map(
+    (await Product.find({ _id: { $in: items.map((i) => i.product) } }).select('name unit').lean()).map((p) => [String(p._id), p])
+  );
+  const lines = items.map((i) => {
+    const product = products.get(String(i.product));
+    if (!product) throw new NotFoundError('Product not found');
+    const unit = i.unit || product.unit;
+    const line = billed.get(`${i.product}|${unit}`);
+    if (invoice && !line) throw new AppError(`${product.name} is not on invoice ${invoice.invoiceNo}`, { status: 422, code: 'VALIDATION_ERROR' });
+    if (line && Number(i.qty) > Number(line.qty)) {
+      throw new AppError(`${product.name}: at most ${line.qty} ${unit} was billed`, { status: 422, code: 'VALIDATION_ERROR' });
+    }
+    return { product: product._id, name: product.name, unit, qty: Number(i.qty) };
+  });
+
+  const request = new ReturnRequest({
+    customer: req.portal.customerId,
+    customerName: req.customer.name,
+    account: req.portal.accountId,
+    kind: req.body.kind,
+    reason: req.body.reason,
+    invoice: invoice?._id || null,
+    invoiceNo: invoice?.invoiceNo || '',
+    items: lines,
+    note: req.body.note,
+    photos: (req.files || []).map((f) => `/uploads/returns/${f.filename}`),
+    history: [{ status: 'OPEN', at: new Date(), byName: req.customer.name, note: 'Raised online' }],
+  });
+  request.requestNo = await nextSeries(req.companyId, 'RETURN_REQUEST', { prefix: 'RR', pad: 5 });
+  await request.save();
+  await notifyPermission(req.companyId, 'returns.manage', {
+    type: 'RETURN_REQUEST',
+    title: `${req.body.kind === 'RETURN' ? 'Return' : 'Complaint'} ${request.requestNo} from ${req.customer.name}`,
+    body: `${req.body.reason.replace('_', ' ').toLowerCase()}${invoice ? ` · invoice ${invoice.invoiceNo}` : ''}`,
+    link: '/app/returns',
+    entityType: 'ReturnRequest',
+    entityId: request._id,
+    priority: 'HIGH',
+  });
+  if (req.customer.assignedTo) {
+    await notifyUsers([req.customer.assignedTo], {
+      type: 'RETURN_REQUEST',
+      title: `${req.customer.name} raised ${request.requestNo}`,
+      body: req.body.note ? String(req.body.note).slice(0, 200) : '',
+      link: '/app/returns',
+      entityType: 'ReturnRequest',
+      entityId: request._id,
+    });
+  }
+  return created(res, { message: 'Sent to the company', data: returnView(request.toObject()) });
+});
+
+// ---------------------------------------------------------------------------
+// Inbox
+// ---------------------------------------------------------------------------
+/** GET /portal/notifications */
+export const listNotifications = asyncHandler(async (req, res) => {
+  const rows = await PortalNotification.find({ customer: req.portal.customerId }).sort({ createdAt: -1 }).limit(50).lean();
+  return success(res, {
+    data: rows.map((n) => ({ id: String(n._id), type: n.type, title: n.title, body: n.body, link: n.link, read: Boolean(n.readAt), at: n.createdAt })),
+  });
+});
+
+/** POST /portal/notifications/read */
+export const readNotifications = asyncHandler(async (req, res) => {
+  await PortalNotification.updateMany({ customer: req.portal.customerId, readAt: null }, { $set: { readAt: new Date() } });
+  return success(res, { message: 'OK' });
 });
 
 export default {

@@ -31,6 +31,8 @@ const notificationSchema = new mongoose.Schema(
         'EXPENSE_REJECTED',
         'PORTAL_ORDER',
         'STALE_ORDER',
+        'PAYMENT_CLAIM',
+        'RETURN_REQUEST',
       ],
       default: 'SYSTEM',
       index: true,

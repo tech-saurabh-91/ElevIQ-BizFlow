@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import CustomerAccount from '../../models/CustomerAccount.js';
+import { notifyCustomer } from '../../services/customerMessaging.js';
 import ExcelJS from 'exceljs';
 import { renderDocumentPdf, companyBlock, addressText, dateText, lineColumns, lineRow, priceTotals, itemSummary } from '../../services/docPdf.js';
 import { notePrint } from '../../services/printControl.js';
@@ -464,6 +466,15 @@ const issueInvoice = async (req, invoice, note = '') => {
     { _id: invoice.customerId },
     { $inc: { outstanding: Number(invoice.total || 0) } }
   );
+  // Customers ordering online see each new invoice in their portal inbox.
+  if (await CustomerAccount.exists({ customer: invoice.customerId })) {
+    await notifyCustomer(invoice.customerId, {
+      type: 'INVOICE',
+      title: `Invoice ${invoice.invoiceNo} for ${Number(invoice.total || 0).toFixed(2)}`,
+      body: invoice.dueDate ? `Due ${dayjs(invoice.dueDate).format('DD/MM/YYYY')}` : '',
+      link: 'invoices',
+    });
+  }
 
   for (const id of ordersOfInvoice(invoice)) {
     const order = await syncOrderInvoicing(id);

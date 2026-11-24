@@ -88,6 +88,9 @@ const settingSchema = new mongoose.Schema(
         // Remind when a confirmed order is still not invoiced after this many
         // days (its stock stays reserved meanwhile). 0 = no reminder.
         staleConfirmedDays: { type: Number, default: 7 },
+        // Cancel a confirmed order not invoiced at all after this many days,
+        // so its reserved stock is freed. 0 = never (default).
+        autoCancelDays: { type: Number, default: 0 },
       },
       default: () => ({}),
     },
@@ -103,6 +106,16 @@ const settingSchema = new mongoose.Schema(
         showStockStatus: { type: Boolean, default: true },
         // Outstanding balance on the customer's home and statement.
         showOutstanding: { type: Boolean, default: true },
+        // Sign in with a one-time code by SMS/WhatsApp (needs a messaging provider).
+        otpLogin: { type: Boolean, default: false },
+        // Also send order / invoice / payment updates by SMS/WhatsApp.
+        sendMessages: { type: Boolean, default: false },
+        // Confirm online orders at once for customers marked "trusted" when
+        // stock, credit limit and the approval limit all allow it.
+        autoConfirm: { type: Boolean, default: false },
+        // Customers may tell you about payments and raise returns / complaints.
+        paymentClaims: { type: Boolean, default: true },
+        returns: { type: Boolean, default: true },
       },
       default: () => ({}),
     },
