@@ -37,6 +37,7 @@ const view = (req, account, extra = {}) => ({
   lastLoginAt: account?.lastLoginAt || null,
   link: `/portal/${req.company?.code || ''}`,
   portalOn: req.settings?.portal?.enabled === true,
+  autoConfirmOn: req.settings?.portal?.autoConfirm === true,
   ...extra,
 });
 
@@ -45,7 +46,9 @@ export const show = asyncHandler(async (req, res) => {
   assertModule(req);
   const customer = await loadCustomer(req.params.id);
   const account = await CustomerAccount.findOne({ customer: customer._id }).lean();
-  return success(res, { data: view(req, account, { suggestedMobile: normalizeMobile(customer.phone) }) });
+  return success(res, {
+    data: view(req, account, { suggestedMobile: normalizeMobile(customer.phone), autoConfirm: Boolean(customer.portalAutoConfirm) }),
+  });
 });
 
 const assertMobileFree = async (mobile, accountId) => {
@@ -67,6 +70,10 @@ export const save = asyncHandler(async (req, res) => {
   let account = await CustomerAccount.findOne({ customer: customer._id });
   const mobile = normalizeMobile(req.body.mobile || account?.mobile || customer.phone);
   let pin = null;
+  if (typeof req.body.autoConfirm === 'boolean' && Boolean(customer.portalAutoConfirm) !== req.body.autoConfirm) {
+    await Customer.updateOne({ _id: customer._id }, { $set: { portalAutoConfirm: req.body.autoConfirm } });
+    customer.portalAutoConfirm = req.body.autoConfirm;
+  }
 
   if (req.body.enabled) {
     if (customer.isActive === false) throw new BadRequestError('This customer is inactive', 'INACTIVE_CUSTOMER');
@@ -99,7 +106,7 @@ export const save = asyncHandler(async (req, res) => {
 
   return success(res, {
     message: req.body.enabled ? 'Online ordering is on for this customer' : 'Online ordering is off for this customer',
-    data: view(req, account?.toObject?.() || account, pin ? { pin } : {}),
+    data: view(req, account?.toObject?.() || account, { ...(pin ? { pin } : {}), autoConfirm: Boolean(customer.portalAutoConfirm) }),
   });
 });
 

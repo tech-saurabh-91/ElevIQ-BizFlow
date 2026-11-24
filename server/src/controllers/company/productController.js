@@ -253,3 +253,29 @@ export const savePriceReview = asyncHandler(async (req, res) => {
 });
 
 export default crud;
+
+/** POST /products/:id/image (multipart "image") - the photo customers see online. */
+export const uploadImage = asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id);
+  if (!product) throw new AppError('Product not found', { status: 404, code: 'NOT_FOUND' });
+  if (!req.file) throw new AppError('Choose a photo', { status: 400, code: 'FILE_REQUIRED' });
+  product.image = `/uploads/products/${req.file.filename}`;
+  await product.save();
+  audit(req, {
+    action: AUDIT_ACTIONS.UPDATE,
+    entityType: 'Product',
+    entityId: product._id,
+    entityLabel: product.name,
+    description: `Photo changed for ${product.name}`,
+  });
+  return success(res, { message: 'Photo saved', data: { id: String(product._id), image: product.image } });
+});
+
+/** DELETE /products/:id/image */
+export const removeImage = asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id);
+  if (!product) throw new AppError('Product not found', { status: 404, code: 'NOT_FOUND' });
+  product.image = '';
+  await product.save();
+  return success(res, { message: 'Photo removed', data: { id: String(product._id), image: '' } });
+});

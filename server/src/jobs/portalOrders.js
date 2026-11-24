@@ -7,6 +7,9 @@ import { withTenant, withoutTenant } from '../middlewares/tenant.js';
 import { notifyPermission, notifyUsers } from '../services/notifyService.js';
 import { ORDER_STATUS } from '../config/constants.js';
 import logger from '../utils/logger.js';
+import { releaseReservation } from '../services/inventoryService.js';
+import { notifyOrderCustomer } from '../services/customerMessaging.js';
+import Customer from '../models/Customer.js';
 
 /**
  * Daily order housekeeping, per company:
@@ -33,6 +36,10 @@ const expireRequests = async (settings, now) => {
       note: `Not accepted within ${days} day${days === 1 ? '' : 's'}`,
     });
     await order.save();
+    await notifyOrderCustomer(order, {
+      title: `Order ${order.orderNo} expired`,
+      body: 'It was not confirmed in time. Please order again.',
+    });
     if (order.salesman) {
       await notifyUsers([order.salesman], {
         type: 'PORTAL_ORDER',
@@ -90,6 +97,50 @@ const remindStale = async (companyId, settings, now) => {
   return stale.length;
 };
 
+/**
+ * Optional (order.autoCancelDays > 0): cancel confirmed orders nothing was
+ * invoiced from after N days, so their reserved stock goes back on sale.
+ * Part-invoiced orders are left alone (a person decides those).
+ */
+const autoCancel = async (settings, now) => {
+  const days = Number(settings?.order?.autoCancelDays || 0);
+  if (!(days > 0)) return 0;
+  const before = dayjs(now).subtract(days, 'day').toDate();
+  const orders = await Order.find({ status: ORDER_STATUS.CONFIRMED, orderDate: { $lt: before } });
+  for (const order of orders) {
+    const reason = `Not invoiced within ${days} days: cancelled automatically, stock released`;
+    order.status = ORDER_STATUS.CANCELLED;
+    order.cancelledAt = now;
+    order.cancelReason = reason;
+    order.statusHistory.push({ status: ORDER_STATUS.CANCELLED, at: now, by: null, byName: 'System', note: reason });
+    if (order.salesCounted) {
+      await Customer.updateOne(
+        { _id: order.customerId },
+        { $inc: { totalOrders: -1, totalSales: -Number(order.total || 0) } }
+      );
+      order.salesCounted = false;
+    }
+    await order.save();
+    if (settings?.order?.reserveStockOnConfirm !== false) {
+      await releaseReservation(order.items, { warehouseId: order.warehouse || null, settings });
+    }
+    if (order.salesman) {
+      await notifyUsers([order.salesman], {
+        type: 'STALE_ORDER',
+        title: `Order ${order.orderNo} cancelled automatically`,
+        body: `${order.customerName} · not invoiced within ${days} days`,
+        link: `/app/orders/${order._id}`,
+        entityType: 'Order',
+        entityId: order._id,
+      });
+    }
+    if (order.source === 'PORTAL') {
+      await notifyOrderCustomer(order, { title: `Order ${order.orderNo} cancelled`, body: 'It could not be delivered in time.' });
+    }
+  }
+  return orders.length;
+};
+
 export const runPortalOrderJobs = async (now = new Date()) => {
   const companies = await withoutTenant(() =>
     Company.find({ status: { $in: ['ACTIVE', 'TRIAL'] }, isDeleted: { $ne: true } })
@@ -99,18 +150,20 @@ export const runPortalOrderJobs = async (now = new Date()) => {
   );
   let expired = 0;
   let stale = 0;
+  let cancelled = 0;
   for (const company of companies) {
     try {
       await withTenant(company._id, async () => {
         const settings = await Setting.forCompany(company._id);
         expired += await expireRequests(settings, now);
+        cancelled += await autoCancel(settings, now);
         stale += await remindStale(company._id, settings, now);
       });
     } catch (err) {
       logger.warn?.(`order housekeeping failed for ${company._id}: ${err.message}`);
     }
   }
-  return { companies: companies.length, expired, stale };
+  return { companies: companies.length, expired, stale, cancelled };
 };
 
 export default runPortalOrderJobs;

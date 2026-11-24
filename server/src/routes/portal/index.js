@@ -4,6 +4,7 @@ import * as ctrl from '../../controllers/portal/portalController.js';
 import { validate } from '../../middlewares/validate.js';
 import { authLimiter } from '../../middlewares/security.js';
 import { authenticatePortal, requirePinChanged } from '../../middlewares/portalAuth.js';
+import { upload, folder } from '../../middlewares/upload.js';
 import { idParamsSchema } from '../../validators/companyValidators.js';
 import {
   portalCodeParams,
@@ -13,6 +14,10 @@ import {
   portalCancelSchema,
   portalStatementQuery,
   portalConfirmSchema,
+  portalOtpRequestSchema,
+  portalOtpVerifySchema,
+  portalPaymentClaimSchema,
+  portalReturnSchema,
 } from '../../validators/portalValidators.js';
 
 /**
@@ -65,6 +70,9 @@ router.get('/company/:code/manifest.webmanifest', validate({ params: portalCodeP
  */
 router.post('/auth/login', authLimiter, validate({ body: portalLoginSchema }), authCtrl.login);
 router.post('/auth/refresh', authCtrl.refresh);
+// One-time code by SMS / WhatsApp (when the company allows it and a provider is set up).
+router.post('/auth/otp', authLimiter, validate({ body: portalOtpRequestSchema }), authCtrl.requestOtp);
+router.post('/auth/otp/verify', authLimiter, validate({ body: portalOtpVerifySchema }), authCtrl.loginWithOtp);
 
 // ---- Signed-in customer ----------------------------------------------------
 router.use(authenticatePortal);
@@ -106,6 +114,30 @@ router.post('/orders/:id/cancel', validate({ params: idParamsSchema, body: porta
 
 router.get('/invoices', ctrl.listInvoices);
 router.get('/invoices/:id/pdf', validate({ params: idParamsSchema }), ctrl.invoicePdf);
+router.get('/invoices/:id', validate({ params: idParamsSchema }), ctrl.getInvoice);
+
+/**
+ * @swagger
+ * /api/portal/payments:
+ *   post:
+ *     tags: [Customer Portal]
+ *     summary: Tell the company about a payment (multipart, optional "proof" image); staff verify it
+ */
+router.get('/payments', ctrl.listClaims);
+router.post('/payments', folder('claims'), upload.single('proof'), validate({ body: portalPaymentClaimSchema }), ctrl.createClaim);
+
+/**
+ * @swagger
+ * /api/portal/returns:
+ *   post:
+ *     tags: [Customer Portal]
+ *     summary: Raise a return or complaint (multipart, up to 4 "photos")
+ */
+router.get('/returns', ctrl.listReturns);
+router.post('/returns', folder('returns'), upload.array('photos', 4), validate({ body: portalReturnSchema }), ctrl.createReturn);
+
+router.get('/notifications', ctrl.listNotifications);
+router.post('/notifications/read', ctrl.readNotifications);
 
 /**
  * @swagger

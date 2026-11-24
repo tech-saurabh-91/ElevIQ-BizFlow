@@ -30,6 +30,12 @@ const customerAccountSchema = new mongoose.Schema(
     failedAttempts: { type: Number, default: 0 },
     lockedUntil: { type: Date, default: null },
     lastLoginAt: { type: Date, default: null },
+
+    // One-time sign-in code (hashed), when the company allows OTP login.
+    otpHash: { type: String, default: null, select: false },
+    otpExpiresAt: { type: Date, default: null },
+    otpSentAt: { type: Date, default: null },
+    otpAttempts: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ChevronRight, ClipboardList, FileDown, FileText, KeyRound, LogOut, Repeat2, ShoppingBag, Wallet } from 'lucide-react';
+import { ChevronRight, ClipboardList, FileDown, FileText, KeyRound, LogOut, PackageX, Repeat2, ShoppingBag, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, Input, Textarea } from '@/components/ui/input';
@@ -130,6 +130,16 @@ export function PortalHome() {
         {data?.portal?.showOutstanding && (
           <Link to={portalPath(code, 'statement')} className="flex items-center gap-2 rounded-xl border bg-card p-3 text-sm font-medium">
             <ClipboardList className="h-4 w-4 text-muted-foreground" /> Statement
+          </Link>
+        )}
+        {data?.portal?.paymentClaims && (
+          <Link to={portalPath(code, 'payments?new=1')} className="flex items-center gap-2 rounded-xl border bg-card p-3 text-sm font-medium">
+            <Wallet className="h-4 w-4 text-muted-foreground" /> I have paid
+          </Link>
+        )}
+        {data?.portal?.returns && (
+          <Link to={portalPath(code, 'returns')} className="flex items-center gap-2 rounded-xl border bg-card p-3 text-sm font-medium">
+            <PackageX className="h-4 w-4 text-muted-foreground" /> Return / complaint
           </Link>
         )}
       </div>
@@ -394,6 +404,7 @@ export function PortalOrderDetail() {
 export function PortalInvoices() {
   const code = usePortalCode();
   const money = useMoney();
+  const paidLink = usePortalStore((s) => s.session?.portal?.paymentClaims !== false);
   const [unpaid, setUnpaid] = useState(false);
   const [page, setPage] = useState(1);
   const query = useQuery({
@@ -450,6 +461,14 @@ export function PortalInvoices() {
                     <InvoiceStatus status={inv.status} />
                   )}
                 </div>
+                {inv.balanceDue > 0 && paidLink && (
+                  <Link
+                    to={portalPath(code, `payments?new=1&invoice=${inv.id}&amount=${inv.balanceDue}`)}
+                    className="text-xs font-medium text-primary"
+                  >
+                    I paid
+                  </Link>
+                )}
                 <Button size="icon-sm" variant="ghost" onClick={() => open(inv)} aria-label={`Download ${inv.invoiceNo}`}>
                   <FileDown className="h-4 w-4" />
                 </Button>
@@ -636,6 +655,8 @@ export function PortalAccount() {
         {[
           ['invoices', 'Invoices', FileText],
           ...(session.portal?.showOutstanding ? [['statement', 'Statement of account', ClipboardList]] : []),
+          ...(session.portal?.paymentClaims !== false ? [['payments', 'Payments I told you about', Wallet]] : []),
+          ...(session.portal?.returns !== false ? [['returns', 'Returns & complaints', PackageX]] : []),
           ['account/pin', 'Change PIN', KeyRound],
         ].map(([to, label, Icon]) => (
           <Link key={to} to={portalPath(code, to)} className="flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-accent/50">

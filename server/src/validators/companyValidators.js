@@ -567,6 +567,7 @@ export const settingsUpdateSchema = z.object({
       defaultPaymentMode: z.enum(['CASH', 'CREDIT']).optional(),
       showStockOnOrder: z.boolean().optional(),
       staleConfirmedDays: z.coerce.number().int().min(0).max(365).optional(),
+      autoCancelDays: z.coerce.number().int().min(0).max(365).optional(),
     })
     .partial()
     .optional(),
@@ -578,6 +579,11 @@ export const settingsUpdateSchema = z.object({
       minOrderValue: z.coerce.number().min(0).max(100000000).optional(),
       showStockStatus: z.boolean().optional(),
       showOutstanding: z.boolean().optional(),
+      otpLogin: z.boolean().optional(),
+      sendMessages: z.boolean().optional(),
+      autoConfirm: z.boolean().optional(),
+      paymentClaims: z.boolean().optional(),
+      returns: z.boolean().optional(),
     })
     .partial()
     .optional(),

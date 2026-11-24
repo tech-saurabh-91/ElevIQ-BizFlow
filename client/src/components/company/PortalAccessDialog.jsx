@@ -21,6 +21,7 @@ export default function PortalAccessDialog({ customer, open, onClose }) {
   const key = ['company', 'customer', customer?.id, 'portal-access'];
   const [enabled, setEnabled] = useState(false);
   const [mobile, setMobile] = useState('');
+  const [trusted, setTrusted] = useState(false);
   const [pin, setPin] = useState(null);
 
   const query = useQuery({
@@ -38,6 +39,7 @@ export default function PortalAccessDialog({ customer, open, onClose }) {
     if (!info) return;
     setEnabled(info.hasAccount ? info.enabled : true);
     setMobile(info.mobile || info.suggestedMobile || '');
+    setTrusted(Boolean(info.autoConfirm));
   }, [info]);
 
   const done = (payload) => {
@@ -46,7 +48,7 @@ export default function PortalAccessDialog({ customer, open, onClose }) {
     toast.success(payload.message);
   };
   const save = useMutation({
-    mutationFn: async () => (await api.put(`/v1/customers/${customer.id}/portal-access`, { enabled, mobile })).data,
+    mutationFn: async () => (await api.put(`/v1/customers/${customer.id}/portal-access`, { enabled, mobile, autoConfirm: trusted })).data,
     onSuccess: done,
   });
   const reset = useMutation({
@@ -115,6 +117,18 @@ export default function PortalAccessDialog({ customer, open, onClose }) {
           <Field label="Mobile number they sign in with" hint="One mobile can sign in for one customer.">
             <Input value={mobile} onChange={(e) => setMobile(e.target.value)} inputMode="tel" disabled={!enabled} />
           </Field>
+
+          <Checkbox
+            checked={trusted}
+            onChange={(e) => setTrusted(e.target.checked)}
+            disabled={!enabled}
+            label="Trusted: confirm their orders automatically"
+            description={
+              info.autoConfirmOn
+                ? 'Confirmed at once when stock is free, their credit limit is not crossed and the order is below the approval limit.'
+                : 'Takes effect once "Confirm orders from trusted customers automatically" is on in Settings.'
+            }
+          />
 
           {info.hasAccount && (
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

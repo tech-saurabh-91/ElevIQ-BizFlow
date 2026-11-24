@@ -16,6 +16,8 @@ import {
   verifyPortalRefreshToken,
 } from '../utils/tokens.js';
 import logger from '../utils/logger.js';
+import crypto from 'node:crypto';
+import { messagingAvailable, phoneForMessages, sendText } from './customerMessaging.js';
 
 /**
  * Customer portal sign-in: company link (/portal/<CODE>) + mobile + PIN.
@@ -66,7 +68,12 @@ export const publicCompanyInfo = (company, settings) => ({
   name: settings?.displayName?.trim() || company.businessName,
   logo: settings?.logo || company.logo || '',
   open: portalOpen(company, settings),
+  // Sign in with a one-time code by SMS / WhatsApp as well as with the PIN.
+  otp: otpAllowed(settings),
 });
+
+/** OTP login: switched on by the company and a messaging provider set up. */
+export const otpAllowed = (settings) => settings?.portal?.otpLogin === true && messagingAvailable();
 
 const issuePortalTokens = async ({ account, companyId, userAgent, ip }) => {
   const jti = newJti();
@@ -119,6 +126,8 @@ export const portalSessionView = ({ account, customer, company, settings }) => (
     showStockStatus: settings?.portal?.showStockStatus !== false,
     showOutstanding: settings?.portal?.showOutstanding !== false,
     minOrderValue: Number(settings?.portal?.minOrderValue || 0),
+    paymentClaims: settings?.portal?.paymentClaims !== false,
+    returns: settings?.portal?.returns !== false,
   },
 });
 
@@ -257,3 +266,84 @@ export const changePin = async ({ accountId, currentPin, newPin, keepJti }) => {
 };
 
 export default { loginPortal, refreshPortal, logoutPortal, changePin, loadPortalCompany, publicCompanyInfo, portalOpen };
+
+// ---------------------------------------------------------------------------
+// OTP sign-in (one-time code by SMS / WhatsApp)
+// ---------------------------------------------------------------------------
+const OTP_TTL_MS = 5 * 60 * 1000;
+const OTP_RESEND_MS = 30 * 1000;
+const OTP_MAX_TRIES = 5;
+const otpHash = (code) => crypto.createHash('sha256').update(String(code)).digest('hex');
+
+/**
+ * Send a 6-digit code to a customer's mobile. The answer never says whether
+ * the mobile has a login (same reply either way).
+ */
+export const requestOtp = async ({ companyCode, mobile }) => {
+  const { company, settings } = await loadPortalCompany(companyCode);
+  assertCompanyLive(company);
+  if (!portalOpen(company, settings)) throw portalClosed();
+  if (!otpAllowed(settings)) throw new BadRequestError('Sign in with your PIN', 'OTP_NOT_AVAILABLE');
+
+  const number = normalizeMobile(mobile);
+  await withTenant(company._id, async () => {
+    const account = await CustomerAccount.findOne({ mobile: number, isActive: true });
+    if (!account) return;
+    if (account.otpSentAt && Date.now() - account.otpSentAt.getTime() < OTP_RESEND_MS) {
+      throw new AppError('Please wait a few seconds before asking for another code.', { status: 429, code: 'OTP_TOO_SOON' });
+    }
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    account.otpHash = otpHash(code);
+    account.otpExpiresAt = new Date(Date.now() + OTP_TTL_MS);
+    account.otpSentAt = new Date();
+    account.otpAttempts = 0;
+    await account.save();
+    const name = settings?.displayName?.trim() || company.businessName;
+    await sendText({
+      to: phoneForMessages(account.mobile),
+      text: `${code} is your code to sign in to ${name}. It works for 5 minutes. Do not share it.`,
+      kind: 'OTP',
+    });
+  });
+  return { sent: true };
+};
+
+/** Sign in with the code; wrong codes count towards the PIN lockout too. */
+export const loginWithOtp = async ({ companyCode, mobile, otp, ip, userAgent }) => {
+  const { company, settings } = await loadPortalCompany(companyCode);
+  assertCompanyLive(company);
+  if (!portalOpen(company, settings)) throw portalClosed();
+  if (!otpAllowed(settings)) throw new BadRequestError('Sign in with your PIN', 'OTP_NOT_AVAILABLE');
+
+  const number = normalizeMobile(mobile);
+  return withTenant(company._id, async () => {
+    const account = await CustomerAccount.findOne({ mobile: number }).select('+otpHash');
+    const wrong = () => new UnauthorizedError('The code is wrong or has expired. Ask for a new one.', 'OTP_INVALID');
+    if (!account || !account.otpHash || !account.otpExpiresAt) throw wrong();
+    if (account.lockedUntil && account.lockedUntil > new Date()) {
+      throw new AppError(`Too many wrong tries. Try again after ${PIN_LOCK_MINUTES} minutes.`, { status: 423, code: ErrorCodes.ACCOUNT_LOCKED });
+    }
+    if (account.otpExpiresAt < new Date() || account.otpAttempts >= OTP_MAX_TRIES) throw wrong();
+    if (otpHash(String(otp || '').trim()) !== account.otpHash) {
+      account.otpAttempts += 1;
+      if (account.otpAttempts >= OTP_MAX_TRIES) account.otpHash = null;
+      await account.save();
+      throw wrong();
+    }
+
+    const customer = await Customer.findById(account.customer).lean();
+    assertAccountUsable(account, customer);
+    account.otpHash = null;
+    account.otpExpiresAt = null;
+    account.otpAttempts = 0;
+    // The code proved they hold the mobile: no need to replace the staff PIN first.
+    account.mustChangePin = false;
+    account.failedAttempts = 0;
+    account.lockedUntil = null;
+    account.lastLoginAt = new Date();
+    await account.save();
+
+    const tokens = await issuePortalTokens({ account, companyId: company._id, userAgent, ip });
+    return { ...tokens, ...portalSessionView({ account, customer, company, settings }) };
+  });
+};

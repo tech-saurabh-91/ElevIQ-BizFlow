@@ -100,6 +100,7 @@ const PartyLedger = lazy(() => import('@/pages/company/PartyLedger'));
 const ReportAccess = lazy(() => import('@/pages/company/ReportAccess'));
 const DashboardCustomize = lazy(() => import('@/pages/company/DashboardCustomize'));
 const Notifications = lazy(() => import('@/pages/company/Notifications'));
+const CustomerRequests = lazy(() => import('@/pages/company/CustomerRequests'));
 
 // ---- customer portal (a company's customers ordering online) ---------------
 const PortalLayout = lazy(() => import('@/portal/PortalLayout'));
@@ -112,6 +113,10 @@ const PortalInvoices = portalPage('PortalInvoices');
 const PortalStatement = portalPage('PortalStatement');
 const PortalAccount = portalPage('PortalAccount');
 const PortalChangePin = portalPage('PortalChangePin');
+const portalRequest = (name) => lazy(() => import('@/portal/PortalRequests').then((m) => ({ default: m[name] })));
+const PortalPayments = portalRequest('PortalPayments');
+const PortalReturns = portalRequest('PortalReturns');
+const PortalInbox = portalRequest('PortalInbox');
 const PortalCatalog = lazy(() => import('@/portal/PortalShop').then((m) => ({ default: m.PortalCatalog })));
 const PortalCart = lazy(() => import('@/portal/PortalShop').then((m) => ({ default: m.PortalCart })));
 
@@ -336,6 +341,10 @@ export default function App() {
           <Route path="settings" element={guard('settings.view', <CompanySettings />)} />
           <Route path="audit-logs" element={guard('audit.view', <AuditTrail />)} />
           <Route path="year-closing" element={guard('books.view', <YearClosing />)} />
+          {/* Customer portal: payments and returns customers send online. */}
+          <Route path="customer-requests" element={<CustomerRequests />} />
+          <Route path="payment-claims" element={<CustomerRequests initialTab="payments" />} />
+          <Route path="returns" element={<CustomerRequests initialTab="returns" />} />
           <Route path="print-control" element={guard('documents.print.original', <PrintControl />)} />
           <Route
             path="notifications"
@@ -358,6 +367,9 @@ export default function App() {
           <Route path="statement" element={<PortalStatement />} />
           <Route path="account" element={<PortalAccount />} />
           <Route path="account/pin" element={<PortalChangePin />} />
+          <Route path="payments" element={<PortalPayments />} />
+          <Route path="returns" element={<PortalReturns />} />
+          <Route path="inbox" element={<PortalInbox />} />
           <Route path="*" element={<PortalHome />} />
         </Route>
 

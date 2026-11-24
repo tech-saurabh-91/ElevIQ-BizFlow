@@ -66,6 +66,25 @@ export const login = asyncHandler(async (req, res) => {
   return success(res, { message: 'Signed in', data: sessionPayload(result) });
 });
 
+/** POST /portal/auth/otp { companyCode, mobile } - text a one-time code. */
+export const requestOtp = asyncHandler(async (req, res) => {
+  await portalAuth.requestOtp({ companyCode: req.body.companyCode, mobile: req.body.mobile });
+  return success(res, { message: 'If this mobile can order online, a code has been sent to it.' });
+});
+
+/** POST /portal/auth/otp/verify { companyCode, mobile, otp } */
+export const loginWithOtp = asyncHandler(async (req, res) => {
+  const result = await portalAuth.loginWithOtp({
+    companyCode: req.body.companyCode,
+    mobile: req.body.mobile,
+    otp: req.body.otp,
+    ip: req.ip,
+    userAgent: pickUA(req),
+  });
+  setPortalRefreshCookie(res, result.refreshToken);
+  return success(res, { message: 'Signed in', data: sessionPayload(result) });
+});
+
 /** POST /portal/auth/refresh (portal cookie) */
 export const refresh = asyncHandler(async (req, res) => {
   const result = await portalAuth.refreshPortal({

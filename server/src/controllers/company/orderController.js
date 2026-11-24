@@ -51,6 +51,7 @@ import { activeVanOf, assertDayClosed, assertVanStock } from '../../services/van
 import { buildSaleLines, repriceInput } from '../../services/pricingService.js';
 import { hasPermission, limitsFor } from '../../middlewares/rbac.js';
 import { notifyUsers, notifyPermission } from '../../services/notifyService.js';
+import { notifyOrderCustomer } from '../../services/customerMessaging.js';
 import { companyToday, tzOf } from '../../utils/companyTime.js';
 
 /** Relations returned on every order read so the UI never needs a second call. */
@@ -291,7 +292,7 @@ const transition = async (req, order, nextStatus, { note = '', reason = '', extr
 };
 
 /** Keep the customer's lifetime counters in sync with confirmed sales. */
-const syncCustomerCounters = async (order, direction) => {
+export const syncCustomerCounters = async (order, direction) => {
   if (direction > 0 && !order.salesCounted) {
     await Customer.updateOne(
       { _id: order.customerId },
@@ -348,6 +349,12 @@ const submitDraft = async (req, order, settings, note = '') => {
   });
 
   let warnings = [...stock.warnings, ...(credit.warning ? [credit.warning] : [])];
+  if (fromRequest) {
+    await notifyOrderCustomer(order, {
+      title: approvalRequired ? `Order ${order.orderNo} is being reviewed` : `Order ${order.orderNo} confirmed`,
+      body: `Total ${Number(order.total || 0).toFixed(2)}`,
+    });
+  }
   if (next === ORDER_STATUS.CONFIRMED) {
     await syncCustomerCounters(order, 1);
     await order.save();
@@ -663,6 +670,9 @@ export const approve = asyncHandler(async (req, res) => {
     settings: await settingsOf(req),
   });
 
+  if (order.source === 'PORTAL') {
+    await notifyOrderCustomer(order, { title: `Order ${order.orderNo} confirmed`, body: `Total ${Number(order.total || 0).toFixed(2)}` });
+  }
   await notifyUsers([order.salesman, order.createdBy], {
     type: 'ORDER_APPROVED',
     title: `Order ${order.orderNo} approved`,
@@ -696,6 +706,9 @@ export const reject = asyncHandler(async (req, res) => {
     action: AUDIT_ACTIONS.REJECT,
   });
 
+  if (order.source === 'PORTAL') {
+    await notifyOrderCustomer(order, { title: `Order ${order.orderNo} not accepted`, body: req.body.reason });
+  }
   await notifyUsers([order.salesman, order.createdBy], {
     type: 'ORDER_REJECTED',
     title: `Order ${order.orderNo} rejected`,
@@ -744,6 +757,9 @@ export const cancel = asyncHandler(async (req, res) => {
   if (order.salesCounted) {
     await syncCustomerCounters(order, -1);
     await order.save();
+  }
+  if (order.source === 'PORTAL') {
+    await notifyOrderCustomer(order, { title: `Order ${order.orderNo} cancelled`, body: reason });
   }
 
   const full = await loadDoc(Order, order._id, { populate: POPULATE, label: 'Order' });

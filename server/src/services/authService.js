@@ -306,6 +306,8 @@ export const loginCompany = async ({ identifier, password, companyCode, ip, user
       status: company.status,
       timezone: company.timezone,
       country: company.address?.country || '',
+      // Plan modules (purchase, customer portal...) so the menu is right from sign-in.
+      featureFlags: company.featureFlags || {},
       financialYearStartMonth: company.financialYearStartMonth,
     },
     user: {
@@ -435,6 +437,8 @@ export const refreshTokens = async ({ token, ip, userAgent, res }) => {
       status: company.status,
       timezone: company.timezone,
       country: company.address?.country || '',
+      // Plan modules (purchase, customer portal...) so the menu is right from sign-in.
+      featureFlags: company.featureFlags || {},
     },
     user: {
       id: String(user._id),
