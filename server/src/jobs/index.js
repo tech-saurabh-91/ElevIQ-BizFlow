@@ -52,19 +52,6 @@ export const startJobs = () => {
     )
   );
 
-  // Daily at 03:00 - expire unreviewed customer requests, remind about
-  // confirmed orders not invoiced (their stock stays reserved).
-  registered.push(
-    cron.schedule(
-      '0 3 * * *',
-      safeWrap('order-housekeeping', async () => {
-        const { runPortalOrderJobs } = await import('./portalOrders.js');
-        await runPortalOrderJobs();
-      }),
-      { scheduled: true, timezone: 'Asia/Kolkata' }
-    )
-  );
-
   // Daily at 02:30 - clean expired sessions.
   registered.push(
     cron.schedule(

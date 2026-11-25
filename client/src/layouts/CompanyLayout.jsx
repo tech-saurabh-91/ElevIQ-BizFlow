@@ -47,7 +47,7 @@ export default function CompanyLayout() {
     );
   }
 
-  const sections = filterNav(companyNav, { can, scope: user?.scope, role: user?.role, user, modules: { purchase, customerPortal: company?.featureFlags?.customerPortal === true } });
+  const sections = filterNav(companyNav, { can, scope: user?.scope, role: user?.role, user, modules: { purchase } });
 
   const limits = user?.limits || {};
   const usage = null; // surfaced once /dashboard/usage exists (Phase 8)

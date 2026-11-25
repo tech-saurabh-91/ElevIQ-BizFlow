@@ -85,37 +85,6 @@ const settingSchema = new mongoose.Schema(
         allowNegativeStock: { type: Boolean, default: BUSINESS_DEFAULTS.allowNegativeStock },
         defaultPaymentMode: { type: String, default: 'CREDIT' },
         showStockOnOrder: { type: Boolean, default: true },
-        // Remind when a confirmed order is still not invoiced after this many
-        // days (its stock stays reserved meanwhile). 0 = no reminder.
-        staleConfirmedDays: { type: Number, default: 7 },
-        // Cancel a confirmed order not invoiced at all after this many days,
-        // so its reserved stock is freed. 0 = never (default).
-        autoCancelDays: { type: Number, default: 0 },
-      },
-      default: () => ({}),
-    },
-
-    // Customer self-ordering portal (needs the plan's customerPortal module).
-    portal: {
-      type: {
-        enabled: { type: Boolean, default: false },
-        // A request nobody accepts or rejects within this many days expires.
-        requestExpiryDays: { type: Number, default: 3 },
-        minOrderValue: { type: Number, default: 0 },
-        // In stock / low / out of stock on products (never the quantity).
-        showStockStatus: { type: Boolean, default: true },
-        // Outstanding balance on the customer's home and statement.
-        showOutstanding: { type: Boolean, default: true },
-        // Sign in with a one-time code by SMS/WhatsApp (needs a messaging provider).
-        otpLogin: { type: Boolean, default: false },
-        // Also send order / invoice / payment updates by SMS/WhatsApp.
-        sendMessages: { type: Boolean, default: false },
-        // Confirm online orders at once for customers marked "trusted" when
-        // stock, credit limit and the approval limit all allow it.
-        autoConfirm: { type: Boolean, default: false },
-        // Customers may tell you about payments and raise returns / complaints.
-        paymentClaims: { type: Boolean, default: true },
-        returns: { type: Boolean, default: true },
       },
       default: () => ({}),
     },

@@ -47,9 +47,6 @@ const customerSchema = new mongoose.Schema(
     tags: { type: [String], default: [] },
     notes: { type: String, default: '', maxlength: 1000 },
 
-    // Online orders from this customer are confirmed at once when stock,
-    // credit and the approval limit allow (company setting portal.autoConfirm).
-    portalAutoConfirm: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true, index: true },
     lastOrderAt: { type: Date, default: null },
     totalOrders: { type: Number, default: 0, min: 0 },

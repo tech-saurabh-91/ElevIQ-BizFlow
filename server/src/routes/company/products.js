@@ -3,7 +3,7 @@ import { z } from 'zod';
 import * as ctrl from '../../controllers/company/productController.js';
 import { validate, objectIdSchema } from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/rbac.js';
-import { spreadsheetUpload, upload, folder } from '../../middlewares/upload.js';
+import { spreadsheetUpload } from '../../middlewares/upload.js';
 import {
   idParamsSchema,
   productCreateSchema,
@@ -16,10 +16,6 @@ const router = Router();
 router.get('/', authorize('products.view'), validate({ query: productListQuerySchema }), ctrl.list);
 
 router.post('/', authorize('products.create'), validate({ body: productCreateSchema }), ctrl.create);
-
-// Product photo (shown in the customer portal catalogue).
-router.post('/:id/image', authorize('products.update'), validate({ params: idParamsSchema }), folder('products'), upload.single('image'), ctrl.uploadImage);
-router.delete('/:id/image', authorize('products.update'), validate({ params: idParamsSchema }), ctrl.removeImage);
 
 // Price review after purchases move costs (needs both price editing and cost sight).
 const priceReviewBody = z.object({

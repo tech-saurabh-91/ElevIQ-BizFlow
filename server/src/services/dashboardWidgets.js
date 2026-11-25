@@ -4,7 +4,6 @@ import dayjs from 'dayjs';
 import Invoice from '../models/Invoice.js';
 import Payment from '../models/Payment.js';
 import Order from '../models/Order.js';
-import { NON_SALE_ORDER_STATUSES } from '../config/constants.js';
 import Product from '../models/Product.js';
 import User from '../models/User.js';
 import Attendance from '../models/Attendance.js';
@@ -93,7 +92,7 @@ const WIDGETS = [
       const match = { ...base(ctx), status: { $in: LIVE_INVOICE }, ...scopeOf(ctx, 'salesman') };
       const [inv, ord] = await Promise.all([
         sumOf(Invoice, match, 'total', 'invoiceDate', w.today, w.tomorrow),
-        sumOf(Order, { ...base(ctx), status: { $nin: NON_SALE_ORDER_STATUSES }, ...scopeOf(ctx, 'salesman') }, 'total', 'orderDate', w.today, w.tomorrow),
+        sumOf(Order, { ...base(ctx), status: { $nin: ['DRAFT', 'CANCELLED', 'REJECTED'] }, ...scopeOf(ctx, 'salesman') }, 'total', 'orderDate', w.today, w.tomorrow),
       ]);
       return { value: inv.total, format: 'money', hint: `${inv.count} invoices · ${ord.count} orders booked (${ord.total.toLocaleString('en-IN')})`, tone: 'brand' };
     },
@@ -347,7 +346,7 @@ const WIDGETS = [
     load: async (ctx) => {
       const w = windows(ctx.tz);
       const rows = await Order.aggregate([
-        { $match: { ...base(ctx), status: { $nin: NON_SALE_ORDER_STATUSES }, orderDate: { $gte: w.monthStart, $lt: w.tomorrow }, salesman: { $ne: null }, ...scopeOf(ctx, 'salesman') } },
+        { $match: { ...base(ctx), status: { $nin: ['DRAFT', 'CANCELLED', 'REJECTED'] }, orderDate: { $gte: w.monthStart, $lt: w.tomorrow }, salesman: { $ne: null }, ...scopeOf(ctx, 'salesman') } },
         { $group: { _id: '$salesman', n: { $sum: 1 }, value: { $sum: '$total' } } },
         { $sort: { value: -1 } },
         { $limit: 5 },

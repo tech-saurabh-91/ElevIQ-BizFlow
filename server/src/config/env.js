@@ -68,18 +68,6 @@ export const env = {
     name: process.env.SUPER_ADMIN_NAME || 'ElevIQ Platform Admin',
   },
 
-  // Customer messages (OTP, order updates) by SMS / WhatsApp.
-  //   none    - off (default): messages stay in the portal inbox, PIN login only
-  //   log     - development: messages (and OTPs) are written to the server log
-  //   webhook - POST { channel, to, text, kind } to MESSAGING_WEBHOOK_URL, with
-  //             MESSAGING_WEBHOOK_TOKEN as a Bearer token; wire it to any
-  //             provider (MSG91, Twilio, Gupshup...) or an automation tool.
-  messaging: {
-    driver: (process.env.MESSAGING_DRIVER || 'none').toLowerCase(),
-    webhookUrl: process.env.MESSAGING_WEBHOOK_URL || '',
-    webhookToken: process.env.MESSAGING_WEBHOOK_TOKEN || '',
-    channel: (process.env.MESSAGING_CHANNEL || 'sms').toLowerCase(),
-  },
   upload: {
     maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB || '5', 10),
     dir: onVercel ? path.join(os.tmpdir(), 'uploads') : process.env.UPLOAD_DIR || 'uploads',

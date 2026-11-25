@@ -163,21 +163,6 @@ const schema = z.object({
     allowNegativeStock: z.boolean(),
     defaultPaymentMode: z.enum(['CASH', 'CREDIT']),
     showStockOnOrder: z.boolean(),
-    staleConfirmedDays: str(3).refine((v) => !v || (/^\d+$/.test(v) && Number(v) <= 365), 'Whole days, 0 to 365'),
-    autoCancelDays: str(3).refine((v) => !v || (/^\d+$/.test(v) && Number(v) <= 365), 'Whole days, 0 to 365'),
-  }),
-
-  portal: z.object({
-    enabled: z.boolean(),
-    requestExpiryDays: str(2).refine((v) => /^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 60, '1 to 60 days'),
-    minOrderValue: str(14),
-    showStockStatus: z.boolean(),
-    showOutstanding: z.boolean(),
-    otpLogin: z.boolean(),
-    sendMessages: z.boolean(),
-    autoConfirm: z.boolean(),
-    paymentClaims: z.boolean(),
-    returns: z.boolean(),
   }),
 
   approvals: z.object({
@@ -288,21 +273,6 @@ const toDefaults = (data) => ({
     allowNegativeStock: data?.order?.allowNegativeStock ?? false,
     defaultPaymentMode: data?.order?.defaultPaymentMode || 'CREDIT',
     showStockOnOrder: data?.order?.showStockOnOrder ?? true,
-    staleConfirmedDays: String(data?.order?.staleConfirmedDays ?? 7),
-    autoCancelDays: String(data?.order?.autoCancelDays ?? 0),
-  },
-
-  portal: {
-    enabled: data?.portal?.enabled ?? false,
-    requestExpiryDays: String(data?.portal?.requestExpiryDays ?? 3),
-    minOrderValue: String(data?.portal?.minOrderValue ?? 0),
-    showStockStatus: data?.portal?.showStockStatus ?? true,
-    showOutstanding: data?.portal?.showOutstanding ?? true,
-    otpLogin: data?.portal?.otpLogin ?? false,
-    sendMessages: data?.portal?.sendMessages ?? false,
-    autoConfirm: data?.portal?.autoConfirm ?? false,
-    paymentClaims: data?.portal?.paymentClaims ?? true,
-    returns: data?.portal?.returns ?? true,
   },
 
   approvals: {
@@ -338,9 +308,6 @@ const toDefaults = (data) => ({
 
 function SettingsForm({ data, canUpdate, tab }) {
   const queryClient = useQueryClient();
-  // Customer portal: only when the plan includes it.
-  const portalModule = useAuthStore((s) => s.company?.featureFlags?.customerPortal === true);
-  const companyCode = useAuthStore((s) => s.company?.code || '');
   const { lookups } = useLookups();
   const [formError, setFormError] = useState('');
 
@@ -427,21 +394,7 @@ function SettingsForm({ data, canUpdate, tab }) {
 
       tax: { ...values.tax, defaultTaxRate: num(values.tax.defaultTaxRate) },
       invoice: { ...values.invoice, defaultDueDays: num(values.invoice.defaultDueDays) },
-      order: {
-        ...values.order,
-        approvalThreshold: num(values.order.approvalThreshold),
-        staleConfirmedDays: num(values.order.staleConfirmedDays) ?? 0,
-        autoCancelDays: num(values.order.autoCancelDays) ?? 0,
-      },
-      ...(portalModule
-        ? {
-            portal: {
-              ...values.portal,
-              requestExpiryDays: num(values.portal.requestExpiryDays),
-              minOrderValue: num(values.portal.minOrderValue) ?? 0,
-            },
-          }
-        : {}),
+      order: { ...values.order, approvalThreshold: num(values.order.approvalThreshold) },
       inventory: {
         ...values.inventory,
         defaultWarehouse: opt(values.inventory.defaultWarehouse),
@@ -508,7 +461,6 @@ function SettingsForm({ data, canUpdate, tab }) {
 
   const disabled = !canUpdate;
   const readOnly = disabled ? { disabled: true } : {};
-  const portalLink = `${window.location.origin}/portal/${companyCode}`;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
@@ -909,126 +861,9 @@ function SettingsForm({ data, canUpdate, tab }) {
                   disabled={disabled}
                 />
               </div>
-              <Field
-                label="Remind about confirmed orders not invoiced after (days)"
-                error={errors.order?.staleConfirmedDays?.message}
-                hint="Their stock stays reserved until invoiced or cancelled. A daily reminder goes to approvers and each salesman. 0 = no reminder."
-              >
-                <Input type="number" min="0" max="365" {...register('order.staleConfirmedDays')} {...readOnly} />
-              </Field>
-              <Field
-                label="Cancel confirmed orders not invoiced after (days)"
-                error={errors.order?.autoCancelDays?.message}
-                hint="Frees their reserved stock automatically. Orders already part-invoiced are left alone. 0 = never (recommended unless orders often go stale)."
-              >
-                <Input type="number" min="0" max="365" {...register('order.autoCancelDays')} {...readOnly} />
-              </Field>
             </FormSection>
           </CardContent>
         </Card>
-
-        {portalModule && (
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle>Customer portal (online ordering)</CardTitle>
-              <CardDescription>
-                Your customers order on their own from your link. Their orders arrive as customer requests: nothing is
-                reserved until you accept them.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FormSection>
-                <div className="space-y-2 sm:col-span-2">
-                  <Checkbox
-                    label="Let customers order online"
-                    description="Then give each customer a login from Customers → ⋯ → Online ordering."
-                    {...register('portal.enabled')}
-                    disabled={disabled}
-                  />
-                  <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                    <span className="text-muted-foreground">Your ordering link:</span>
-                    <code className="break-all font-medium">{portalLink}</code>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => navigator.clipboard?.writeText(portalLink).then(() => toast.success('Link copied'))}
-                    >
-                      Copy
-                    </Button>
-                  </div>
-                </div>
-                <Field
-                  label="Requests expire after (days)"
-                  error={errors.portal?.requestExpiryDays?.message}
-                  hint="A customer request nobody accepts or rejects in time expires; the customer sees it."
-                >
-                  <Input type="number" min="1" max="60" {...register('portal.requestExpiryDays')} {...readOnly} />
-                </Field>
-                <Field
-                  label="Minimum order value"
-                  error={errors.portal?.minOrderValue?.message}
-                  hint="0 = no minimum."
-                >
-                  <Input type="number" min="0" step="0.01" {...register('portal.minOrderValue')} {...readOnly} />
-                </Field>
-                <div className="space-y-2 sm:col-span-2">
-                  <Checkbox
-                    label="Show stock status on products"
-                    description="In stock / Low / Out of stock only, never the quantity."
-                    {...register('portal.showStockStatus')}
-                    disabled={disabled}
-                  />
-                  <Checkbox
-                    label="Show balance and statement"
-                    description="Outstanding amount on their home screen, statement of account, and online balance confirmation."
-                    {...register('portal.showOutstanding')}
-                    disabled={disabled}
-                  />
-                  <Checkbox
-                    label="Customers can tell you about payments"
-                    description="They send the amount, UPI / bank reference and a screenshot. Your accountant checks the bank and records the receipt (Sales → Online Requests)."
-                    {...register('portal.paymentClaims')}
-                    disabled={disabled}
-                  />
-                  <Checkbox
-                    label="Customers can raise returns and complaints"
-                    description="Damaged, expired, wrong or short goods, with photos. You accept, reject or resolve them."
-                    {...register('portal.returns')}
-                    disabled={disabled}
-                  />
-                  <Checkbox
-                    label="Confirm orders from trusted customers automatically"
-                    description="For customers marked trusted (Customers → ⋯ → Online ordering): confirmed at once when stock is free, the credit limit is not crossed and the order is below the approval limit. Otherwise they wait for review as usual."
-                    {...register('portal.autoConfirm')}
-                    disabled={disabled}
-                  />
-                </div>
-                <div className="space-y-2 rounded-md border p-3 sm:col-span-2">
-                  <p className="text-sm font-medium">SMS / WhatsApp</p>
-                  {!data?.messagingReady && (
-                    <p className="text-xs text-muted-foreground">
-                      No SMS / WhatsApp provider is set up on the server yet, so these stay off: customers sign in with their PIN and
-                      see updates in their portal inbox. Ask your service provider to connect one.
-                    </p>
-                  )}
-                  <Checkbox
-                    label="Sign in with a one-time code (OTP)"
-                    description="Customers can get a 6-digit code on their mobile instead of typing the PIN."
-                    {...register('portal.otpLogin')}
-                    disabled={disabled || !data?.messagingReady}
-                  />
-                  <Checkbox
-                    label="Send order, invoice and payment updates by SMS / WhatsApp"
-                    description="The same updates they see in the portal inbox. Each message may cost money with your provider."
-                    {...register('portal.sendMessages')}
-                    disabled={disabled || !data?.messagingReady}
-                  />
-                </div>
-              </FormSection>
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       {/* ---------------- Operations ---------------- */}

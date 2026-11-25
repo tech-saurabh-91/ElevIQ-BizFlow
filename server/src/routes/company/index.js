@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { paymentClaimRoutes, returnRequestRoutes } from './portalRequests.js';
 import companyAuthRoutes from './auth.js';
 import customerRoutes from './customers.js';
 import productRoutes from './products.js';
@@ -130,9 +129,6 @@ router.use('/credit-notes', creditNoteRoutes);
 
 // ---- Phase 6: payments & collections ---------------------------------------
 router.use('/payments', paymentRoutes);
-// Customer portal: payment claims and returns / complaints from customers.
-router.use('/payment-claims', paymentClaimRoutes);
-router.use('/returns', returnRequestRoutes);
 
 // ---- Phase 7: inventory + field force --------------------------------------
 router.use('/inventory', inventoryRoutes);

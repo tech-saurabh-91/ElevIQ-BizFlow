@@ -44,7 +44,6 @@ export const summary = asyncHandler(async (req, res) => {
     overdueCount: 0,
     lowStockCount: 0,
     pendingApprovals: 0,
-    portalRequests: 0,
     recentOrders: [],
   };
 
@@ -104,8 +103,7 @@ export const summary = asyncHandler(async (req, res) => {
   const loadOrders = async () => {
     try {
       const { default: Order } = await import('../../models/Order.js');
-      // Customer requests are not sales until accepted.
-      const moneyStatuses = { $nin: ['CANCELLED', 'REJECTED', 'REQUESTED', 'EXPIRED'] };
+      const moneyStatuses = { $nin: ['CANCELLED', 'REJECTED'] };
       const tenantId = new mongoose.Types.ObjectId(companyId);
 
       const [ordersToday, pendingSales, pending, recent, today] = await Promise.all([
@@ -126,11 +124,7 @@ export const summary = asyncHandler(async (req, res) => {
           },
           { $group: { _id: null, count: { $sum: 1 }, total: { $sum: '$total' } } },
         ]),
-        Promise.all([
-          Order.countDocuments({ ...bySalesman, status: 'PENDING_APPROVAL' }),
-          // Customers' online orders waiting for review.
-          Order.countDocuments({ ...bySalesman, status: 'REQUESTED' }),
-        ]),
+        Order.countDocuments({ ...bySalesman, status: 'PENDING_APPROVAL' }),
         Order.find({ ...bySalesman })
           .sort({ createdAt: -1 })
           .limit(5)
@@ -155,8 +149,7 @@ export const summary = asyncHandler(async (req, res) => {
         salesToday: Math.round((today?.[0]?.total || 0) * 100) / 100,
         ordersMtd: pendingSales?.[0]?.count || 0,
         salesMtd: Math.round((pendingSales?.[0]?.total || 0) * 100) / 100,
-        pendingApprovals: pending[0],
-        portalRequests: pending[1],
+        pendingApprovals: pending,
         recentOrders: recent.map((o) => ({
           id: String(o._id),
           orderNo: o.orderNo,
