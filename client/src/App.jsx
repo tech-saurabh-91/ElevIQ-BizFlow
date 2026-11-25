@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/store/authStore';
 import PageErrorBoundary from '@/components/shell/PageErrorBoundary';
 import { usePermissions } from '@/hooks/usePermissions';
 import { LoadingState } from '@/components/ui/misc';
@@ -120,7 +121,10 @@ function Protected({ scope, children }) {
 
   if (!user) {
     const login = scope === 'platform' ? '/platform/login' : '/login';
-    return <Navigate to={login} replace state={{ from: location.pathname + location.search }} />;
+    // Remember whose page this was, so a different user signing in next is not
+    // dropped onto it (see authStore.returnPath).
+    const forUser = useAuthStore.getState().lastUserId;
+    return <Navigate to={login} replace state={{ from: location.pathname + location.search, forUser }} />;
   }
 
   if (scope && user.scope !== scope) {

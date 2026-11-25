@@ -7,6 +7,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/store/authStore';
 import { Input, Label } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorAlert } from '@/components/ui/alert';
@@ -36,7 +37,7 @@ export default function PlatformLogin() {
     const res = await loginAsPlatform(values);
     if (res.ok) {
       toast.success('Welcome back, ElevIQ admin');
-      const from = location.state?.from || '/platform';
+      const from = useAuthStore.getState().returnPath(location.state, '/platform');
       navigate(from, { replace: true });
     } else {
       if (res.error?.errors?.length) {

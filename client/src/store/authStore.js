@@ -43,6 +43,12 @@ export const useAuthStore = create(
        * buttons that book something are hidden (server: requireFieldDay).
        */
       fieldDayBlocked: false,
+      /**
+       * Who was signed in just before the last sign-out (memory only). The
+       * login screen sends a user back to the page they were on only when the
+       * same person signs in again - never into another user's page.
+       */
+      lastUserId: null,
 
       setHydrated: () => set({ hydrated: true }),
       setFieldDayBlocked: (value) => set({ fieldDayBlocked: Boolean(value) }),
@@ -128,7 +134,8 @@ export const useAuthStore = create(
       setCompany: (company) => set({ company }),
 
       clear: () =>
-        set({
+        set((state) => ({
+          lastUserId: state.user?.id ?? state.lastUserId,
           accessToken: null,
           scope: null,
           user: null,
@@ -137,7 +144,19 @@ export const useAuthStore = create(
           settings: null,
           status: 'idle',
           impersonation: null,
-        }),
+        })),
+
+      /**
+       * Where to go after a successful sign-in: the page that asked for it,
+       * but only when it was the same user's page (or nobody was signed in).
+       */
+      returnPath: (state, fallback) => {
+        const from = state?.from;
+        if (!from) return fallback;
+        const owner = state?.forUser;
+        const me = get().user?.id;
+        return !owner || owner === me ? from : fallback;
+      },
 
       // ---- derived helpers -------------------------------------------
       isAuthenticated: () => Boolean(get().user),

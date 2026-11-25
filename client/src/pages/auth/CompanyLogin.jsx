@@ -7,6 +7,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/store/authStore';
 import { Input, Label } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorAlert } from '@/components/ui/alert';
@@ -62,7 +63,7 @@ export default function CompanyLogin() {
       // Back to the page that asked for sign-in - except the change-password
       // screen: right after changing it there, that would show it again. If a
       // change is still required, the route guard sends the user there anyway.
-      const from = location.state?.from || '/app';
+      const from = useAuthStore.getState().returnPath(location.state, '/app');
       navigate(from.startsWith('/app/change-password') ? '/app' : from, { replace: true });
     } else {
       if (res.error?.errors?.length) {
