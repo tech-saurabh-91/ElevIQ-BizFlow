@@ -1,6 +1,4 @@
 import mongoose from 'mongoose';
-import CustomerAccount from '../../models/CustomerAccount.js';
-import { notifyCustomer } from '../../services/customerMessaging.js';
 import ExcelJS from 'exceljs';
 import { renderDocumentPdf, companyBlock, addressText, dateText, lineColumns, lineRow, priceTotals, itemSummary } from '../../services/docPdf.js';
 import { notePrint } from '../../services/printControl.js';
@@ -48,7 +46,7 @@ import { companyToday, tzOf } from '../../utils/companyTime.js';
 import { numberOutOfYear } from '../../utils/numberSeries.js';
 
 /** Relations returned on every invoice read so the UI never needs a second call. */
-export const POPULATE = [
+const POPULATE = [
   {
     path: 'customerId',
     select:
@@ -466,15 +464,6 @@ const issueInvoice = async (req, invoice, note = '') => {
     { _id: invoice.customerId },
     { $inc: { outstanding: Number(invoice.total || 0) } }
   );
-  // Customers ordering online see each new invoice in their portal inbox.
-  if (await CustomerAccount.exists({ customer: invoice.customerId })) {
-    await notifyCustomer(invoice.customerId, {
-      type: 'INVOICE',
-      title: `Invoice ${invoice.invoiceNo} for ${Number(invoice.total || 0).toFixed(2)}`,
-      body: invoice.dueDate ? `Due ${dayjs(invoice.dueDate).format('DD/MM/YYYY')}` : '',
-      link: 'invoices',
-    });
-  }
 
   for (const id of ordersOfInvoice(invoice)) {
     const order = await syncOrderInvoicing(id);
@@ -1270,6 +1259,10 @@ const money2 = (n) => Number(n || 0).toFixed(2);
 
 export const pdf = asyncHandler(async (req, res) => {
   const invoice = await loadInvoice(req, req.params.id);
+  const settings = await settingsOf(req);
+  const company = sellerFor(invoice, req.company || {});
+  const loc = await pdfLocale(settings, company);
+  const customer = invoice.customerId || {};
   const print = await notePrint(req, {
     docType: 'INVOICE',
     docId: invoice._id,
@@ -1277,26 +1270,6 @@ export const pdf = asyncHandler(async (req, res) => {
     partyName: invoice.customerName,
     draft: invoice.status === 'DRAFT',
   });
-  await renderInvoicePdf(req, res, invoice, print);
-
-  audit(req, {
-    action: AUDIT_ACTIONS.EXPORT,
-    entityType: 'Invoice',
-    entityId: invoice._id,
-    entityLabel: labelOf(invoice),
-    description: `Printed invoice ${labelOf(invoice)}${print.copyLabel ? ` (${print.copyLabel.toLowerCase()})` : ''}`,
-  });
-});
-
-/**
- * Write one invoice's PDF to `res`. `print` = { copyLabel, watermark, printedBy }
- * (staff prints go through notePrint; the customer portal passes its own label).
- */
-export const renderInvoicePdf = async (req, res, invoice, print = {}) => {
-  const settings = await settingsOf(req);
-  const company = sellerFor(invoice, req.company || {});
-  const loc = await pdfLocale(settings, company);
-  const customer = invoice.customerId || {};
 
   // Order no. of each billed order (an invoice may bill several of one customer).
   const orderNos = invoice.orderNos?.length ? invoice.orderNos.filter(Boolean) : invoice.orderNo ? [invoice.orderNo] : [];
@@ -1364,7 +1337,15 @@ export const renderInvoicePdf = async (req, res, invoice, print = {}) => {
     qr,
     signatures: ["Customer's signature", 'Authorised signatory'],
   });
-};
+
+  audit(req, {
+    action: AUDIT_ACTIONS.EXPORT,
+    entityType: 'Invoice',
+    entityId: invoice._id,
+    entityLabel: labelOf(invoice),
+    description: `Printed invoice ${labelOf(invoice)}${print.copyLabel ? ` (${print.copyLabel.toLowerCase()})` : ''}`,
+  });
+});
 
 export default {
   list,

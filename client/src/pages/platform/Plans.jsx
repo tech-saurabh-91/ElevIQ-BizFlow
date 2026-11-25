@@ -30,7 +30,6 @@ const FEATURES = [
   ['barcode', 'Barcode'],
   ['schemes', 'Schemes & discounts'],
   ['purchase', 'Purchase (orders, receipts, supplier bills & payments)'],
-  ['customerPortal', 'Customer portal (customers order online)'],
 ];
 
 const schema = z.object({

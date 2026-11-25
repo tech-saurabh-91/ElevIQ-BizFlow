@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { BookOpenText, Globe, LocateFixed, Upload, Users } from 'lucide-react';
+import { BookOpenText, LocateFixed, Upload, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { ConfirmDialog } from '@/components/ui/dialog';
@@ -11,7 +11,6 @@ import { ConfirmDialog } from '@/components/ui/dialog';
 import api, { apiError, toFieldErrors } from '@/api/client';
 import ResourcePage from '@/components/company/ResourcePage';
 import CustomerImport from '@/components/company/CustomerImport';
-import PortalAccessDialog from '@/components/company/PortalAccessDialog';
 import { useAuthStore } from '@/store/authStore';
 import { AddressFields, FormActions, FormSection, num, numInput, opt } from '@/components/company/form-utils';
 import { Input, Select, Textarea, Field } from '@/components/ui/input';
@@ -580,10 +579,6 @@ export default function Customers() {
   const { can } = usePermissions();
   const navigate = useNavigate();
   const [importing, setImporting] = useState(false);
-  const [portalFor, setPortalFor] = useState(null);
-  const canStatement = can('customers.statement');
-  // Online ordering logins: only when the plan has the customer portal.
-  const canPortal = can('customers.portal') && company?.featureFlags?.customerPortal === true;
 
   const columns = [
     {
@@ -711,30 +706,16 @@ export default function Customers() {
         formSize="xl"
         renderForm={(props) => <CustomerForm {...props} />}
         rowActions={
-          canStatement || canPortal
+          can('customers.statement')
             ? (row, { close }) => (
-                <>
-                  {canStatement && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        close();
-                        navigate(`/app/ledger/customer/${row.id}`);
-                      }}
-                    >
-                      <BookOpenText className="h-4 w-4" /> Statement
-                    </DropdownMenuItem>
-                  )}
-                  {canPortal && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        close();
-                        setPortalFor(row);
-                      }}
-                    >
-                      <Globe className="h-4 w-4" /> Online ordering
-                    </DropdownMenuItem>
-                  )}
-                </>
+                <DropdownMenuItem
+                  onClick={() => {
+                    close();
+                    navigate(`/app/ledger/customer/${row.id}`);
+                  }}
+                >
+                  <BookOpenText className="h-4 w-4" /> Statement
+                </DropdownMenuItem>
               )
             : undefined
         }
@@ -745,7 +726,6 @@ export default function Customers() {
         }
       />
       <CustomerImport open={importing} onClose={() => setImporting(false)} />
-      <PortalAccessDialog customer={portalFor} open={Boolean(portalFor)} onClose={() => setPortalFor(null)} />
     </>
   );
 }

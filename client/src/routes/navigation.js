@@ -6,7 +6,6 @@
  * matrix (COMPANY_ADMIN always sees everything).
  */
 import {
-  Inbox,
   LayoutDashboard,
   Printer,
   ShoppingBag,
@@ -111,8 +110,6 @@ export const companyNav = [
       { to: '/app/invoices', label: 'Invoices', icon: FileText, permission: 'invoices.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/payments', label: 'Payments & Collections', icon: Wallet, permission: 'payments.view', excludeRoles: ['SALESMAN'] },
       { to: '/app/credit-notes', label: 'Credit Notes', icon: ClipboardList, permission: 'creditnotes.view', excludeRoles: ['SALESMAN'] },
-      // Customer portal: payments customers told us about, returns / complaints.
-      { to: '/app/customer-requests', label: 'Online Requests', icon: Inbox, anyPermission: ['payments.claims', 'returns.manage'], module: 'customerPortal' },
     ],
   },
   {

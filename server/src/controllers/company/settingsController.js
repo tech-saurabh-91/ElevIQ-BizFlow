@@ -1,5 +1,4 @@
 import Setting from '../../models/Setting.js';
-import { messagingAvailable } from '../../services/customerMessaging.js';
 import Company from '../../models/Company.js';
 import Warehouse from '../../models/Warehouse.js';
 import { AppError } from '../../utils/errors.js';
@@ -13,7 +12,7 @@ import { assertAddresses } from '../../services/locationService.js';
 import { assertIdentity } from '../../services/identityRules.js';
 import { assertUnlocked, lockInfo } from '../../services/settingLocks.js';
 
-const SECTIONS = ['series', 'tax', 'invoice', 'order', 'inventory', 'collections', 'fieldForce', 'approvals', 'portal'];
+const SECTIONS = ['series', 'tax', 'invoice', 'order', 'inventory', 'collections', 'fieldForce', 'approvals'];
 const SCALARS = [
   'displayName',
   'logo',
@@ -66,8 +65,7 @@ const locksFor = async (req) => ({ ...(await lockInfo(req.companyId)), canEditSu
 /** GET /api/v1/settings - full workspace configuration. */
 export const get = asyncHandler(async (req, res) => {
   const [doc, company, locks] = await Promise.all([Setting.forCompany(req.companyId), companyOf(req), locksFor(req)]);
-  // messagingReady: an SMS / WhatsApp provider is set up on the server (OTP, customer messages).
-  return success(res, { data: { ...present(doc, company), locks, messagingReady: messagingAvailable() } });
+  return success(res, { data: { ...present(doc, company), locks } });
 });
 
 /** PATCH /api/v1/settings - merge-update the editable configuration. */
@@ -223,7 +221,7 @@ export const update = asyncHandler(async (req, res) => {
 
   return success(res, {
     message: 'Settings saved',
-    data: { ...present(doc, await companyOf(req)), locks: await locksFor(req), messagingReady: messagingAvailable() },
+    data: { ...present(doc, await companyOf(req)), locks: await locksFor(req) },
   });
 });
 

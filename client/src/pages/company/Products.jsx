@@ -180,77 +180,6 @@ const useCatalog = () => {
   return { groups: groups.data || [], units: units.data || [] };
 };
 
-/** Product photo, shown to customers in the online portal. Saved at once. */
-function ProductPhoto({ product, canEdit }) {
-  const [image, setImage] = useState(product?.image || '');
-  const [busy, setBusy] = useState(false);
-  if (!product?.id) return null;
-  const upload = async (file) => {
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Choose a photo under 5 MB');
-      return;
-    }
-    setBusy(true);
-    try {
-      const body = new FormData();
-      body.append('image', file);
-      const { data } = await api.post(`/v1/products/${product.id}/image`, body, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setImage(data.data.image);
-      toast.success('Photo saved');
-    } catch (err) {
-      toast.error(apiError(err).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const remove = async () => {
-    setBusy(true);
-    try {
-      await api.delete(`/v1/products/${product.id}/image`);
-      setImage('');
-      toast.success('Photo removed');
-    } catch (err) {
-      toast.error(apiError(err).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="flex items-center gap-3 sm:col-span-2">
-      {image ? (
-        <img src={image} alt="" className="h-20 w-20 rounded-md border bg-muted object-contain" />
-      ) : (
-        <span className="flex h-20 w-20 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
-          No photo
-        </span>
-      )}
-      {canEdit && (
-        <div className="space-y-1">
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
-            <Upload className="h-4 w-4" /> {busy ? 'Saving…' : image ? 'Change photo' : 'Add photo'}
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              disabled={busy}
-              onChange={(e) => upload(e.target.files?.[0])}
-            />
-          </label>
-          {image && (
-            <button type="button" className="block text-xs text-destructive hover:underline" onClick={remove} disabled={busy}>
-              Remove photo
-            </button>
-          )}
-          <p className="text-xs text-muted-foreground">Customers see it when ordering online. PNG, JPG or WebP, up to 5 MB.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ProductForm({ mode, initial, onClose, onSaved }) {
   const { taxLabel, country } = useTaxLabels();
   const isIndia = country?.code === 'IN';
@@ -691,7 +620,6 @@ function ProductForm({ mode, initial, onClose, onSaved }) {
         </FormSection>
 
         <FormSection title="Other">
-          {!creating && <ProductPhoto product={initial} canEdit={!viewOnly && can('products.update')} />}
           <Field label="Description" error={errors.description?.message} className="sm:col-span-2">
             <Textarea {...register('description')} />
           </Field>

@@ -8,7 +8,6 @@ import {
   CalendarClock,
   CheckCircle2,
   ClipboardList,
-  Globe,
   Download,
   Eye,
   MoreHorizontal,
@@ -33,8 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Badge, StatusBadge } from '@/components/ui/badge';
-import { Alert } from '@/components/ui/alert';
+import { StatusBadge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -51,7 +49,6 @@ import {
   openOrderPdf,
   orderActionsFor,
   statusLabel,
-  isPortalOrder,
 } from '@/components/company/order-shared';
 import { todayInput } from '@/components/company/form-utils';
 
@@ -71,9 +68,6 @@ export default function Orders() {
   const status = params.get('status') || '';
   const dateFrom = params.get('dateFrom') || '';
   const dateTo = params.get('dateTo') || '';
-  const source = params.get('source') || '';
-  // Set by the "confirmed but not invoiced" reminder.
-  const olderThanDays = Number(params.get('olderThanDays') || 0);
   const page = Number(params.get('page') || 1);
   const limit = Number(params.get('limit') || 20);
   const sort = params.get('sort') || '';
@@ -113,14 +107,12 @@ export default function Orders() {
     if (status) out.status = status;
     if (dateFrom) out.dateFrom = dateFrom;
     if (dateTo) out.dateTo = dateTo;
-    if (source) out.source = source;
-    if (olderThanDays > 0) out.olderThanDays = olderThanDays;
     if (sort) {
       out.sort = sort;
       out.order = order;
     }
     return out;
-  }, [page, limit, searchParam, status, dateFrom, dateTo, source, olderThanDays, sort, order]);
+  }, [page, limit, searchParam, status, dateFrom, dateTo, sort, order]);
 
   const { data, isLoading, isError, error, isFetching } = useQuery({
     queryKey: ['company', 'orders', queryParams],
@@ -158,7 +150,7 @@ export default function Orders() {
     onError: (err) => toast.error(apiError(err).message),
   });
 
-  const hasActiveFilters = Boolean(searchParam || status || dateFrom || dateTo || source || olderThanDays || sort);
+  const hasActiveFilters = Boolean(searchParam || status || dateFrom || dateTo || sort);
 
   const resetAll = () => {
     const next = new URLSearchParams();
@@ -187,11 +179,6 @@ export default function Orders() {
           >
             {row.orderNo || 'Draft'}
           </Link>
-          {isPortalOrder(row) && (
-            <Badge tone="info" className="ml-1.5 align-middle" title="Placed by the customer online">
-              Online
-            </Badge>
-          )}
           <p className="truncate text-xs text-muted-foreground">
             {row.poReference ? `PO ${row.poReference}` : `${formatNumber(row.itemCount || 0)} units`}
           </p>
@@ -308,28 +295,6 @@ export default function Orders() {
         />
       </div>
 
-      {stats?.portalRequests > 0 && status !== 'REQUESTED' && (
-        <Alert tone="warning" icon={Globe}>
-          <span>
-            {formatNumber(stats.portalRequests)} online order{stats.portalRequests === 1 ? '' : 's'} from customers
-            waiting for review. Nothing is reserved until you accept.{' '}
-            <button
-              type="button"
-              className="font-semibold underline underline-offset-2"
-              onClick={() => setParam({ status: 'REQUESTED', page: 1 })}
-            >
-              Review now
-            </button>
-          </span>
-        </Alert>
-      )}
-      {olderThanDays > 0 && (
-        <Alert tone="info" onClose={() => setParam({ olderThanDays: '', page: 1 })}>
-          Showing orders dated more than {olderThanDays} days ago. Their stock stays reserved until they are invoiced or
-          cancelled.
-        </Alert>
-      )}
-
       <Card className={FILTER_CARD}>
         <CardContent className={FILTER_ROW}>
           <div className="relative min-w-0 flex-1">
@@ -354,7 +319,7 @@ export default function Orders() {
           </div>
 
           <FilterPanel
-            active={[status, dateFrom, dateTo, source].filter(Boolean).length}
+            active={[status, dateFrom, dateTo].filter(Boolean).length}
             onReset={hasActiveFilters ? resetAll : undefined}
           >
             <Select
@@ -368,16 +333,6 @@ export default function Orders() {
                   {value ? statusLabel(value) : 'All statuses'}
                 </option>
               ))}
-            </Select>
-            <Select
-              value={source}
-              onChange={(e) => setParam({ source: e.target.value, page: 1 })}
-              className="w-40"
-              aria-label="Filter by source"
-            >
-              <option value="">All sources</option>
-              <option value="PORTAL">Online (customer)</option>
-              <option value="WEB">Booked by staff</option>
             </Select>
 
             <Input
@@ -472,7 +427,6 @@ export default function Orders() {
               {rows.map((row) => {
                 const available = actionsFor(row);
                 const isDraft = row.status === 'DRAFT';
-                const isRequest = row.status === 'REQUESTED';
                 return (
                   <TableRow key={row.id}>
                     {columns.map((col) => (
@@ -500,9 +454,9 @@ export default function Orders() {
                             <DropdownMenuItem onClick={() => navigate(`/app/orders/${row.id}`)}>
                               <Eye className="h-4 w-4" /> View order
                             </DropdownMenuItem>
-                            {(isDraft || isRequest) && can('orders.update') && (
+                            {isDraft && can('orders.update') && (
                               <DropdownMenuItem onClick={() => navigate(`/app/orders/${row.id}/edit`)}>
-                                <Pencil className="h-4 w-4" /> {isRequest ? 'Change quantities' : 'Edit draft'}
+                                <Pencil className="h-4 w-4" /> Edit draft
                               </DropdownMenuItem>
                             )}
                             {can('orders.print') && (
@@ -516,19 +470,6 @@ export default function Orders() {
                                 onClick={() => setAction({ action: 'submit', order: row })}
                               >
                                 <CheckCircle2 className="h-4 w-4" /> Submit
-                              </DropdownMenuItem>
-                            )}
-                            {available.includes('accept') && (
-                              <DropdownMenuItem onClick={() => setAction({ action: 'accept', order: row })}>
-                                <CheckCircle2 className="h-4 w-4" /> Accept order
-                              </DropdownMenuItem>
-                            )}
-                            {available.includes('reject') && isRequest && (
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => setAction({ action: 'reject', order: row })}
-                              >
-                                <X className="h-4 w-4" /> Reject order
                               </DropdownMenuItem>
                             )}
                             {available.includes('approve') && (

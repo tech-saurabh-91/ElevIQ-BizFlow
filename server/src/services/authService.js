@@ -306,8 +306,6 @@ export const loginCompany = async ({ identifier, password, companyCode, ip, user
       status: company.status,
       timezone: company.timezone,
       country: company.address?.country || '',
-      // Plan modules (purchase, customer portal...) so the menu is right from sign-in.
-      featureFlags: company.featureFlags || {},
       financialYearStartMonth: company.financialYearStartMonth,
     },
     user: {
@@ -335,8 +333,6 @@ export const refreshTokens = async ({ token, ip, userAgent, res }) => {
   const decoded = verifyRefreshToken(token);
   const { jti, scope, sub: userId, companyId } = decoded;
   if (!jti) throw new UnauthorizedError('Invalid refresh token', 'TOKEN_INVALID');
-  // Customer portal sessions refresh on /portal/auth/refresh only.
-  if (scope !== 'company' && scope !== 'platform') throw new UnauthorizedError('Invalid refresh token', 'TOKEN_INVALID');
 
   const session = await Session.findOne({ jti }).select('+refreshTokenHash').lean();
 
@@ -437,8 +433,6 @@ export const refreshTokens = async ({ token, ip, userAgent, res }) => {
       status: company.status,
       timezone: company.timezone,
       country: company.address?.country || '',
-      // Plan modules (purchase, customer portal...) so the menu is right from sign-in.
-      featureFlags: company.featureFlags || {},
     },
     user: {
       id: String(user._id),

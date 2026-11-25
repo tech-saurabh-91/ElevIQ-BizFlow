@@ -14,7 +14,6 @@ import { Dialog } from '@/components/ui/dialog';
 import { Field, Input, Select, Textarea } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Table,
   TableHeader,
@@ -322,21 +321,6 @@ export default function PartyLedger() {
           </div>
         </CardContent>
       </Card>
-
-      {ledger?.confirmation && (
-        <Alert tone={ledger.confirmation.status === 'CONFIRMED' ? 'success' : 'warning'}>
-          <AlertTitle>
-            {ledger.confirmation.status === 'CONFIRMED'
-              ? 'Customer confirmed this balance online'
-              : 'Customer does not agree with this balance'}
-          </AlertTitle>
-          <AlertDescription>
-            {withSide(ledger.confirmation.balance)} as on {formatDate(ledger.confirmation.asOf)} · answered{' '}
-            {formatDate(ledger.confirmation.at)}
-            {ledger.confirmation.note ? ` · “${ledger.confirmation.note}”` : ''}
-          </AlertDescription>
-        </Alert>
-      )}
 
       {ledger && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

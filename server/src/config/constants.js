@@ -70,26 +70,8 @@ export const ORDER_STATUS = Object.freeze({
   DELIVERED: 'DELIVERED',
   CANCELLED: 'CANCELLED',
   REJECTED: 'REJECTED',
-  // A customer's own order from the portal: nothing is reserved until staff
-  // accept it (then it follows DRAFT's path: approval or confirmed).
-  REQUESTED: 'REQUESTED',
-  // A customer request nobody reviewed in time (portal.requestExpiryDays).
-  EXPIRED: 'EXPIRED',
 });
 export const ORDER_STATUS_LIST = Object.values(ORDER_STATUS);
-
-// Orders that are not (yet, or any more) a sale: never counted in sales
-// totals, dashboards or reports.
-export const NON_SALE_ORDER_STATUSES = Object.freeze([
-  ORDER_STATUS.DRAFT,
-  ORDER_STATUS.REQUESTED,
-  ORDER_STATUS.EXPIRED,
-  ORDER_STATUS.CANCELLED,
-  ORDER_STATUS.REJECTED,
-]);
-
-// Where an order came from.
-export const ORDER_SOURCES = Object.freeze(['WEB', 'MOBILE', 'IMPORT', 'API', 'PORTAL']);
 
 // Status transitions allowed by the order state machine.
 export const ORDER_TRANSITIONS = Object.freeze({
@@ -102,14 +84,6 @@ export const ORDER_TRANSITIONS = Object.freeze({
   [ORDER_STATUS.DELIVERED]: [],
   [ORDER_STATUS.CANCELLED]: [],
   [ORDER_STATUS.REJECTED]: [],
-  [ORDER_STATUS.REQUESTED]: [
-    ORDER_STATUS.PENDING_APPROVAL,
-    ORDER_STATUS.CONFIRMED,
-    ORDER_STATUS.REJECTED,
-    ORDER_STATUS.CANCELLED,
-    ORDER_STATUS.EXPIRED,
-  ],
-  [ORDER_STATUS.EXPIRED]: [],
 });
 
 // ---------------------------------------------------------------------------
@@ -441,12 +415,6 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
   'customers.update': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
   'customers.delete': [COMPANY_ROLES.COMPANY_ADMIN],
   'customers.export': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
-  // Give a customer a portal login, reset its PIN, switch it off.
-  'customers.portal': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER],
-  // Customers' "I have paid" claims from the portal: check and record or reject.
-  'payments.claims': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.ACCOUNTANT],
-  // Customers' return / complaint requests from the portal.
-  'returns.manage': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.ACCOUNTANT],
 
   'products.view': ALL_ROLES,
   'products.create': [COMPANY_ROLES.COMPANY_ADMIN, COMPANY_ROLES.MANAGER, COMPANY_ROLES.WAREHOUSE],

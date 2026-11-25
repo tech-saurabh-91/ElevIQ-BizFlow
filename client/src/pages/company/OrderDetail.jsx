@@ -25,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Badge, StatusBadge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/badge';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { ConfirmDialog } from '@/components/ui/dialog';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -43,7 +43,6 @@ import { ShareDocumentButtons } from '@/components/company/share-document';
 import { CustomerChangedNote } from '@/components/company/customer-changed';
 
 const ACTION_BUTTONS = {
-  accept: { label: 'Accept order', icon: CheckCircle2 },
   submit: { label: 'Submit order', icon: Send },
   approve: { label: 'Approve', icon: CheckCircle2 },
   reject: { label: 'Reject', icon: XCircle, outline: true, destructive: true },
@@ -51,27 +50,6 @@ const ACTION_BUTTONS = {
   deliver: { label: 'Mark delivered', icon: PackageCheck },
   cancel: { label: 'Cancel order', icon: XCircle, outline: true, destructive: true },
 };
-
-/** What the customer asked for online vs what the order holds now. */
-function RequestedVsNow({ order }) {
-  const now = new Map(
-    (order.items || [])
-      .filter((l) => !l.isFree)
-      .map((l) => [`${l.product?.id || l.product?._id || l.product}|${l.unit}`, Number(l.qty)])
-  );
-  const changed = order.requestedItems.filter((r) => now.get(`${r.product}|${r.unit}`) !== Number(r.qty));
-  if (!changed.length) return null;
-  return (
-    <Alert tone="info">
-      <AlertTitle>Changed from the customer&apos;s order</AlertTitle>
-      <AlertDescription>
-        {changed
-          .map((r) => `${r.name}: asked ${formatNumber(r.qty)} ${r.unit || ''}, now ${formatNumber(now.get(`${r.product}|${r.unit}`) || 0)}`)
-          .join(' · ')}
-      </AlertDescription>
-    </Alert>
-  );
-}
 
 const addressLines = (address = {}) =>
   [address.line1, address.line2, address.city, address.state, address.pincode, address.country]
@@ -150,8 +128,6 @@ export default function OrderDetail() {
   const customer = order.customerId && typeof order.customerId === 'object' ? order.customerId : {};
   const available = orderActionsFor(order, can);
   const isDraft = order.status === 'DRAFT';
-  const isRequest = order.status === 'REQUESTED';
-  const portal = order.source === 'PORTAL';
   // Something still to bill on a confirmed order: invoice it from here.
   const unbilled = (order.items || []).some((i) => Number(i.qty || 0) - Number(i.invoicedQty || 0) > 0.0001);
   const canInvoice =
@@ -172,8 +148,7 @@ export default function OrderDetail() {
             <Button variant="outline" className="max-sm:hidden" onClick={() => navigate('/app/orders')}>
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
-            {/* Not printed or shared until it is accepted. */}
-            {can('orders.print') && !isRequest && (
+            {can('orders.print') && (
               <Button variant="outline" onClick={() => openOrderPdf(order)}>
                 <Printer className="h-4 w-4" /> Print / PDF
               </Button>
@@ -183,10 +158,10 @@ export default function OrderDetail() {
                 <FileText className="h-4 w-4" /> Create invoice
               </Button>
             )}
-            {!isRequest && <ShareDocumentButtons kind="order" doc={order} />}
-            {(isDraft || isRequest) && can('orders.update') && (
+            <ShareDocumentButtons kind="order" doc={order} />
+            {isDraft && can('orders.update') && (
               <Button variant="outline" onClick={() => navigate(`/app/orders/${order.id}/edit`)}>
-                <Pencil className="h-4 w-4" /> {isRequest ? 'Change quantities' : 'Edit draft'}
+                <Pencil className="h-4 w-4" /> Edit draft
               </Button>
             )}
             {available.map((key) => {
@@ -219,45 +194,15 @@ export default function OrderDetail() {
 
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge status={order.status} />
-        {portal && (
-          <Badge tone="info" title="Placed by the customer on the online ordering portal">
-            Online order
-          </Badge>
-        )}
         {order.approvalRequired && <span className="text-xs text-warning">Approval pending</span>}
         <span className="text-xs text-muted-foreground">
           Created {formatDateTime(order.createdAt)}
-          {portal ? ` by ${order.customerName} (online)` : order.createdBy?.name ? ` by ${order.createdBy.name}` : ''}
+          {order.createdBy?.name ? ` by ${order.createdBy.name}` : ''}
         </span>
         {order.poReference && (
           <span className="text-xs text-muted-foreground">PO ref {order.poReference}</span>
         )}
       </div>
-
-      {isRequest && (
-        <Alert tone="warning">
-          <AlertTitle>Customer&apos;s online order: review it</AlertTitle>
-          <AlertDescription>
-            No stock is reserved yet. Check the quantities (use “Change quantities” if you cannot send everything), then
-            accept it or reject it with a reason. The customer sees the outcome and any changes. Unreviewed requests
-            expire automatically.
-            {order.notes && <span className="mt-1 block">Customer&apos;s note: “{order.notes}”</span>}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {order.status === 'EXPIRED' && (
-        <Alert tone="warning">
-          <AlertTitle>Request expired</AlertTitle>
-          <AlertDescription>
-            Nobody accepted this online order in time. The customer can place it again.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {portal && order.requestedItems?.length > 0 && !isRequest && (
-        <RequestedVsNow order={order} />
-      )}
 
       {order.status === 'PENDING_APPROVAL' && (
         <Alert tone="info">

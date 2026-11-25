@@ -414,11 +414,6 @@ export default function WorkspaceHome() {
                     <Badge tone="info">
                       {formatNumber(summary.pendingApprovals ?? 0)} approvals
                     </Badge>
-                    {summary.portalRequests > 0 && (
-                      <Link to="/app/orders?status=REQUESTED" title="Customers' online orders waiting for review">
-                        <Badge tone="warning">{formatNumber(summary.portalRequests)} online orders to review</Badge>
-                      </Link>
-                    )}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Open the{' '}

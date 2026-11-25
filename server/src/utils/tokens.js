@@ -53,47 +53,6 @@ export const verifyRefreshToken = (token) => {
   }
 };
 
-// ---------------------------------------------------------------------------
-// Customer portal tokens: their own audience and cookie, so a portal session
-// and a staff session never stand in for each other (same browser included).
-// ---------------------------------------------------------------------------
-export const PORTAL_AUDIENCE = 'portal';
-export const PORTAL_REFRESH_COOKIE = 'eleviq_prt';
-
-export const signPortalAccessToken = ({ accountId, companyId, customerId, sid }) =>
-  jwt.sign({ sub: String(accountId), scope: 'customer', companyId: String(companyId), customerId: String(customerId), sid }, env.jwt.accessSecret, {
-    expiresIn: env.jwt.accessExpires,
-    issuer: 'eleviq-sfa',
-    audience: PORTAL_AUDIENCE,
-  });
-
-export const signPortalRefreshToken = ({ accountId, companyId, jti }) =>
-  jwt.sign({ sub: String(accountId), scope: 'customer', companyId: String(companyId), jti }, env.jwt.refreshSecret, {
-    expiresIn: env.jwt.refreshExpires,
-    issuer: 'eleviq-sfa',
-    audience: PORTAL_AUDIENCE,
-  });
-
-const verifyWith = (token, secret, label) => {
-  try {
-    const decoded = jwt.verify(token, secret, { issuer: 'eleviq-sfa', audience: PORTAL_AUDIENCE });
-    if (decoded.scope !== 'customer') throw new Error('scope');
-    return decoded;
-  } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      throw new AppError(`${label} expired`, { status: 401, code: 'TOKEN_EXPIRED' });
-    }
-    throw new AppError(`Invalid ${label.toLowerCase()}`, { status: 401, code: 'TOKEN_INVALID' });
-  }
-};
-export const verifyPortalAccessToken = (token) => verifyWith(token, env.jwt.accessSecret, 'Access token');
-export const verifyPortalRefreshToken = (token) => verifyWith(token, env.jwt.refreshSecret, 'Refresh token');
-
-const portalCookieOptions = () => ({ ...refreshCookieOptions(), path: '/api/portal' });
-export const setPortalRefreshCookie = (res, token) => res.cookie(PORTAL_REFRESH_COOKIE, token, portalCookieOptions());
-export const clearPortalRefreshCookie = (res) =>
-  res.clearCookie(PORTAL_REFRESH_COOKIE, { ...portalCookieOptions(), maxAge: undefined });
-
 export const newJti = () => crypto.randomUUID();
 
 export const hashToken = (token) =>

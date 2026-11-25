@@ -358,8 +358,6 @@ export default function OrderEditor() {
 
   // ---- Save ---------------------------------------------------------------
   const pendingIntent = useRef('draft');
-  // Editing a customer's online order (REQUESTED) before accepting it.
-  const isRequestEdit = isEdit && order?.status === 'REQUESTED';
 
   const mutation = useMutation({
     mutationFn: async (payload) => {
@@ -484,7 +482,7 @@ export default function OrderEditor() {
     );
   }
 
-  if (isEdit && order && order.status !== 'DRAFT' && order.status !== 'REQUESTED') {
+  if (isEdit && order && order.status !== 'DRAFT') {
     return (
       <div className="space-y-4">
         <PageHeader
@@ -998,7 +996,7 @@ export default function OrderEditor() {
                 disabled={saving}
               >
                 <Save className="h-4 w-4" />
-                {saving && intent === 'draft' ? 'Saving…' : isRequestEdit ? 'Save changes' : 'Save draft'}
+                {saving && intent === 'draft' ? 'Saving…' : 'Save draft'}
               </Button>
               <Button
                 type="button"
@@ -1007,12 +1005,10 @@ export default function OrderEditor() {
                 onClick={() => submitForm('submit')}
               >
                 <Send className="h-4 w-4" />
-                {isRequestEdit ? 'Save & accept' : 'Save & submit'}
+                Save &amp; submit
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                {isRequestEdit
-                  ? "The customer's online order: saving keeps it waiting; accepting confirms it and reserves stock."
-                  : needsApproval
+                {needsApproval
                   ? 'Submitting sends this order for approval.'
                   : 'Submitting confirms this order immediately.'}
               </p>
