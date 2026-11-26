@@ -82,6 +82,12 @@ export const env = {
     from: process.env.EMAIL_FROM || 'ElevIQ BizFlow <no-reply@eleviqsfa.com>',
     // Public base URL of the web app (used to build reset links).
     appUrl: (process.env.APP_URL || process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, ''),
+    // Who gets an email for each new "Book a demo" request (comma-separated).
+    // Needs SMTP_URL too; blank = no email, the request is still saved.
+    leadAlerts: (process.env.LEAD_ALERT_EMAILS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
   },
 
   log: {

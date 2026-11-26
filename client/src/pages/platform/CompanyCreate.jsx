@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -202,6 +202,32 @@ export default function CompanyCreate() {
 
   const startMode = watch('startMode');
 
+  // Opened from a demo request (?lead=<id>): fill in what the lead told us,
+  // and link the new company back to the lead once it is created.
+  const [searchParams] = useSearchParams();
+  const leadId = searchParams.get('lead') || '';
+  const queryClient = useQueryClient();
+  const { data: lead } = useQuery({
+    queryKey: ['platform', 'demo-request', leadId],
+    queryFn: async () => (await api.get(`/platform/demo-requests/${leadId}`)).data.data,
+    enabled: Boolean(leadId),
+  });
+  useEffect(() => {
+    if (!lead) return;
+    const fill = {
+      businessName: lead.business,
+      city: lead.city,
+      phone: lead.mobile ? `+91${lead.mobile}` : '',
+      email: lead.email,
+      adminName: lead.name,
+      adminPhone: lead.mobile ? `+91${lead.mobile}` : '',
+      adminEmail: lead.email,
+    };
+    Object.entries(fill).forEach(([k, v]) => {
+      if (v && !getValues(k)) setValue(k, v, { shouldDirty: true });
+    });
+  }, [lead?.id]);
+
   // Currency, time zone, financial year and tax follow the chosen country.
   const { data: countries = [] } = useCountries();
   const country = findCountry(countries, watch('country'));
@@ -267,6 +293,12 @@ export default function CompanyCreate() {
     onSuccess: (data) => {
       toast.success(`${data.company.name} provisioned`);
       setCreated(data);
+      if (leadId && data.company?.id) {
+        api
+          .patch(`/platform/demo-requests/${leadId}`, { convertedCompany: data.company.id })
+          .then(() => queryClient.invalidateQueries({ queryKey: ['platform', 'demo-requests'] }))
+          .catch(() => toast.error('Company created, but it could not be linked to the demo request'));
+      }
     },
     onError: (err) => {
       const info = apiError(err);

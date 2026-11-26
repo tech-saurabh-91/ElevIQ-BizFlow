@@ -7,6 +7,7 @@ import { success } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { withoutTenant } from '../../middlewares/tenant.js';
 import logger from '../../utils/logger.js';
+import { countNew as countNewDemoRequests } from './demoRequestController.js';
 
 /**
  * GET /api/platform/dashboard
@@ -52,6 +53,7 @@ export const overview = asyncHandler(async (_req, res) => {
   );
 
   const byStatus = Object.fromEntries(statusCounts.map((s) => [s._id, s.count]));
+  const newDemoRequests = await countNewDemoRequests().catch(() => 0);
 
   // MRR proxy: sum of active subscription plan prices, normalised to monthly.
   let mrr = 0;
@@ -152,6 +154,7 @@ export const overview = asyncHandler(async (_req, res) => {
       totalUsers,
       newSignups,
       expiringSoon: expiring.length,
+      newDemoRequests,
       mrr: Math.round(mrr),
       revenueYtd,
     },

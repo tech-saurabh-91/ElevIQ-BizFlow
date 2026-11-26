@@ -43,6 +43,7 @@ import {
   Globe2,
   Gift,
   Percent,
+  Inbox,
 } from 'lucide-react';
 import { sellsVia } from '@/utils/salesType';
 
@@ -52,6 +53,7 @@ export const platformNav = [
     section: 'Overview',
     items: [
       { to: '/platform', label: 'Dashboard', icon: LayoutDashboard, end: true },
+      { to: '/platform/demo-requests', label: 'Demo Requests', icon: Inbox, badgeKey: 'demoRequests' },
       { to: '/platform/companies', label: 'Companies', icon: Building2, permission: 'companies.view' },
       { to: '/platform/plans', label: 'Plans', icon: CreditCard, permission: 'plans.view' },
       { to: '/platform/locations', label: 'Locations', icon: Globe2, permission: 'settings.view' },
@@ -179,7 +181,7 @@ export const mobileTabs = (role) =>
   role === 'SALESMAN'
     ? ['/app/sales', '/app/attendance', '/app/orders', '/app/invoices', '/app/payments']
     : ['/app/orders', '/app/invoices', '/app/customers', '/app/payments', '/app/reports'];
-export const platformMobileTabs = ['/platform/companies', '/platform/plans', '/platform/reports'];
+export const platformMobileTabs = ['/platform/demo-requests', '/platform/companies', '/platform/plans'];
 
 /**
  * Filter a nav tree by the current user's permissions.

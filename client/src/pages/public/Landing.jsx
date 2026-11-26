@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { LogoMark } from '@/components/brand/Logo';
 import { cn } from '@/utils/cn';
+import api, { toFieldErrors } from '@/api/client';
 
 /**
  * Public home page (/), shown to signed-out visitors. Everything on it is
@@ -641,21 +642,13 @@ const BUSINESS_TYPES = ['Distributor', 'Wholesaler', 'Stockist / C&F', 'Manufact
 const TEAM_SIZES = ['No salesmen yet', '1–5 salesmen', '6–20 salesmen', '20+ salesmen'];
 
 function DemoForm() {
-  const [form, setForm] = useState({ name: '', business: '', mobile: '', city: '', type: '', team: '' });
+  const [form, setForm] = useState({ name: '', business: '', mobile: '', city: '', email: '', type: '', team: '', website: '' });
   const [errors, setErrors] = useState({});
-  const [sent, setSent] = useState(false);
+  // idle | sending | saved | failed
+  const [state, setState] = useState('idle');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const submit = (e) => {
-    e.preventDefault();
-    const next = {};
-    if (!form.name.trim()) next.name = 'Please enter your name';
-    if (!form.business.trim()) next.business = 'Please enter your business name';
-    if (!/^[6-9]\d{9}$/.test(form.mobile.replace(/\D/g, '').slice(-10))) next.mobile = 'Enter a 10-digit mobile number';
-    if (!form.city.trim()) next.city = 'Please enter your city';
-    setErrors(next);
-    if (Object.keys(next).length) return;
-
+  const whatsappLink = () => {
     const lines = [
       'Hello ElevIQ team, I would like a demo of ElevIQ BizFlow.',
       `Name: ${form.name.trim()}`,
@@ -665,8 +658,48 @@ function DemoForm() {
       form.type && `Business type: ${form.type}`,
       form.team && `Team: ${form.team}`,
     ].filter(Boolean);
-    window.open(`https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent(lines.join('\n'))}`, '_blank', 'noopener');
-    setSent(true);
+    return `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent(lines.join('\n'))}`;
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (state === 'sending') return;
+    const formEl = e.currentTarget;
+    // The thank-you card is shorter than the form: keep it in view.
+    const reveal = () => requestAnimationFrame(() => formEl?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    const next = {};
+    if (form.name.trim().length < 2) next.name = 'Please enter your name';
+    if (form.business.trim().length < 2) next.business = 'Please enter your business name';
+    if (!/^[6-9]\d{9}$/.test(form.mobile.replace(/\D/g, '').slice(-10))) next.mobile = 'Enter a 10-digit mobile number';
+    if (form.city.trim().length < 2) next.city = 'Please enter your city';
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) next.email = 'Enter a valid email';
+    setErrors(next);
+    if (Object.keys(next).length) return;
+
+    setState('sending');
+    try {
+      await api.post('/public/demo-requests', {
+        name: form.name.trim(),
+        business: form.business.trim(),
+        mobile: form.mobile.trim(),
+        city: form.city.trim(),
+        email: form.email.trim(),
+        businessType: form.type,
+        teamSize: form.team,
+        website: form.website,
+      });
+      setState('saved');
+      reveal();
+    } catch (err) {
+      const fieldErrors = err?.response?.status === 422 ? toFieldErrors(err.response.data?.errors || []) : null;
+      if (fieldErrors && Object.keys(fieldErrors).length) {
+        setErrors(fieldErrors);
+        setState('idle');
+      } else {
+        setState('failed');
+        reveal();
+      }
+    }
   };
 
   const field = 'mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15';
@@ -700,16 +733,41 @@ function DemoForm() {
         </Reveal>
 
         <Reveal delay={120}>
-          <form onSubmit={submit} noValidate className="rounded-3xl bg-white p-6 text-slate-900 shadow-2xl sm:p-8">
-            {sent ? (
-              <div className="py-10 text-center">
-                <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
-                <h3 className="mt-4 text-xl font-bold">Almost done</h3>
-                <p className="mx-auto mt-2 max-w-sm text-sm text-slate-600">
-                  We opened WhatsApp with your details. Press send there and we will get back to you within one working day.
-                </p>
-                <button type="button" onClick={() => setSent(false)} className="mt-6 text-sm font-semibold text-brand-600 hover:text-brand-700">
-                  Edit details
+          <form onSubmit={submit} noValidate className="relative rounded-3xl bg-white p-6 text-slate-900 shadow-2xl sm:p-8">
+            {state === 'saved' || state === 'failed' ? (
+              <div className="py-8 text-center" role="status">
+                {state === 'saved' ? (
+                  <>
+                    <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
+                    <h3 className="mt-4 text-xl font-bold">Thank you, {form.name.trim().split(' ')[0]}!</h3>
+                    <p className="mx-auto mt-2 max-w-sm text-sm text-slate-600">
+                      We have your request and will call you on {form.mobile.trim()} within one working day to fix a time.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle className="mx-auto h-12 w-12 text-brand-500" />
+                    <h3 className="mt-4 text-xl font-bold">We couldn’t send your request</h3>
+                    <p className="mx-auto mt-2 max-w-sm text-sm text-slate-600">
+                      Something went wrong on our side. Send the same details to us on WhatsApp instead, or call {CONTACT.phone}.
+                    </p>
+                  </>
+                )}
+                <a
+                  href={whatsappLink()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    'mt-6 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold',
+                    state === 'failed'
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'border border-slate-300 text-slate-800 hover:bg-slate-50'
+                  )}
+                >
+                  <MessageCircle className="h-4 w-4" /> {state === 'failed' ? 'Send on WhatsApp' : 'Chat with us on WhatsApp now'}
+                </a>
+                <button type="button" onClick={() => setState('idle')} className="mt-4 block w-full text-sm font-semibold text-brand-600 hover:text-brand-700">
+                  {state === 'failed' ? 'Try again' : 'Edit details'}
                 </button>
               </div>
             ) : (
@@ -737,6 +795,16 @@ function DemoForm() {
                     <input className={field} value={form.city} onChange={set('city')} autoComplete="address-level2" />
                     {err('city')}
                   </label>
+                  <label className="block sm:col-span-2">
+                    <span className={label}>Email (optional)</span>
+                    <input className={field} type="email" value={form.email} onChange={set('email')} autoComplete="email" />
+                    {err('email')}
+                  </label>
+                  {/* Honeypot: hidden from people, bots fill it in. */}
+                  <label className="absolute -left-[9999px] h-px w-px overflow-hidden" aria-hidden="true">
+                    Website
+                    <input tabIndex={-1} autoComplete="off" value={form.website} onChange={set('website')} />
+                  </label>
                   <label className="block">
                     <span className={label}>Type of business</span>
                     <select className={field} value={form.type} onChange={set('type')}>
@@ -758,16 +826,17 @@ function DemoForm() {
                 </div>
                 <button
                   type="submit"
-                  className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700"
+                  disabled={state === 'sending'}
+                  className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70"
                 >
-                  <MessageCircle className="h-4 w-4" /> Send on WhatsApp
+                  {state === 'sending' ? 'Sending…' : (
+                    <>
+                      Request free demo <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
                 </button>
                 <p className="mt-3 text-center text-xs text-slate-500">
-                  Opens WhatsApp with your details filled in. Prefer email?{' '}
-                  <a href={`mailto:${CONTACT.email}?subject=${encodeURIComponent('ElevIQ BizFlow demo request')}`} className="font-medium text-brand-600 hover:underline">
-                    Write to us
-                  </a>
-                  .
+                  We use these details only to contact you about the demo. No spam.
                 </p>
               </>
             )}

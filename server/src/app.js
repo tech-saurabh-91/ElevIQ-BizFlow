@@ -22,6 +22,7 @@ import platformRoutes from './routes/platform/index.js';
 import companyRoutes from './routes/company/index.js';
 import authRoutes from './routes/auth/index.js';
 import { locationReadRoutes } from './routes/locations.js';
+import publicRoutes from './routes/public.js';
 import { healthRouter, readyRouter } from './routes/health.js';
 import { swaggerUi, swaggerSpec } from './docs/swagger.js';
 
@@ -67,6 +68,7 @@ app.use('/api', apiLimiter);
 app.use('/api/platform', platformRoutes);
 app.use('/api/v1', companyRoutes);
 app.use('/api/locations', locationReadRoutes);
+app.use('/api/public', publicRoutes); // public home page (demo requests)
 app.use('/api', authRoutes); // /api/auth/* (login/refresh shared entrypoints)
 
 // ---- Root info ------------------------------------------------------------

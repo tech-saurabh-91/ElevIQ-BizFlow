@@ -30,6 +30,7 @@ const CompanyDetail = lazy(() => import('@/pages/platform/CompanyDetail'));
 const CompanyEdit = lazy(() => import('@/pages/platform/CompanyEdit'));
 const Plans = lazy(() => import('@/pages/platform/Plans'));
 const Announcements = lazy(() => import('@/pages/platform/Announcements'));
+const DemoRequests = lazy(() => import('@/pages/platform/DemoRequests'));
 const AuditLogs = lazy(() => import('@/pages/platform/AuditLogs'));
 const PlatformReports = lazy(() => import('@/pages/platform/PlatformReports'));
 const PlatformSettings = lazy(() => import('@/pages/platform/PlatformSettings'));
@@ -205,6 +206,7 @@ export default function App() {
           <Route path="plans" element={<Plans />} />
           <Route path="reports" element={<PlatformReports />} />
           <Route path="announcements" element={<Announcements />} />
+          <Route path="demo-requests" element={<DemoRequests />} />
           <Route path="audit-logs" element={<AuditLogs />} />
           <Route path="settings" element={<PlatformSettings />} />
           <Route path="locations" element={<Locations />} />

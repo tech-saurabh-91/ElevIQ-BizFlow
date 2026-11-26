@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Building2, Users, TrendingUp, AlertTriangle, Activity, Server } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Building2, Users, TrendingUp, AlertTriangle, Activity, Server, Inbox, ArrowRight } from 'lucide-react';
 import api, { apiError } from '@/api/client';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -86,6 +87,24 @@ export default function PlatformDashboard() {
             </button>
           </CardContent>
         </Card>
+      )}
+
+      {stats.newDemoRequests > 0 && (
+        <Link
+          to="/platform/demo-requests?tab=NEW"
+          className="mb-5 flex items-center gap-4 rounded-xl border border-brand-500/30 bg-brand-500/5 p-4 transition-colors hover:bg-brand-500/10 focus-ring"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white">
+            <Inbox className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">
+              {formatNumber(stats.newDemoRequests)} new demo request{stats.newDemoRequests === 1 ? '' : 's'} from the website
+            </span>
+            <span className="block text-sm text-muted-foreground">Not contacted yet. Call them while they are interested.</span>
+          </span>
+          <ArrowRight className="h-5 w-5 shrink-0 text-brand-500" aria-hidden="true" />
+        </Link>
       )}
 
       {/* ---- KPI grid ---- */}

@@ -6,6 +6,8 @@ import BottomNav from '@/components/shell/BottomNav';
 import { LoadingState } from '@/components/ui/misc';
 import PageErrorBoundary from '@/components/shell/PageErrorBoundary';
 import { useAuth } from '@/hooks/useAuth';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/api/client';
 import { platformNav, platformMobileTabs } from '@/routes/navigation';
 
 /**
@@ -16,6 +18,20 @@ export default function PlatformLayout() {
   const { user, logout, bootstrapping } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // New website demo requests, shown as a count next to "Demo Requests".
+  const { data: newLeads = 0 } = useQuery({
+    queryKey: ['platform', 'demo-requests-new'],
+    queryFn: async () => (await api.get('/platform/demo-requests/new-count')).data.data.count,
+    enabled: Boolean(user) && !bootstrapping,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const badges = { demoRequests: newLeads };
+  const sections = platformNav.map((s) => ({
+    ...s,
+    items: s.items.map((i) => (i.badgeKey ? { ...i, badge: badges[i.badgeKey] || 0 } : i)),
+  }));
 
   if (bootstrapping) {
     return (
@@ -28,7 +44,7 @@ export default function PlatformLayout() {
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar
-        sections={platformNav}
+        sections={sections}
         variant="platform"
         footer={
           <div className="px-2 py-1.5">
@@ -53,7 +69,7 @@ export default function PlatformLayout() {
           ElevIQ BizFlow · Service Provider Console · v1.0.0
         </footer>
       </div>
-      <BottomNav sections={platformNav} primary={platformMobileTabs} homeTo="/platform" />
+      <BottomNav sections={sections} primary={platformMobileTabs} homeTo="/platform" />
     </div>
   );
 }
