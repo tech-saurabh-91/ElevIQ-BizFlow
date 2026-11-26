@@ -16,6 +16,7 @@ const PlatformLogin = lazy(() => import('@/pages/platform/PlatformLogin'));
 const CompanyLogin = lazy(() => import('@/pages/auth/CompanyLogin'));
 const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
+const Landing = lazy(() => import('@/pages/public/Landing'));
 
 // ---- shared ---------------------------------------------------------------
 const NotFound = lazy(() => import('@/pages/NotFound'));
@@ -162,8 +163,11 @@ const guard = (permission, element) => (
 
 function RootRedirect() {
   const { user, bootstrapping } = useAuth();
+  // Signed-out visitors get the public home page straight away (no "loading
+  // your workspace" spinner while the session check runs); signed-in users
+  // go to their workspace.
+  if (!user) return <Landing />;
   if (bootstrapping) return <FullPageLoader />;
-  if (!user) return <Navigate to="/login" replace />;
   return <Navigate to={user.scope === 'platform' ? '/platform' : '/app'} replace />;
 }
 

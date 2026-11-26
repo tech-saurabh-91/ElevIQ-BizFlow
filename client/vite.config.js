@@ -21,7 +21,8 @@ export default defineConfig(({ mode }) => {
           name: 'ElevIQ BizFlow',
           short_name: 'ElevIQ BizFlow',
           description: 'Sales force automation: orders, invoices, collections and field visits.',
-          start_url: '/',
+          // Installed app opens the workspace (or its sign-in), not the public home page.
+          start_url: '/app',
           scope: '/',
           display: 'standalone',
           orientation: 'any',
